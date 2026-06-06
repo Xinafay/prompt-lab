@@ -31,3 +31,12 @@ Required local config:
 Start from the templates under `config/`.
 
 The LLM cache should remain disabled for Prompt Lab generator runs. Repeated prompt tests need uncached model calls to expose output variance.
+
+## Runtime Paths
+
+Prompt Lab defaults to repository-local `experiments/` and `examples/`.
+
+Environment overrides:
+
+- `PROMPT_LAB_EXPERIMENTS_ROOT`
+- `PROMPT_LAB_EXAMPLES_ROOT`
