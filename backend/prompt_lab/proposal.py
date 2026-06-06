@@ -18,6 +18,17 @@ class ProposalDraft(BaseModel):
     rationale_md: str = Field(min_length=1)
 
 
+class ProposalSource(BaseModel):
+    """Traceability metadata saved next to a proposal draft."""
+
+    model_config = ConfigDict(extra="allow")
+
+    experiment_id: str = Field(min_length=1)
+    source_version: str = Field(min_length=1)
+    review_id: str = Field(min_length=1)
+    judgment_id: str = Field(min_length=1)
+
+
 def _json_block(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2)
 

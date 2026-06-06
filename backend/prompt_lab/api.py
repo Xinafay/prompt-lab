@@ -7,7 +7,7 @@ from dataclasses import asdict
 from pathlib import Path, PureWindowsPath
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from prompt_lab import llm_client
 from prompt_lab.config import PromptLabConfig
@@ -15,7 +15,7 @@ from prompt_lab.judge import build_judge_prompt
 from prompt_lab.jobs import JobManager
 from prompt_lab.models.artifacts import RunArtifact
 from prompt_lab.models.judgments import FindingDecisionSet, JudgmentArtifact
-from prompt_lab.proposal import ProposalDraft, build_proposal_prompt
+from prompt_lab.proposal import ProposalDraft, ProposalSource, build_proposal_prompt
 from prompt_lab.pydantic_loader import load_model_entrypoint
 from prompt_lab.runner import iter_case_major, run_structured_case, run_text_case
 from prompt_lab.storage import PromptLabStore
@@ -314,6 +314,45 @@ def _remove_generated_version_dirs(version_dir: Path) -> None:
             shutil.rmtree(path)
 
 
+def _load_validated_proposal_source(
+    *,
+    proposal_dir: Path,
+    experiment_id: str,
+    version: str,
+    review_id: str,
+    judgment: JudgmentArtifact,
+) -> ProposalSource:
+    source_path = proposal_dir / "source.json"
+    if not source_path.is_file():
+        raise HTTPException(status_code=404, detail="Proposal source not found")
+    try:
+        source = ProposalSource.model_validate(_read_json(source_path))
+    except (json.JSONDecodeError, ValidationError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid proposal source.json: {exc}",
+        ) from exc
+
+    expected = {
+        "experiment_id": experiment_id,
+        "source_version": version,
+        "review_id": review_id,
+        "judgment_id": judgment.judgment_id,
+    }
+    actual = source.model_dump(mode="json")
+    mismatches = [
+        field
+        for field, expected_value in expected.items()
+        if actual.get(field) != expected_value
+    ]
+    if mismatches:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Proposal source mismatch: {', '.join(mismatches)}",
+        )
+    return source
+
+
 def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     resolved_config = config or PromptLabConfig.from_env()
     store = PromptLabStore(
@@ -583,7 +622,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         proposal_prompt = build_proposal_prompt(
             experiment_id=experiment_id,
             version=version,
-            current_model=experiment.models.judge_model,
+            current_model=experiment.models.generator_model,
             output_type=experiment.output.type,
             prompt_template=prompt_template,
             model_source=model_source,
@@ -604,6 +643,11 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             if isinstance(output, ProposalDraft)
             else ProposalDraft.model_validate(output)
         )
+        if experiment.output.type == "text" and proposal.model_py is not None:
+            raise HTTPException(
+                status_code=400,
+                detail="Text output proposals cannot include model_py",
+            )
 
         proposal_dir = review_dir / "proposal"
         proposal_dir.mkdir(parents=True, exist_ok=True)
@@ -649,34 +693,51 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         proposal_prompt_path = proposal_dir / "prompt.md"
         if not proposal_prompt_path.is_file():
             raise HTTPException(status_code=404, detail="Proposal not found")
-        if not (proposal_dir / "source.json").is_file():
-            raise HTTPException(status_code=404, detail="Proposal not found")
+        judgment = JudgmentArtifact.model_validate(_read_json(review_dir / "judgment.json"))
+        _load_validated_proposal_source(
+            proposal_dir=proposal_dir,
+            experiment_id=experiment_id,
+            version=version,
+            review_id=review_id,
+            judgment=judgment,
+        )
 
         versions_root = source_version_dir.parent
         new_version, new_version_dir = _next_numeric_version_dir(versions_root)
-        shutil.copytree(source_version_dir, new_version_dir)
-        _remove_generated_version_dirs(new_version_dir)
+        staging_dir = versions_root / f".{new_version}.tmp"
+        if staging_dir.exists():
+            shutil.rmtree(staging_dir)
+        try:
+            shutil.copytree(source_version_dir, staging_dir)
+            _remove_generated_version_dirs(staging_dir)
 
-        prompt_target = _resolve_version_local_write_path(
-            new_version_dir, experiment.template.path
-        )
-        prompt_target.parent.mkdir(parents=True, exist_ok=True)
-        prompt_target.write_text(
-            proposal_prompt_path.read_text(encoding="utf-8"),
-            encoding="utf-8",
-        )
-        proposal_model_path = proposal_dir / "model.py"
-        if experiment.output.type == "pydantic" and proposal_model_path.is_file():
-            model_file = experiment.output.model_file
-            assert model_file is not None
-            model_target = _resolve_version_local_write_path(
-                new_version_dir, model_file
+            prompt_target = _resolve_version_local_write_path(
+                staging_dir, experiment.template.path
             )
-            model_target.parent.mkdir(parents=True, exist_ok=True)
-            model_target.write_text(
-                proposal_model_path.read_text(encoding="utf-8"),
+            prompt_target.parent.mkdir(parents=True, exist_ok=True)
+            prompt_target.write_text(
+                proposal_prompt_path.read_text(encoding="utf-8"),
                 encoding="utf-8",
             )
+            proposal_model_path = proposal_dir / "model.py"
+            if experiment.output.type == "pydantic" and proposal_model_path.is_file():
+                model_file = experiment.output.model_file
+                assert model_file is not None
+                model_target = _resolve_version_local_write_path(
+                    staging_dir, model_file
+                )
+                model_target.parent.mkdir(parents=True, exist_ok=True)
+                model_target.write_text(
+                    proposal_model_path.read_text(encoding="utf-8"),
+                    encoding="utf-8",
+                )
+            staging_dir.rename(new_version_dir)
+        except Exception:
+            if staging_dir.exists():
+                shutil.rmtree(staging_dir)
+            if new_version_dir.exists():
+                shutil.rmtree(new_version_dir)
+            raise
 
         return {
             "version": new_version,

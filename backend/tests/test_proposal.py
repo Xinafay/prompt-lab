@@ -125,14 +125,33 @@ def write_review_fixture(root: Path, *, output_type: str = "pydantic") -> Path:
     return review_dir
 
 
+def write_valid_proposal_source(review_dir: Path) -> None:
+    write_json(
+        review_dir / "proposal" / "source.json",
+        {
+            "experiment_id": "demo",
+            "source_version": "v001",
+            "review_id": "review-001",
+            "judgment_id": "j001",
+            "decision_summary": {
+                "accepted": ["f-accepted"],
+                "rejected": ["f-rejected"],
+                "deferred": ["f-deferred"],
+            },
+            "human_notes_present": True,
+            "generated_by_model": "openai/judge",
+        },
+    )
+
+
 def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
     prompt = build_proposal_prompt(
         experiment_id="demo",
         version="v001",
-        current_model="openai/judge",
+        current_model="local/generator",
         output_type="pydantic",
-        prompt_template="Say {{ value }}",
-        model_source="class DemoOutput: ...",
+        prompt_template="Say {{ value }} and include summary.",
+        model_source="class DemoOutput: ...\n    answer: str",
         rubric_snapshot="Prefer complete answers.",
         judgment=valid_judgment_payload(
             findings=[
@@ -170,7 +189,7 @@ def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
             "f-rejected": {"decision": "rejected", "reason": "Out of scope"},
             "f-deferred": {"decision": "deferred", "reason": "Later"},
         },
-        human_notes="Human notes override all judge findings.",
+        human_notes="Keep the answer terse; human notes override all judge findings.",
     )
 
     assert "human notes override all judge findings" in prompt
@@ -179,10 +198,18 @@ def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
     assert "deferred findings are ignored" in prompt
     assert "preserve task scope" in prompt
     assert "change `model.py` only when contract changes are clearly needed" in prompt
+    assert "Say {{ value }} and include summary." in prompt
+    assert "Current model: local/generator" in prompt
+    assert "Keep the answer terse" in prompt
+    assert "Prefer complete answers." in prompt
     assert "f-accepted" in prompt
+    assert "Missing summary." in prompt
     assert "f-rejected" in prompt
+    assert "REJECTED_FINDINGS_AS_CONSTRAINTS_JSON" in prompt
+    assert "Out of scope" in prompt
     assert "f-deferred" not in prompt
     assert "class DemoOutput" in prompt
+    assert "answer: str" in prompt
 
 
 def test_api_generates_proposal_artifacts_with_traceable_source() -> None:
@@ -251,9 +278,17 @@ def test_api_generates_proposal_artifacts_with_traceable_source() -> None:
             assert calls[0]["model"] == "openai/judge"
             assert calls[0]["response_model"] is ProposalDraft
             assert calls[0]["validation_context"] is None
+            assert "Say {{ value }}" in calls[0]["prompt"]
+            assert "Current model: local/a" in calls[0]["prompt"]
+            assert "Keep the answer terse" in calls[0]["prompt"]
+            assert "Prefer concise complete answers." in calls[0]["prompt"]
             assert "f-accepted" in calls[0]["prompt"]
+            assert "The output misses the required summary." in calls[0]["prompt"]
             assert "f-rejected" in calls[0]["prompt"]
+            assert "REJECTED_FINDINGS_AS_CONSTRAINTS_JSON" in calls[0]["prompt"]
+            assert "Out of scope" in calls[0]["prompt"]
             assert "f-deferred" not in calls[0]["prompt"]
+            assert "class DemoOutput(BaseModel)" in calls[0]["prompt"]
     finally:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
@@ -279,7 +314,7 @@ def test_api_create_version_copies_clean_source_and_replaces_pydantic_files() ->
             encoding="utf-8",
         )
         (proposal_dir / "rationale.md").write_text("Why", encoding="utf-8")
-        write_json(proposal_dir / "source.json", {"experiment_id": "demo"})
+        write_valid_proposal_source(review_dir)
         app = create_app(PromptLabConfig.from_env(project_root=root))
 
         response = TestClient(app).post(
@@ -307,6 +342,59 @@ def test_api_create_version_copies_clean_source_and_replaces_pydantic_files() ->
         )
 
 
+def test_api_create_version_rejects_mismatched_source_without_creating_version() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        review_dir = write_review_fixture(root)
+        version_dir = review_dir.parents[1]
+        proposal_dir = review_dir / "proposal"
+        proposal_dir.mkdir()
+        (proposal_dir / "prompt.md").write_text("Improved prompt", encoding="utf-8")
+        (proposal_dir / "rationale.md").write_text("Why", encoding="utf-8")
+        write_json(
+            proposal_dir / "source.json",
+            {
+                "experiment_id": "demo",
+                "source_version": "v999",
+                "review_id": "review-001",
+                "judgment_id": "j001",
+            },
+        )
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).post(
+            "/api/experiments/demo/versions/v001/reviews/review-001/proposal/create-version"
+        )
+
+        assert response.status_code == 400
+        assert "Proposal source mismatch" in response.json()["detail"]
+        assert not (version_dir.parent / "v002").exists()
+
+
+def test_api_create_version_cleans_partial_version_when_replacement_fails() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        review_dir = write_review_fixture(root)
+        version_dir = review_dir.parents[1]
+        experiment_path = review_dir.parents[3] / "experiment.json"
+        manifest = json.loads(experiment_path.read_text(encoding="utf-8"))
+        manifest["template"]["path"] = "../escaped.md"
+        write_json(experiment_path, manifest)
+        proposal_dir = review_dir / "proposal"
+        proposal_dir.mkdir()
+        (proposal_dir / "prompt.md").write_text("Improved prompt", encoding="utf-8")
+        (proposal_dir / "rationale.md").write_text("Why", encoding="utf-8")
+        write_valid_proposal_source(review_dir)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/api/experiments/demo/versions/v001/reviews/review-001/proposal/create-version"
+        )
+
+        assert response.status_code == 400
+        assert not (version_dir.parent / "v002").exists()
+
+
 def test_api_create_version_returns_404_when_proposal_missing() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -321,15 +409,55 @@ def test_api_create_version_returns_404_when_proposal_missing() -> None:
         assert response.json()["detail"] == "Proposal not found"
 
 
+def test_api_rejects_text_proposal_that_returns_model_py() -> None:
+    def fake_generate_structured(
+        model: str,
+        prompt: str,
+        response_model: Any,
+        validation_context: dict[str, Any] | None,
+    ) -> FakeGeneratedStructured:
+        return FakeGeneratedStructured(
+            response_model(
+                prompt_md="Improved text prompt",
+                model_py="class ShouldNotExist: ...",
+                rationale_md="Text proposals cannot change model.py.",
+            )
+        )
+
+    original_generate_structured = llm_client.generate_structured
+    llm_client.generate_structured = fake_generate_structured  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            review_dir = write_review_fixture(root, output_type="text")
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+
+            response = TestClient(app).post(
+                "/api/experiments/demo/versions/v001/reviews/review-001/proposal"
+            )
+
+            assert response.status_code == 400
+            assert response.json()["detail"] == (
+                "Text output proposals cannot include model_py"
+            )
+            assert not (review_dir / "proposal").exists()
+    finally:
+        llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
+
+
 def main() -> int:
     tests: list[Any] = [
         test_build_proposal_prompt_sorts_decisions_and_includes_rules,
         test_api_generates_proposal_artifacts_with_traceable_source,
         test_api_create_version_copies_clean_source_and_replaces_pydantic_files,
+        test_api_create_version_rejects_mismatched_source_without_creating_version,
+        test_api_create_version_cleans_partial_version_when_replacement_fails,
         test_api_create_version_returns_404_when_proposal_missing,
+        test_api_rejects_text_proposal_that_returns_model_py,
     ]
     for test in tests:
         test()
+        print(f"OK: {test.__name__}")
     return 0
 
 
