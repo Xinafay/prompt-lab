@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from prompt_lab.errors import NotFoundError
@@ -21,8 +21,22 @@ def _resolve_version_local_path(version_dir: Path, relative_path: str) -> Path:
     root = version_dir.resolve()
     candidate = (root / relative_path).resolve()
     if candidate != root and not candidate.is_relative_to(root):
-        raise NotFoundError(f"File not found: {candidate}")
+        raise NotFoundError("File not found")
     return candidate
+
+
+def _validate_storage_id(value: str, label: str) -> None:
+    windows_path = PureWindowsPath(value)
+    if (
+        not value
+        or Path(value).is_absolute()
+        or windows_path.is_absolute()
+        or windows_path.drive
+        or "/" in value
+        or "\\" in value
+        or value in {".", ".."}
+    ):
+        raise NotFoundError(f"{label} not found")
 
 
 class PromptLabStore:
@@ -45,28 +59,36 @@ class PromptLabStore:
 
     def experiment_dir(self, experiment_id: str) -> Path:
         """Resolve an experiment directory, preferring editable experiments over examples."""
+        _validate_storage_id(experiment_id, "Experiment")
         for root in [self.experiments_root, self.examples_root]:
-            candidate = root / experiment_id
+            resolved_root = root.resolve()
+            candidate = (resolved_root / experiment_id).resolve()
+            if candidate != resolved_root and not candidate.is_relative_to(resolved_root):
+                raise NotFoundError("Experiment not found")
             if (candidate / "experiment.json").is_file():
                 return candidate
-        raise NotFoundError(f"Experiment not found: {experiment_id}")
+        raise NotFoundError("Experiment not found")
 
     def load_experiment(self, experiment_id: str) -> ExperimentArtifact:
         path = self.experiment_dir(experiment_id) / "experiment.json"
         return ExperimentArtifact.model_validate(_read_json(path))
 
     def version_dir(self, experiment_id: str, version: str) -> Path:
-        path = self.experiment_dir(experiment_id) / "versions" / version
-        if not path.is_dir():
-            raise NotFoundError(f"Version not found: {experiment_id}/{version}")
-        return path
+        _validate_storage_id(version, "Version")
+        versions_root = (self.experiment_dir(experiment_id) / "versions").resolve()
+        candidate = (versions_root / version).resolve()
+        if candidate != versions_root and not candidate.is_relative_to(versions_root):
+            raise NotFoundError("Version not found")
+        if not candidate.is_dir():
+            raise NotFoundError("Version not found")
+        return candidate
 
     def read_text(self, experiment_id: str, version: str, relative_path: str) -> str:
         path = _resolve_version_local_path(
             self.version_dir(experiment_id, version), relative_path
         )
         if not path.is_file():
-            raise NotFoundError(f"File not found: {path}")
+            raise NotFoundError("File not found")
         return path.read_text(encoding="utf-8")
 
     def load_cases(self, experiment_id: str, version: str) -> list[CaseArtifact]:
