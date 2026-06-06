@@ -157,6 +157,74 @@ def test_job_manager_completed_event_has_terminal_fields() -> None:
     assert terminal_event.total_units == 1
 
 
+def test_job_manager_rejects_fail_after_completed_without_appending_event() -> None:
+    jobs = JobManager()
+    job = jobs.start_job(kind="judge", experiment_id="demo", version="v001", total_units=1)
+    jobs.complete(job.job_id, message="done")
+    event_count = len(jobs.events(job.job_id))
+
+    error = assert_raises(
+        ValueError,
+        lambda: jobs.fail(job.job_id, message="late failure"),
+    )
+
+    assert "completed" in str(error)
+    assert jobs.get(job.job_id).status == "completed"
+    assert len(jobs.events(job.job_id)) == event_count
+    assert [event.message for event in jobs.events(job.job_id)] == ["started", "done"]
+
+
+def test_job_manager_rejects_complete_after_failed_without_appending_event() -> None:
+    jobs = JobManager()
+    job = jobs.start_job(kind="judge", experiment_id="demo", version="v001", total_units=1)
+    jobs.fail(job.job_id, message="failed")
+    event_count = len(jobs.events(job.job_id))
+
+    error = assert_raises(
+        ValueError,
+        lambda: jobs.complete(job.job_id, message="late done"),
+    )
+
+    assert "failed" in str(error)
+    assert jobs.get(job.job_id).status == "failed"
+    assert len(jobs.events(job.job_id)) == event_count
+    assert [event.message for event in jobs.events(job.job_id)] == ["started", "failed"]
+
+
+def test_job_manager_rejects_duplicate_complete_without_appending_event() -> None:
+    jobs = JobManager()
+    job = jobs.start_job(kind="judge", experiment_id="demo", version="v001", total_units=1)
+    jobs.complete(job.job_id, message="done")
+    event_count = len(jobs.events(job.job_id))
+
+    error = assert_raises(
+        ValueError,
+        lambda: jobs.complete(job.job_id, message="done again"),
+    )
+
+    assert "completed" in str(error)
+    assert jobs.get(job.job_id).status == "completed"
+    assert len(jobs.events(job.job_id)) == event_count
+    assert [event.message for event in jobs.events(job.job_id)] == ["started", "done"]
+
+
+def test_job_manager_rejects_duplicate_fail_without_appending_event() -> None:
+    jobs = JobManager()
+    job = jobs.start_job(kind="judge", experiment_id="demo", version="v001", total_units=1)
+    jobs.fail(job.job_id, message="failed")
+    event_count = len(jobs.events(job.job_id))
+
+    error = assert_raises(
+        ValueError,
+        lambda: jobs.fail(job.job_id, message="failed again"),
+    )
+
+    assert "failed" in str(error)
+    assert jobs.get(job.job_id).status == "failed"
+    assert len(jobs.events(job.job_id)) == event_count
+    assert [event.message for event in jobs.events(job.job_id)] == ["started", "failed"]
+
+
 def main() -> int:
     tests = [
         test_job_manager_records_progress_events,
@@ -169,6 +237,10 @@ def main() -> int:
         test_job_manager_fails_job_with_terminal_event,
         test_job_manager_rejects_updates_after_failed,
         test_job_manager_completed_event_has_terminal_fields,
+        test_job_manager_rejects_fail_after_completed_without_appending_event,
+        test_job_manager_rejects_complete_after_failed_without_appending_event,
+        test_job_manager_rejects_duplicate_complete_without_appending_event,
+        test_job_manager_rejects_duplicate_fail_without_appending_event,
     ]
     for test in tests:
         test()

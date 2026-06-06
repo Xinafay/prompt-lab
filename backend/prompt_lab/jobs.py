@@ -90,6 +90,8 @@ class JobManager:
     def complete(self, job_id: str, *, message: str) -> JobStatus:
         with self._lock:
             old = self._jobs[job_id]
+            if old.status in _TERMINAL_STATUSES:
+                raise ValueError(f"Cannot complete {old.status} job {job_id}")
             job = replace(
                 old,
                 status="completed",
@@ -104,6 +106,8 @@ class JobManager:
     def fail(self, job_id: str, *, message: str) -> JobStatus:
         with self._lock:
             old = self._jobs[job_id]
+            if old.status in _TERMINAL_STATUSES:
+                raise ValueError(f"Cannot fail {old.status} job {job_id}")
             job = replace(old, status="failed", message=message, finished_at=_now())
             self._jobs[job_id] = job
             self._append_event(job, message)
