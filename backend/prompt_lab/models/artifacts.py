@@ -25,7 +25,7 @@ class OutputConfig(BaseModel):
     type: Literal["text", "pydantic"]
     model_file: str | None = Field(default=None, min_length=1)
     model_entrypoint: str | None = Field(default=None, min_length=1)
-    validation_context_from_case: str | None = None
+    validation_context_from_case: str | None = Field(default=None, min_length=1)
 
     @model_validator(mode="after")
     def validate_mode_fields(self) -> Self:

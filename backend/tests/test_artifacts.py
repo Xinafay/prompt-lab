@@ -134,6 +134,16 @@ def test_output_config_rejects_invalid_mode_fields() -> None:
         {"type": "pydantic", "model_file": "model.py", "model_entrypoint": ""},
         "String should have at least 1 character",
     )
+    assert_validation_error(
+        OutputConfig,
+        {
+            "type": "pydantic",
+            "model_file": "model.py",
+            "model_entrypoint": "model.SceneList",
+            "validation_context_from_case": "",
+        },
+        "String should have at least 1 character",
+    )
 
 
 def test_run_defaults_rejects_invalid_values_and_extras() -> None:
