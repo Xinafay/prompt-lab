@@ -13,7 +13,7 @@ from prompt_lab import llm_client
 from prompt_lab.api import create_app
 from prompt_lab.compare import build_comparison_prompt
 from prompt_lab.config import PromptLabConfig
-from prompt_lab.models.artifacts import RunArtifact
+from prompt_lab.models.artifacts import CaseArtifact, RunArtifact
 from prompt_lab.models.judgments import ComparisonArtifact
 
 
@@ -145,23 +145,28 @@ def write_run_batch(
     version: str,
     answer_prefix: str,
     repeat_count: int = 2,
+    case_ids: list[str] | None = None,
 ) -> None:
-    for repeat_index in range(1, repeat_count + 1):
-        write_json(
-            version_dir
-            / "runs"
-            / batch_id
-            / "case-a"
-            / f"repeat-{repeat_index:03d}.json",
-            valid_run_payload(
-                run_id=f"{batch_id}-case-a-repeat-{repeat_index:03d}",
-                run_batch_id=batch_id,
-                version=version,
-                repeat_index=repeat_index,
-                raw_output=f'{{"answer":"{answer_prefix} {repeat_index}"}}',
-                output_json={"answer": f"{answer_prefix} {repeat_index}"},
-            ),
-        )
+    case_ids = case_ids or ["case-a"]
+    for case_id in case_ids:
+        for repeat_index in range(1, repeat_count + 1):
+            write_json(
+                version_dir
+                / "runs"
+                / batch_id
+                / case_id
+                / f"repeat-{repeat_index:03d}.json",
+                valid_run_payload(
+                    run_id=f"{batch_id}-{case_id}-repeat-{repeat_index:03d}",
+                    run_batch_id=batch_id,
+                    version=version,
+                    case_id=case_id,
+                    repeat_index=repeat_index,
+                    rendered_prompt=f"Rendered {version} {case_id} repeat {repeat_index}",
+                    raw_output=f'{{"answer":"{answer_prefix} {case_id} {repeat_index}"}}',
+                    output_json={"answer": f"{answer_prefix} {case_id} {repeat_index}"},
+                ),
+            )
 
 
 class FakeGeneratedStructured:
@@ -200,11 +205,32 @@ def test_comparison_artifact_rejects_invalid_recommendation_and_empty_items() ->
 
 
 def test_build_comparison_prompt_includes_versions_runs_rubric_and_id_guidance() -> None:
+    baseline_cases = [
+        CaseArtifact.model_validate(
+            {
+                "schema_version": "prompt_lab.case/v1",
+                "id": "case-a",
+                "title": "Baseline Case A",
+                "variables": {"value": "baseline hello"},
+            }
+        )
+    ]
+    candidate_cases = [
+        CaseArtifact.model_validate(
+            {
+                "schema_version": "prompt_lab.case/v1",
+                "id": "case-a",
+                "title": "Candidate Case A",
+                "variables": {"value": "candidate hello"},
+            }
+        )
+    ]
     baseline_runs = [
         RunArtifact.model_validate(
             valid_run_payload(
                 run_batch_id="baseline-batch",
                 version="v001",
+                rendered_prompt="Baseline rendered prompt for hello",
                 raw_output='{"id":"base-1","answer":"short"}',
                 output_json={"id": "base-1", "answer": "short"},
             )
@@ -216,6 +242,7 @@ def test_build_comparison_prompt_includes_versions_runs_rubric_and_id_guidance()
                 run_id="candidate-batch-case-a-repeat-001",
                 run_batch_id="candidate-batch",
                 version="v002",
+                rendered_prompt="Candidate rendered prompt for hello",
                 raw_output='{"id":"candidate-9","answer":"short with summary"}',
                 output_json={"id": "candidate-9", "answer": "short with summary"},
             )
@@ -231,6 +258,8 @@ def test_build_comparison_prompt_includes_versions_runs_rubric_and_id_guidance()
         candidate_prompt_template="Candidate prompt: say {{ value }} and summarize.",
         baseline_run_batch_ids=["baseline-batch"],
         candidate_run_batch_ids=["candidate-batch"],
+        baseline_cases=baseline_cases,
+        candidate_cases=candidate_cases,
         baseline_run_artifacts=baseline_runs,
         candidate_run_artifacts=candidate_runs,
     )
@@ -244,8 +273,16 @@ def test_build_comparison_prompt_includes_versions_runs_rubric_and_id_guidance()
     assert "candidate-batch" in prompt
     assert "v001" in prompt
     assert "v002" in prompt
+    assert "Baseline Case A" in prompt
+    assert "Candidate Case A" in prompt
+    assert '"value": "baseline hello"' in prompt
+    assert '"value": "candidate hello"' in prompt
+    assert "Baseline rendered prompt for hello" in prompt
+    assert "Candidate rendered prompt for hello" in prompt
     assert '{"id":"base-1","answer":"short"}' in prompt
     assert '{"id":"candidate-9","answer":"short with summary"}' in prompt
+    assert "BASELINE_CASES_JSON" in prompt
+    assert "CANDIDATE_CASES_JSON" in prompt
     assert "BASELINE_RUN_SUMMARY" in prompt
     assert "CANDIDATE_RUN_SUMMARY" in prompt
     assert "COMPARISON_SCHEMA_JSON" in prompt
@@ -264,6 +301,11 @@ def test_api_creates_comparison_under_candidate_version() -> None:
         captured["prompt"] = prompt
         captured["response_model"] = response_model
         captured["validation_context"] = validation_context
+        candidate_dir = captured["candidate_dir"]
+        assert isinstance(candidate_dir, Path)
+        captured["reserved_before_llm"] = (
+            candidate_dir / "comparisons" / "comparison-001"
+        ).is_dir()
         return FakeGeneratedStructured(
             ComparisonArtifact.model_validate(valid_comparison_payload())
         )
@@ -286,6 +328,7 @@ def test_api_creates_comparison_under_candidate_version() -> None:
                 version="v002",
                 answer_prefix="candidate",
             )
+            captured["candidate_dir"] = candidate_dir
             app = create_app(PromptLabConfig.from_env(project_root=root))
 
             response = TestClient(app, raise_server_exceptions=False).post(
@@ -302,6 +345,7 @@ def test_api_creates_comparison_under_candidate_version() -> None:
             assert captured["model"] == "openai/judge"
             assert captured["response_model"] is ComparisonArtifact
             assert captured["validation_context"] is None
+            assert captured["reserved_before_llm"] is True
             assert "Baseline prompt: say {{ value }}." in captured["prompt"]
             assert "Candidate prompt: say {{ value }} and include a summary." in captured[
                 "prompt"
@@ -365,6 +409,63 @@ def test_api_allocates_next_comparison_without_overwriting() -> None:
             assert "keep me" in (first_dir / "comparison.json").read_text(
                 encoding="utf-8"
             )
+    finally:
+        llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
+
+
+def test_api_rejects_mismatched_case_ids_without_comparing() -> None:
+    calls: list[str] = []
+
+    def fake_generate_structured(
+        model: str,
+        prompt: str,
+        response_model: Any,
+        validation_context: dict[str, Any] | None,
+    ) -> FakeGeneratedStructured:
+        calls.append(prompt)
+        return FakeGeneratedStructured(
+            ComparisonArtifact.model_validate(valid_comparison_payload())
+        )
+
+    original_generate_structured = llm_client.generate_structured
+    llm_client.generate_structured = fake_generate_structured  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline_dir, candidate_dir = write_demo_experiment(root)
+            write_json(
+                candidate_dir / "cases" / "case-extra.json",
+                {
+                    "schema_version": "prompt_lab.case/v1",
+                    "id": "case-extra",
+                    "title": "Extra Candidate Case",
+                    "variables": {"value": "extra"},
+                },
+            )
+            write_run_batch(
+                baseline_dir,
+                "baseline-batch",
+                version="v001",
+                answer_prefix="baseline",
+            )
+            write_run_batch(
+                candidate_dir,
+                "candidate-batch",
+                version="v002",
+                answer_prefix="candidate",
+                case_ids=["case-a", "case-extra"],
+            )
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+
+            response = TestClient(app, raise_server_exceptions=False).post(
+                "/api/experiments/demo/comparisons",
+                json={"baseline_version": "v001", "candidate_version": "v002"},
+            )
+
+            assert response.status_code == 400
+            assert "case ids must match" in response.json()["detail"]
+            assert calls == []
+            assert not (candidate_dir / "comparisons").exists()
     finally:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
@@ -509,6 +610,7 @@ def main() -> int:
         test_build_comparison_prompt_includes_versions_runs_rubric_and_id_guidance,
         test_api_creates_comparison_under_candidate_version,
         test_api_allocates_next_comparison_without_overwriting,
+        test_api_rejects_mismatched_case_ids_without_comparing,
         test_api_selects_latest_run_batches_for_both_versions_by_mtime,
         test_api_rejects_comparison_metadata_mismatch_without_writing,
     ]

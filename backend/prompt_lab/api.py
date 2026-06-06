@@ -350,9 +350,22 @@ def _next_comparison_location(version_dir: Path) -> tuple[str, Path]:
     while True:
         comparison_id = f"comparison-{index:03d}"
         comparison_dir = comparisons_dir / comparison_id
-        if not comparison_dir.exists():
+        try:
+            comparison_dir.mkdir(parents=True)
             return comparison_id, comparison_dir
+        except FileExistsError:
+            pass
         index += 1
+
+
+def _cleanup_reserved_comparison_dir(comparison_dir: Path) -> None:
+    if comparison_dir.exists():
+        shutil.rmtree(comparison_dir)
+    comparisons_dir = comparison_dir.parent
+    try:
+        comparisons_dir.rmdir()
+    except OSError:
+        pass
 
 
 def _resolve_existing_review_dir(version_dir: Path, review_id: str) -> Path:
@@ -704,18 +717,33 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail="Candidate version has no cases")
         for case in [*baseline_cases, *candidate_cases]:
             _validate_case_id_path_segment(case.id)
+        baseline_case_ids = {case.id for case in baseline_cases}
+        candidate_case_ids = {case.id for case in candidate_cases}
+        if baseline_case_ids != candidate_case_ids:
+            missing_from_candidate = sorted(baseline_case_ids - candidate_case_ids)
+            extra_in_candidate = sorted(candidate_case_ids - baseline_case_ids)
+            detail_parts = ["Baseline and candidate case ids must match"]
+            if missing_from_candidate:
+                detail_parts.append(
+                    f"missing from candidate: {', '.join(missing_from_candidate)}"
+                )
+            if extra_in_candidate:
+                detail_parts.append(
+                    f"extra in candidate: {', '.join(extra_in_candidate)}"
+                )
+            raise HTTPException(status_code=400, detail="; ".join(detail_parts))
 
         repeat_count = experiment.run_defaults.repeat_count
         baseline_run_batch_id, baseline_run_artifacts = _load_latest_validated_run_batch(
             version_dir=baseline_version_dir,
             version=baseline_version,
-            cases={case.id for case in baseline_cases},
+            cases=baseline_case_ids,
             repeat_count=repeat_count,
         )
         candidate_run_batch_id, candidate_run_artifacts = _load_latest_validated_run_batch(
             version_dir=candidate_version_dir,
             version=candidate_version,
-            cases={case.id for case in candidate_cases},
+            cases=candidate_case_ids,
             repeat_count=repeat_count,
         )
 
@@ -735,48 +763,56 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         comparison_id, comparison_dir = _next_comparison_location(
             candidate_version_dir
         )
-        comparison_prompt = build_comparison_prompt(
-            experiment_id=experiment_id,
-            baseline_version=baseline_version,
-            candidate_version=candidate_version,
-            rubric=rubric,
-            baseline_prompt_template=baseline_prompt_template,
-            candidate_prompt_template=candidate_prompt_template,
-            baseline_run_batch_ids=[baseline_run_batch_id],
-            candidate_run_batch_ids=[candidate_run_batch_id],
-            baseline_run_artifacts=baseline_run_artifacts,
-            candidate_run_artifacts=candidate_run_artifacts,
-            comparison_id=comparison_id,
-        )
-        generated = llm_client.generate_structured(
-            experiment.models.judge_model,
-            comparison_prompt,
-            ComparisonArtifact,
-            None,
-        )
-        output = generated.output
-        comparison = (
-            output
-            if isinstance(output, ComparisonArtifact)
-            else ComparisonArtifact.model_validate(output)
-        )
-        _validate_comparison_metadata(
-            comparison=comparison,
-            comparison_id=comparison_id,
-            baseline_version=baseline_version,
-            candidate_version=candidate_version,
-            baseline_run_batch_id=baseline_run_batch_id,
-            candidate_run_batch_id=candidate_run_batch_id,
-            judge_model=experiment.models.judge_model,
-        )
+        try:
+            comparison_prompt = build_comparison_prompt(
+                experiment_id=experiment_id,
+                baseline_version=baseline_version,
+                candidate_version=candidate_version,
+                rubric=rubric,
+                baseline_prompt_template=baseline_prompt_template,
+                candidate_prompt_template=candidate_prompt_template,
+                baseline_run_batch_ids=[baseline_run_batch_id],
+                candidate_run_batch_ids=[candidate_run_batch_id],
+                baseline_cases=baseline_cases,
+                candidate_cases=candidate_cases,
+                baseline_run_artifacts=baseline_run_artifacts,
+                candidate_run_artifacts=candidate_run_artifacts,
+                comparison_id=comparison_id,
+            )
+            generated = llm_client.generate_structured(
+                experiment.models.judge_model,
+                comparison_prompt,
+                ComparisonArtifact,
+                None,
+            )
+            output = generated.output
+            comparison = (
+                output
+                if isinstance(output, ComparisonArtifact)
+                else ComparisonArtifact.model_validate(output)
+            )
+            _validate_comparison_metadata(
+                comparison=comparison,
+                comparison_id=comparison_id,
+                baseline_version=baseline_version,
+                candidate_version=candidate_version,
+                baseline_run_batch_id=baseline_run_batch_id,
+                candidate_run_batch_id=candidate_run_batch_id,
+                judge_model=experiment.models.judge_model,
+            )
 
-        _write_json(
-            comparison_dir / "comparison.json", comparison.model_dump(mode="json")
-        )
-        (comparison_dir / "comparison.md").write_text(
-            _render_comparison_markdown(comparison), encoding="utf-8"
-        )
-        (comparison_dir / "rubric_snapshot.md").write_text(rubric, encoding="utf-8")
+            _write_json(
+                comparison_dir / "comparison.json", comparison.model_dump(mode="json")
+            )
+            (comparison_dir / "comparison.md").write_text(
+                _render_comparison_markdown(comparison), encoding="utf-8"
+            )
+            (comparison_dir / "rubric_snapshot.md").write_text(
+                rubric, encoding="utf-8"
+            )
+        except Exception:
+            _cleanup_reserved_comparison_dir(comparison_dir)
+            raise
         return {
             "comparison_id": comparison_id,
             "baseline_run_batch_id": baseline_run_batch_id,

@@ -4,7 +4,7 @@ import json
 from collections import Counter
 from typing import Any
 
-from prompt_lab.models.artifacts import RunArtifact
+from prompt_lab.models.artifacts import CaseArtifact, RunArtifact
 from prompt_lab.models.judgments import ComparisonArtifact
 
 
@@ -36,6 +36,7 @@ def _run_summary(run_artifacts: list[RunArtifact]) -> dict[str, Any]:
         {
             "case_repeat": f"{run.case_id} repeat {run.repeat_index}",
             "status": run.status,
+            "rendered_prompt": run.rendered_prompt,
             "raw_output": run.raw_output,
             "output_json": run.output_json,
             "output_text": run.output_text,
@@ -62,6 +63,7 @@ def _run_outputs_text(run_artifacts: list[RunArtifact]) -> str:
                 [
                     f"{run.case_id} repeat {run.repeat_index}",
                     f"status: {run.status}",
+                    f"rendered_prompt: {run.rendered_prompt}",
                     f"raw_output: {run.raw_output}",
                     f"output_text: {run.output_text}",
                     f"validation_error: {run.validation_error}",
@@ -82,6 +84,8 @@ def build_comparison_prompt(
     candidate_prompt_template: str,
     baseline_run_batch_ids: list[str],
     candidate_run_batch_ids: list[str],
+    baseline_cases: list[CaseArtifact],
+    candidate_cases: list[CaseArtifact],
     baseline_run_artifacts: list[RunArtifact],
     candidate_run_artifacts: list[RunArtifact],
     comparison_id: str | None = None,
@@ -111,6 +115,16 @@ def build_comparison_prompt(
             _section("RUBRIC_SNAPSHOT", rubric),
             _section("BASELINE_PROMPT_TEMPLATE", baseline_prompt_template),
             _section("CANDIDATE_PROMPT_TEMPLATE", candidate_prompt_template),
+            _section(
+                "BASELINE_CASES_JSON",
+                _json_block([case.model_dump(mode="json") for case in baseline_cases]),
+                fence="json",
+            ),
+            _section(
+                "CANDIDATE_CASES_JSON",
+                _json_block([case.model_dump(mode="json") for case in candidate_cases]),
+                fence="json",
+            ),
             _section(
                 "BASELINE_RUN_SUMMARY",
                 _json_block(_run_summary(baseline_run_artifacts)),
