@@ -10,11 +10,16 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from prompt_lab import llm_client
+from prompt_lab.compare import build_comparison_prompt
 from prompt_lab.config import PromptLabConfig
 from prompt_lab.judge import build_judge_prompt
 from prompt_lab.jobs import JobManager
 from prompt_lab.models.artifacts import RunArtifact
-from prompt_lab.models.judgments import FindingDecisionSet, JudgmentArtifact
+from prompt_lab.models.judgments import (
+    ComparisonArtifact,
+    FindingDecisionSet,
+    JudgmentArtifact,
+)
 from prompt_lab.proposal import ProposalDraft, ProposalSource, build_proposal_prompt
 from prompt_lab.pydantic_loader import load_model_entrypoint
 from prompt_lab.runner import iter_case_major, run_structured_case, run_text_case
@@ -25,6 +30,13 @@ class HumanNotesRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     notes: str
+
+
+class ComparisonRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    baseline_version: str = Field(min_length=1)
+    candidate_version: str = Field(min_length=1)
 
 
 def _validate_case_id_path_segment(case_id: str) -> None:
@@ -135,6 +147,48 @@ def _render_judgment_markdown(judgment: JudgmentArtifact) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _render_comparison_markdown(comparison: ComparisonArtifact) -> str:
+    lines = [
+        f"# Comparison {comparison.comparison_id}",
+        "",
+        f"Baseline: `{_markdown_text(comparison.baseline_version)}`",
+        f"Candidate: `{_markdown_text(comparison.candidate_version)}`",
+        f"Recommendation: `{comparison.recommendation}`",
+        "",
+        _markdown_text(comparison.summary),
+    ]
+    sections = [
+        ("Improvements", comparison.improvements),
+        ("Regressions", comparison.regressions),
+        ("Unchanged Problems", comparison.unchanged_problems),
+        ("New Problems", comparison.new_problems),
+        ("Stability Changes", comparison.stability_changes),
+    ]
+    for title, items in sections:
+        lines.extend(["", f"## {title}"])
+        if items:
+            lines.extend(f"- {_markdown_text(item)}" for item in items)
+        else:
+            lines.append("- None.")
+    lines.extend(["", "## Decision Points"])
+    if comparison.decision_points:
+        for decision in comparison.decision_points:
+            options = "; ".join(_markdown_text(item) for item in decision.options)
+            lines.extend(
+                [
+                    (
+                        f"- `{_markdown_text(decision.decision_id)}`: "
+                        f"{_markdown_text(decision.description)}"
+                    ),
+                    f"  Options: {options}",
+                    f"  Recommended: {_markdown_text(decision.recommended_option)}",
+                ]
+            )
+    else:
+        lines.append("- None.")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def _select_latest_run_batch_dir(runs_dir: Path) -> Path | None:
     if not runs_dir.is_dir():
         return None
@@ -231,6 +285,54 @@ def _validate_judgment_metadata(
         )
 
 
+def _validate_comparison_metadata(
+    *,
+    comparison: ComparisonArtifact,
+    comparison_id: str,
+    baseline_version: str,
+    candidate_version: str,
+    baseline_run_batch_id: str,
+    candidate_run_batch_id: str,
+    judge_model: str,
+) -> None:
+    if comparison.comparison_id != comparison_id:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Comparison comparison_id must be {comparison_id}",
+        )
+    if comparison.baseline_version != baseline_version:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Comparison baseline_version must be {baseline_version}",
+        )
+    if comparison.candidate_version != candidate_version:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Comparison candidate_version must be {candidate_version}",
+        )
+    if comparison.baseline_run_batch_ids != [baseline_run_batch_id]:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Comparison baseline_run_batch_ids must be "
+                f"['{baseline_run_batch_id}']"
+            ),
+        )
+    if comparison.candidate_run_batch_ids != [candidate_run_batch_id]:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Comparison candidate_run_batch_ids must be "
+                f"['{candidate_run_batch_id}']"
+            ),
+        )
+    if comparison.judge_model != judge_model:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Comparison judge_model must be {judge_model}",
+        )
+
+
 def _next_review_location(version_dir: Path) -> tuple[str, Path]:
     reviews_dir = version_dir / "reviews"
     index = 1
@@ -239,6 +341,17 @@ def _next_review_location(version_dir: Path) -> tuple[str, Path]:
         review_dir = reviews_dir / review_id
         if not review_dir.exists():
             return review_id, review_dir
+        index += 1
+
+
+def _next_comparison_location(version_dir: Path) -> tuple[str, Path]:
+    comparisons_dir = version_dir / "comparisons"
+    index = 1
+    while True:
+        comparison_id = f"comparison-{index:03d}"
+        comparison_dir = comparisons_dir / comparison_id
+        if not comparison_dir.exists():
+            return comparison_id, comparison_dir
         index += 1
 
 
@@ -351,6 +464,34 @@ def _load_validated_proposal_source(
             detail=f"Proposal source mismatch: {', '.join(mismatches)}",
         )
     return source
+
+
+def _load_latest_validated_run_batch(
+    *,
+    version_dir: Path,
+    version: str,
+    cases: set[str],
+    repeat_count: int,
+) -> tuple[str, list[RunArtifact]]:
+    runs_dir = version_dir / "runs"
+    run_batch_dir = _select_latest_run_batch_dir(runs_dir)
+    if run_batch_dir is None:
+        raise HTTPException(status_code=400, detail="Version has no run batches")
+    selected_run_batch_id = run_batch_dir.name
+    run_artifacts = [
+        RunArtifact.model_validate(json.loads(path.read_text(encoding="utf-8")))
+        for path in sorted(run_batch_dir.glob("*/*.json"))
+    ]
+    if not run_artifacts:
+        raise HTTPException(status_code=400, detail="Run batch has no artifacts")
+    _validate_run_artifacts(
+        run_artifacts=run_artifacts,
+        selected_run_batch_id=selected_run_batch_id,
+        version=version,
+        case_ids=cases,
+        repeat_count=repeat_count,
+    )
+    return selected_run_batch_id, run_artifacts
 
 
 def create_app(config: PromptLabConfig | None = None) -> FastAPI:
@@ -543,6 +684,104 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             "review_id": review_id,
             "run_batch_id": selected_run_batch_id,
             "judgment": judgment.model_dump(mode="json"),
+        }
+
+    @app.post("/api/experiments/{experiment_id}/comparisons")
+    def compare_experiment_versions(
+        experiment_id: str, request: ComparisonRequest
+    ) -> dict[str, object]:
+        experiment = store.load_experiment(experiment_id)
+        baseline_version = request.baseline_version
+        candidate_version = request.candidate_version
+        baseline_version_dir = store.version_dir(experiment_id, baseline_version)
+        candidate_version_dir = store.version_dir(experiment_id, candidate_version)
+
+        baseline_cases = store.load_cases(experiment_id, baseline_version)
+        candidate_cases = store.load_cases(experiment_id, candidate_version)
+        if not baseline_cases:
+            raise HTTPException(status_code=400, detail="Baseline version has no cases")
+        if not candidate_cases:
+            raise HTTPException(status_code=400, detail="Candidate version has no cases")
+        for case in [*baseline_cases, *candidate_cases]:
+            _validate_case_id_path_segment(case.id)
+
+        repeat_count = experiment.run_defaults.repeat_count
+        baseline_run_batch_id, baseline_run_artifacts = _load_latest_validated_run_batch(
+            version_dir=baseline_version_dir,
+            version=baseline_version,
+            cases={case.id for case in baseline_cases},
+            repeat_count=repeat_count,
+        )
+        candidate_run_batch_id, candidate_run_artifacts = _load_latest_validated_run_batch(
+            version_dir=candidate_version_dir,
+            version=candidate_version,
+            cases={case.id for case in candidate_cases},
+            repeat_count=repeat_count,
+        )
+
+        experiment_dir = store.experiment_dir(experiment_id)
+        rubric_path = experiment_dir / "rubric.md"
+        rubric = (
+            rubric_path.read_text(encoding="utf-8")
+            if rubric_path.is_file()
+            else ""
+        )
+        baseline_prompt_template = store.read_text(
+            experiment_id, baseline_version, experiment.template.path
+        )
+        candidate_prompt_template = store.read_text(
+            experiment_id, candidate_version, experiment.template.path
+        )
+        comparison_id, comparison_dir = _next_comparison_location(
+            candidate_version_dir
+        )
+        comparison_prompt = build_comparison_prompt(
+            experiment_id=experiment_id,
+            baseline_version=baseline_version,
+            candidate_version=candidate_version,
+            rubric=rubric,
+            baseline_prompt_template=baseline_prompt_template,
+            candidate_prompt_template=candidate_prompt_template,
+            baseline_run_batch_ids=[baseline_run_batch_id],
+            candidate_run_batch_ids=[candidate_run_batch_id],
+            baseline_run_artifacts=baseline_run_artifacts,
+            candidate_run_artifacts=candidate_run_artifacts,
+            comparison_id=comparison_id,
+        )
+        generated = llm_client.generate_structured(
+            experiment.models.judge_model,
+            comparison_prompt,
+            ComparisonArtifact,
+            None,
+        )
+        output = generated.output
+        comparison = (
+            output
+            if isinstance(output, ComparisonArtifact)
+            else ComparisonArtifact.model_validate(output)
+        )
+        _validate_comparison_metadata(
+            comparison=comparison,
+            comparison_id=comparison_id,
+            baseline_version=baseline_version,
+            candidate_version=candidate_version,
+            baseline_run_batch_id=baseline_run_batch_id,
+            candidate_run_batch_id=candidate_run_batch_id,
+            judge_model=experiment.models.judge_model,
+        )
+
+        _write_json(
+            comparison_dir / "comparison.json", comparison.model_dump(mode="json")
+        )
+        (comparison_dir / "comparison.md").write_text(
+            _render_comparison_markdown(comparison), encoding="utf-8"
+        )
+        (comparison_dir / "rubric_snapshot.md").write_text(rubric, encoding="utf-8")
+        return {
+            "comparison_id": comparison_id,
+            "baseline_run_batch_id": baseline_run_batch_id,
+            "candidate_run_batch_id": candidate_run_batch_id,
+            "comparison": comparison.model_dump(mode="json"),
         }
 
     @app.put(
