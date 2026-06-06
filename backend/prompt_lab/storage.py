@@ -17,6 +17,14 @@ def _write_json(path: Path, value: dict[str, Any]) -> None:
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def _resolve_version_local_path(version_dir: Path, relative_path: str) -> Path:
+    root = version_dir.resolve()
+    candidate = (root / relative_path).resolve()
+    if candidate != root and not candidate.is_relative_to(root):
+        raise NotFoundError(f"File not found: {candidate}")
+    return candidate
+
+
 class PromptLabStore:
     """Filesystem-backed Prompt Lab artifact store."""
 
@@ -54,7 +62,9 @@ class PromptLabStore:
         return path
 
     def read_text(self, experiment_id: str, version: str, relative_path: str) -> str:
-        path = self.version_dir(experiment_id, version) / relative_path
+        path = _resolve_version_local_path(
+            self.version_dir(experiment_id, version), relative_path
+        )
         if not path.is_file():
             raise NotFoundError(f"File not found: {path}")
         return path.read_text(encoding="utf-8")
@@ -69,6 +79,8 @@ class PromptLabStore:
         ]
 
     def write_run_artifact(self, experiment_id: str, version: str, relative_path: str, value: dict[str, Any]) -> Path:
-        path = self.version_dir(experiment_id, version) / relative_path
+        path = _resolve_version_local_path(
+            self.version_dir(experiment_id, version), relative_path
+        )
         _write_json(path, value)
         return path
