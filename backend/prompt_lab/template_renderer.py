@@ -7,6 +7,7 @@ from prompt_lab.models.artifacts import CaseArtifact
 
 
 _ENV = SandboxedEnvironment(undefined=StrictUndefined, autoescape=False)
+_ENV.globals.clear()
 
 
 def render_prompt(template_text: str, case: CaseArtifact) -> str:
