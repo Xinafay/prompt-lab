@@ -53,40 +53,165 @@ def _write_json(path: Path, value: dict[str, object]) -> None:
     )
 
 
+def _markdown_text(value: str) -> str:
+    return " ".join(value.split())
+
+
 def _render_judgment_markdown(judgment: JudgmentArtifact) -> str:
     lines = [
         f"# Judgment {judgment.judgment_id}",
         "",
-        judgment.summary,
+        _markdown_text(judgment.summary),
         "",
         "## What Looks Correct",
     ]
     for finding in judgment.what_looks_correct:
+        evidence = "; ".join(_markdown_text(item) for item in finding.evidence)
         lines.extend(
             [
-                f"- {finding.finding_id}: {finding.description}",
-                f"  Evidence: {'; '.join(finding.evidence)}",
+                (
+                    f"- `{_markdown_text(finding.finding_id)}`: "
+                    f"{_markdown_text(finding.description)}"
+                ),
+                f"  Evidence: {evidence}",
             ]
         )
     lines.extend(["", "## Findings"])
     for finding in judgment.findings:
+        finding_header = (
+            f"- `{_markdown_text(finding.finding_id)}` [{finding.severity}] "
+            f"{_markdown_text(finding.area)}/{_markdown_text(finding.category)}: "
+            f"{_markdown_text(finding.description)}"
+        )
+        evidence = "; ".join(_markdown_text(item) for item in finding.evidence)
         lines.extend(
             [
-                f"- {finding.finding_id} [{finding.severity}] {finding.area}/{finding.category}: {finding.description}",
-                f"  Evidence: {'; '.join(finding.evidence)}",
-                f"  Suggested change: {finding.suggested_change}",
+                finding_header,
+                f"  Evidence: {evidence}",
+                f"  Suggested change: {_markdown_text(finding.suggested_change)}",
             ]
         )
     lines.extend(["", "## Decision Points"])
     for decision in judgment.decision_points:
+        options = "; ".join(_markdown_text(item) for item in decision.options)
         lines.extend(
             [
-                f"- {decision.decision_id}: {decision.description}",
-                f"  Options: {'; '.join(decision.options)}",
-                f"  Recommended: {decision.recommended_option}",
+                (
+                    f"- `{_markdown_text(decision.decision_id)}`: "
+                    f"{_markdown_text(decision.description)}"
+                ),
+                f"  Options: {options}",
+                f"  Recommended: {_markdown_text(decision.recommended_option)}",
             ]
         )
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _select_latest_run_batch_dir(runs_dir: Path) -> Path | None:
+    if not runs_dir.is_dir():
+        return None
+    run_batch_dirs = [path for path in runs_dir.iterdir() if path.is_dir()]
+    if not run_batch_dirs:
+        return None
+    return max(run_batch_dirs, key=lambda path: (path.stat().st_mtime_ns, path.name))
+
+
+def _validate_run_artifacts(
+    *,
+    run_artifacts: list[RunArtifact],
+    selected_run_batch_id: str,
+    version: str,
+    case_ids: set[str],
+    repeat_count: int,
+) -> None:
+    seen_pairs: set[tuple[str, int]] = set()
+    for run in run_artifacts:
+        if run.run_batch_id != selected_run_batch_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Run artifact {run.run_id} batch {run.run_batch_id} "
+                    f"does not match selected batch {selected_run_batch_id}"
+                ),
+            )
+        if run.version != version:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Run artifact {run.run_id} does not match version {version}",
+            )
+        if run.case_id not in case_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Run artifact {run.run_id} has unknown case_id {run.case_id}",
+            )
+        pair = (run.case_id, run.repeat_index)
+        if pair in seen_pairs:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Duplicate run artifact for case {run.case_id} "
+                    f"repeat {run.repeat_index}"
+                ),
+            )
+        seen_pairs.add(pair)
+
+    expected_pairs = {
+        (case_id, repeat_index)
+        for case_id in case_ids
+        for repeat_index in range(1, repeat_count + 1)
+    }
+    unexpected_pairs = sorted(seen_pairs - expected_pairs)
+    if unexpected_pairs:
+        case_id, repeat_index = unexpected_pairs[0]
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unexpected run artifact for case {case_id} repeat {repeat_index}",
+        )
+    missing_pairs = sorted(expected_pairs - seen_pairs)
+    if missing_pairs:
+        missing = ", ".join(
+            f"{case_id} repeat {repeat_index}"
+            for case_id, repeat_index in missing_pairs
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=f"Missing run artifacts for {missing}",
+        )
+
+
+def _validate_judgment_metadata(
+    *,
+    judgment: JudgmentArtifact,
+    version: str,
+    selected_run_batch_id: str,
+    judge_model: str,
+) -> None:
+    if judgment.version != version:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Judgment version must be {version}",
+        )
+    if judgment.run_batch_ids != [selected_run_batch_id]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Judgment run_batch_ids must be ['{selected_run_batch_id}']",
+        )
+    if judgment.judge_model != judge_model:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Judgment judge_model must be {judge_model}",
+        )
+
+
+def _next_review_location(version_dir: Path) -> tuple[str, Path]:
+    reviews_dir = version_dir / "reviews"
+    index = 1
+    while True:
+        review_id = f"review-{index:03d}"
+        review_dir = reviews_dir / review_id
+        if not review_dir.exists():
+            return review_id, review_dir
+        index += 1
 
 
 def create_app(config: PromptLabConfig | None = None) -> FastAPI:
@@ -183,14 +308,9 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         version_dir = store.version_dir(experiment_id, version)
         runs_dir = version_dir / "runs"
         if run_batch_id is None:
-            run_batch_dirs = (
-                sorted(path for path in runs_dir.iterdir() if path.is_dir())
-                if runs_dir.is_dir()
-                else []
-            )
-            if not run_batch_dirs:
+            run_batch_dir = _select_latest_run_batch_dir(runs_dir)
+            if run_batch_dir is None:
                 raise HTTPException(status_code=400, detail="Version has no run batches")
-            run_batch_dir = run_batch_dirs[-1]
             selected_run_batch_id = run_batch_dir.name
         else:
             _validate_run_batch_id_path_segment(run_batch_id)
@@ -221,6 +341,13 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         ]
         if not run_artifacts:
             raise HTTPException(status_code=400, detail="Run batch has no artifacts")
+        _validate_run_artifacts(
+            run_artifacts=run_artifacts,
+            selected_run_batch_id=selected_run_batch_id,
+            version=version,
+            case_ids={case.id for case in cases},
+            repeat_count=experiment.run_defaults.repeat_count,
+        )
 
         if experiment.output.type == "pydantic":
             model_file = experiment.output.model_file
@@ -256,12 +383,17 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             if isinstance(output, JudgmentArtifact)
             else JudgmentArtifact.model_validate(output)
         )
+        _validate_judgment_metadata(
+            judgment=judgment,
+            version=version,
+            selected_run_batch_id=selected_run_batch_id,
+            judge_model=experiment.models.judge_model,
+        )
         decisions = FindingDecisionSet.from_finding_ids(
             [finding.finding_id for finding in judgment.findings]
         )
 
-        review_id = "review-001"
-        review_dir = version_dir / "reviews" / review_id
+        review_id, review_dir = _next_review_location(version_dir)
         _write_json(review_dir / "judgment.json", judgment.model_dump(mode="json"))
         (review_dir / "judgment.md").write_text(
             _render_judgment_markdown(judgment), encoding="utf-8"
