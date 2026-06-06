@@ -22,7 +22,10 @@ def _load_module(path: Path) -> ModuleType:
 
 def load_model_entrypoint(version_dir: Path, model_file: str, model_entrypoint: str) -> type[BaseModel]:
     """Load a Pydantic model class from a version-local Python file."""
-    module_name, _, class_name = model_entrypoint.partition(".")
+    parts = model_entrypoint.split(".")
+    if len(parts) != 2:
+        raise ValueError("model_entrypoint must look like '<model_file_stem>.<ClassName>'.")
+    module_name, class_name = parts
     if module_name != Path(model_file).stem or not class_name:
         raise ValueError("model_entrypoint must look like '<model_file_stem>.<ClassName>'.")
     module = _load_module(version_dir / model_file)
