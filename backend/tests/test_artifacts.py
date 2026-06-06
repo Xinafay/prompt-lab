@@ -120,6 +120,20 @@ def test_output_config_rejects_invalid_mode_fields() -> None:
         {"type": "text", "validation_context_from_case": "context"},
         "text output cannot include pydantic-only fields",
     )
+    assert_validation_error(
+        OutputConfig,
+        {
+            "type": "pydantic",
+            "model_file": "",
+            "model_entrypoint": "model.SceneList",
+        },
+        "String should have at least 1 character",
+    )
+    assert_validation_error(
+        OutputConfig,
+        {"type": "pydantic", "model_file": "model.py", "model_entrypoint": ""},
+        "String should have at least 1 character",
+    )
 
 
 def test_run_defaults_rejects_invalid_values_and_extras() -> None:
@@ -236,6 +250,13 @@ def test_run_artifact_rejects_empty_filesystem_keys() -> None:
 
 
 def test_run_batch_artifact_enforces_counts_and_keys() -> None:
+    empty_batch = RunBatchArtifact.model_validate(
+        valid_run_batch_payload(total_runs=0, completed_runs=0)
+    )
+
+    assert empty_batch.total_runs == 0
+    assert empty_batch.completed_runs == 0
+
     assert_validation_error(
         RunBatchArtifact,
         valid_run_batch_payload(run_batch_id=""),
@@ -245,11 +266,6 @@ def test_run_batch_artifact_enforces_counts_and_keys() -> None:
         RunBatchArtifact,
         valid_run_batch_payload(version=""),
         "String should have at least 1 character",
-    )
-    assert_validation_error(
-        RunBatchArtifact,
-        valid_run_batch_payload(total_runs=0),
-        "greater than or equal to 1",
     )
     assert_validation_error(
         RunBatchArtifact,

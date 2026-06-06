@@ -23,8 +23,8 @@ class OutputConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["text", "pydantic"]
-    model_file: str | None = None
-    model_entrypoint: str | None = None
+    model_file: str | None = Field(default=None, min_length=1)
+    model_entrypoint: str | None = Field(default=None, min_length=1)
     validation_context_from_case: str | None = None
 
     @model_validator(mode="after")
@@ -113,7 +113,7 @@ class RunBatchArtifact(BaseModel):
     llm_cache: Literal["disabled"]
     started_at: str
     finished_at: str | None = None
-    total_runs: int = Field(ge=1)
+    total_runs: int = Field(ge=0)
     completed_runs: int = Field(ge=0)
 
     @model_validator(mode="after")
