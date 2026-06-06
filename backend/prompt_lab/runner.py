@@ -5,6 +5,7 @@ from collections.abc import Callable, Iterable, Iterator
 from typing import Any
 
 from pydantic import BaseModel
+from shared.llm.structured_lite import StructuredLiteExhaustedError
 
 from prompt_lab.models.artifacts import CaseArtifact, RunArtifact
 from prompt_lab.template_renderer import render_prompt
@@ -88,7 +89,7 @@ def run_structured_case(
             case.structured_validation_context,
         )
         output = getattr(result, "output")
-    except Exception:
+    except StructuredLiteExhaustedError:
         return RunArtifact(
             schema_version="prompt_lab.run/v1",
             run_id=run_id,
@@ -101,6 +102,20 @@ def run_structured_case(
             rendered_prompt=rendered_prompt,
             output_type="pydantic",
             validation_error=traceback.format_exc(),
+        )
+    except Exception:
+        return RunArtifact(
+            schema_version="prompt_lab.run/v1",
+            run_id=run_id,
+            run_batch_id=run_batch_id,
+            version=version,
+            case_id=case.id,
+            repeat_index=repeat_index,
+            generator_model=generator_model,
+            status="execution_error",
+            rendered_prompt=rendered_prompt,
+            output_type="pydantic",
+            execution_error=traceback.format_exc(),
         )
     return RunArtifact(
         schema_version="prompt_lab.run/v1",

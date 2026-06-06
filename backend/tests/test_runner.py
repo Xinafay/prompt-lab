@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pydantic import BaseModel
+from shared.llm.structured_lite import StructuredLiteExhaustedError
 
 from prompt_lab.models.artifacts import CaseArtifact
 from prompt_lab.runner import iter_case_major, run_structured_case, run_text_case
@@ -67,6 +68,34 @@ def test_run_text_case_saves_text_output() -> None:
     assert run.rendered_prompt == "Hello Ada"
 
 
+def test_run_text_case_stores_execution_errors() -> None:
+    case = CaseArtifact.model_validate(
+        {
+            "schema_version": "prompt_lab.case/v1",
+            "id": "a",
+            "title": "A",
+            "variables": {"name": "Ada"},
+        }
+    )
+
+    def generate(model: str, prompt: str) -> object:
+        raise RuntimeError("transport failed")
+
+    run = run_text_case(
+        version="v001",
+        run_batch_id="batch-1",
+        case=case,
+        repeat_index=1,
+        generator_model="local/model",
+        template_text="Hello {{ name }}",
+        generate_text=generate,
+    )
+
+    assert run.status == "execution_error"
+    assert run.execution_error is not None
+    assert "transport failed" in run.execution_error
+
+
 def test_run_structured_case_saves_json_output() -> None:
     case = CaseArtifact.model_validate(
         {
@@ -111,11 +140,82 @@ def test_run_structured_case_saves_json_output() -> None:
     assert run.output_type == "pydantic"
 
 
+def test_run_structured_case_stores_validation_errors() -> None:
+    case = CaseArtifact.model_validate(
+        {
+            "schema_version": "prompt_lab.case/v1",
+            "id": "a",
+            "title": "A",
+            "variables": {"name": "Ada"},
+        }
+    )
+
+    def generate(
+        model: str,
+        prompt: str,
+        response_model: type[BaseModel],
+        validation_context: dict[str, object] | None,
+    ) -> object:
+        raise StructuredLiteExhaustedError(ValueError("invalid structured output"), [])
+
+    run = run_structured_case(
+        version="v001",
+        run_batch_id="batch-1",
+        case=case,
+        repeat_index=1,
+        generator_model="local/model",
+        template_text="Hello {{ name }}",
+        response_model=DemoOutput,
+        generate_structured=generate,
+    )
+
+    assert run.status == "validation_error"
+    assert run.validation_error is not None
+    assert "invalid structured output" in run.validation_error
+
+
+def test_run_structured_case_stores_execution_errors() -> None:
+    case = CaseArtifact.model_validate(
+        {
+            "schema_version": "prompt_lab.case/v1",
+            "id": "a",
+            "title": "A",
+            "variables": {"name": "Ada"},
+        }
+    )
+
+    def generate(
+        model: str,
+        prompt: str,
+        response_model: type[BaseModel],
+        validation_context: dict[str, object] | None,
+    ) -> object:
+        raise RuntimeError("transport failed")
+
+    run = run_structured_case(
+        version="v001",
+        run_batch_id="batch-1",
+        case=case,
+        repeat_index=1,
+        generator_model="local/model",
+        template_text="Hello {{ name }}",
+        response_model=DemoOutput,
+        generate_structured=generate,
+    )
+
+    assert run.status == "execution_error"
+    assert run.execution_error is not None
+    assert "transport failed" in run.execution_error
+
+
 def main() -> int:
     tests = [
         test_iter_case_major_groups_repeats_per_case,
         test_run_text_case_saves_text_output,
+        test_run_text_case_stores_execution_errors,
         test_run_structured_case_saves_json_output,
+        test_run_structured_case_stores_validation_errors,
+        test_run_structured_case_stores_execution_errors,
     ]
     for test in tests:
         test()
