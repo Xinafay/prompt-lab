@@ -21,7 +21,7 @@ from prompt_lab.storage import PromptLabStore
 class HumanNotesRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    notes: str = Field(default="")
+    notes: str
 
 
 def _validate_case_id_path_segment(case_id: str) -> None:
@@ -254,6 +254,24 @@ def _resolve_existing_review_dir(version_dir: Path, review_id: str) -> Path:
     return review_dir
 
 
+def _validate_decision_keys_match_judgment(
+    *, judgment: JudgmentArtifact, decisions: FindingDecisionSet
+) -> None:
+    expected_ids = {finding.finding_id for finding in judgment.findings}
+    submitted_ids = set(decisions.finding_decisions)
+    if submitted_ids != expected_ids:
+        missing_ids = sorted(expected_ids - submitted_ids)
+        unknown_ids = sorted(submitted_ids - expected_ids)
+        detail_parts = [
+            "finding_decisions keys must exactly match judgment finding ids"
+        ]
+        if missing_ids:
+            detail_parts.append(f"missing: {', '.join(missing_ids)}")
+        if unknown_ids:
+            detail_parts.append(f"unknown: {', '.join(unknown_ids)}")
+        raise HTTPException(status_code=400, detail="; ".join(detail_parts))
+
+
 def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     resolved_config = config or PromptLabConfig.from_env()
     store = PromptLabStore(
@@ -457,6 +475,11 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     ) -> dict[str, object]:
         version_dir = store.version_dir(experiment_id, version)
         review_dir = _resolve_existing_review_dir(version_dir, review_id)
+        judgment = JudgmentArtifact.model_validate(_read_json(review_dir / "judgment.json"))
+        _validate_decision_keys_match_judgment(
+            judgment=judgment,
+            decisions=decisions,
+        )
         saved = decisions.model_dump(mode="json")
         _write_json(review_dir / "decisions.json", saved)
         return saved

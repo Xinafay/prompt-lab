@@ -12,7 +12,8 @@ from prompt_lab.config import PromptLabConfig
 from test_judge import valid_judgment_payload, write_json
 
 
-def write_demo_review(root: Path) -> Path:
+def write_demo_review(root: Path, *, finding_ids: list[str] | None = None) -> Path:
+    finding_ids = finding_ids or ["f001"]
     example = root / "examples" / "demo"
     version_dir = example / "versions" / "v001"
     review_dir = version_dir / "reviews" / "review-001"
@@ -38,7 +39,21 @@ def write_demo_review(root: Path) -> Path:
     (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
     write_json(
         review_dir / "judgment.json",
-        valid_judgment_payload(judge_model="openai/judge"),
+        valid_judgment_payload(
+            judge_model="openai/judge",
+            findings=[
+                {
+                    "finding_id": finding_id,
+                    "severity": "recommended",
+                    "area": "prompt",
+                    "category": "recurring_problem",
+                    "description": f"The model skips required section {finding_id}.",
+                    "evidence": [f"case after-hours repeat {index}"],
+                    "suggested_change": "Make the required sections explicit.",
+                }
+                for index, finding_id in enumerate(finding_ids, start=1)
+            ],
+        ),
     )
     (review_dir / "judgment.md").write_text("# Judgment\n", encoding="utf-8")
     (review_dir / "rubric_snapshot.md").write_text(
@@ -49,7 +64,8 @@ def write_demo_review(root: Path) -> Path:
         {
             "schema_version": "prompt_lab.decisions/v1",
             "finding_decisions": {
-                "f001": {"decision": "accepted", "reason": "initial default"}
+                finding_id: {"decision": "accepted", "reason": "initial default"}
+                for finding_id in finding_ids
             },
         },
     )
@@ -79,6 +95,54 @@ def test_api_updates_one_finding_decision_to_rejected() -> None:
         assert saved == body
 
 
+def test_api_rejects_decision_update_missing_judgment_finding_key() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        review_dir = write_demo_review(root, finding_ids=["f001", "f002"])
+        decisions_path = review_dir / "decisions.json"
+        original = decisions_path.read_text(encoding="utf-8")
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).put(
+            "/api/experiments/demo/versions/v001/reviews/review-001/decisions",
+            json={
+                "schema_version": "prompt_lab.decisions/v1",
+                "finding_decisions": {
+                    "f001": {"decision": "rejected", "reason": "False positive"}
+                },
+            },
+        )
+
+        assert response.status_code == 400
+        assert "must exactly match judgment finding ids" in response.json()["detail"]
+        assert decisions_path.read_text(encoding="utf-8") == original
+
+
+def test_api_rejects_decision_update_unknown_judgment_finding_key() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        review_dir = write_demo_review(root, finding_ids=["f001", "f002"])
+        decisions_path = review_dir / "decisions.json"
+        original = decisions_path.read_text(encoding="utf-8")
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).put(
+            "/api/experiments/demo/versions/v001/reviews/review-001/decisions",
+            json={
+                "schema_version": "prompt_lab.decisions/v1",
+                "finding_decisions": {
+                    "f001": {"decision": "accepted", "reason": "Keep it"},
+                    "f002": {"decision": "accepted", "reason": "Keep it"},
+                    "f999": {"decision": "rejected", "reason": "Unknown finding"},
+                },
+            },
+        )
+
+        assert response.status_code == 400
+        assert "must exactly match judgment finding ids" in response.json()["detail"]
+        assert decisions_path.read_text(encoding="utf-8") == original
+
+
 def test_api_saves_human_notes_markdown() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -97,6 +161,23 @@ def test_api_saves_human_notes_markdown() -> None:
         assert (review_dir / "human_notes.md").read_text(encoding="utf-8") == (
             "Keep the finding rejected until case coverage improves.\n"
         )
+
+
+def test_api_rejects_missing_human_notes_without_changing_existing_notes() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        review_dir = write_demo_review(root)
+        notes_path = review_dir / "human_notes.md"
+        notes_path.write_text("Existing reviewer note.\n", encoding="utf-8")
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).put(
+            "/api/experiments/demo/versions/v001/reviews/review-001/human-notes",
+            json={},
+        )
+
+        assert response.status_code == 422
+        assert notes_path.read_text(encoding="utf-8") == "Existing reviewer note.\n"
 
 
 def test_api_reads_review_state() -> None:
@@ -167,7 +248,10 @@ def test_api_returns_404_for_missing_review_without_creating_it() -> None:
 def main() -> int:
     tests: list[Any] = [
         test_api_updates_one_finding_decision_to_rejected,
+        test_api_rejects_decision_update_missing_judgment_finding_key,
+        test_api_rejects_decision_update_unknown_judgment_finding_key,
         test_api_saves_human_notes_markdown,
+        test_api_rejects_missing_human_notes_without_changing_existing_notes,
         test_api_reads_review_state,
         test_api_rejects_unsafe_review_id_without_reading_parent_paths,
         test_api_returns_404_for_missing_review_without_creating_it,
