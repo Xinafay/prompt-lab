@@ -26,8 +26,12 @@ class GeneratedStructured:
 
 def _raw_response(result: Any) -> Any:
     if hasattr(result, "response"):
-        return result.response
-    return result.conversation
+        response = result.response
+        if response is not None:
+            return response
+    if hasattr(result, "conversation"):
+        return result.conversation
+    raise AttributeError("LLM result has neither non-None response nor conversation.")
 
 
 def generate_text(model: str, prompt: str) -> GeneratedText:

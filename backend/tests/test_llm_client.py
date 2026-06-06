@@ -25,7 +25,7 @@ def test_text_wrapper_disables_cache(monkeypatch: object | None = None) -> None:
         class Result:
             output = "hello"
             usage = {"total_tokens": 3}
-            response = None
+            response = {"id": "text-response"}
 
         return Result()
 
@@ -37,6 +37,8 @@ def test_text_wrapper_disables_cache(monkeypatch: object | None = None) -> None:
         llm_client.chat_get_text = original
 
     assert result.output == "hello"
+    assert result.raw_response == {"id": "text-response"}
+    assert calls[0]["preset"] == {"model": "local/model"}
     assert calls[0]["cache_enabled"] is False
 
 
@@ -53,12 +55,21 @@ def test_structured_wrapper_disables_cache() -> None:
         cache_enabled: bool,
         stream_callback: object | None = None,
     ) -> object:
-        calls.append({"prompt": prompt, "cache_enabled": cache_enabled, "validation_context": validation_context})
+        calls.append(
+            {
+                "prompt": prompt,
+                "preset": preset,
+                "response_model": response_model,
+                "cache_enabled": cache_enabled,
+                "validation_context": validation_context,
+            }
+        )
 
         class Result:
             output = DemoModel(name="Ada")
             usage = {"total_tokens": 4}
             response = None
+            conversation = [{"role": "assistant", "content": "{\"name\":\"Ada\"}"}]
 
         return Result()
 
@@ -70,6 +81,10 @@ def test_structured_wrapper_disables_cache() -> None:
         llm_client.chat_get_structured_lite = original
 
     assert result.output.model_dump() == {"name": "Ada"}
+    assert result.raw_response == [{"role": "assistant", "content": "{\"name\":\"Ada\"}"}]
+    assert calls[0]["preset"] == {"model": "local/model"}
+    assert calls[0]["response_model"] is DemoModel
+    assert calls[0]["validation_context"] == {"x": 1}
     assert calls[0]["cache_enabled"] is False
 
 
