@@ -8,7 +8,8 @@ from fastapi import FastAPI, HTTPException
 from prompt_lab import llm_client
 from prompt_lab.config import PromptLabConfig
 from prompt_lab.jobs import JobManager
-from prompt_lab.runner import iter_case_major, run_text_case
+from prompt_lab.pydantic_loader import load_model_entrypoint
+from prompt_lab.runner import iter_case_major, run_structured_case, run_text_case
 from prompt_lab.storage import PromptLabStore
 
 
@@ -45,14 +46,20 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         cases = store.load_cases(experiment_id, version)
         if not cases:
             raise HTTPException(status_code=400, detail="Version has no cases")
-        if experiment.output.type != "text":
-            raise NotImplementedError(
-                "Pydantic run endpoint is implemented in a later task."
-            )
         for case in cases:
             _validate_case_id_path_segment(case.id)
         repeat_count = experiment.run_defaults.repeat_count
         template_text = store.read_text(experiment_id, version, experiment.template.path)
+        response_model = None
+        if experiment.output.type == "pydantic":
+            model_file = experiment.output.model_file
+            model_entrypoint = experiment.output.model_entrypoint
+            assert model_file is not None
+            assert model_entrypoint is not None
+            version_dir = store.version_dir(experiment_id, version)
+            response_model = load_model_entrypoint(
+                version_dir, model_file, model_entrypoint
+            )
         job = job_manager.start_job(
             kind="run_version",
             experiment_id=experiment_id,
@@ -63,15 +70,28 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         completed_units = 0
         try:
             for case, repeat_index in iter_case_major(cases, repeat_count=repeat_count):
-                run = run_text_case(
-                    version=version,
-                    run_batch_id=job.job_id,
-                    case=case,
-                    repeat_index=repeat_index,
-                    generator_model=experiment.models.generator_model,
-                    template_text=template_text,
-                    generate_text=llm_client.generate_text,
-                )
+                if experiment.output.type == "pydantic":
+                    assert response_model is not None
+                    run = run_structured_case(
+                        version=version,
+                        run_batch_id=job.job_id,
+                        case=case,
+                        repeat_index=repeat_index,
+                        generator_model=experiment.models.generator_model,
+                        template_text=template_text,
+                        response_model=response_model,
+                        generate_structured=llm_client.generate_structured,
+                    )
+                else:
+                    run = run_text_case(
+                        version=version,
+                        run_batch_id=job.job_id,
+                        case=case,
+                        repeat_index=repeat_index,
+                        generator_model=experiment.models.generator_model,
+                        template_text=template_text,
+                        generate_text=llm_client.generate_text,
+                    )
                 store.write_run_artifact(
                     experiment_id,
                     version,

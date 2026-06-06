@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -76,6 +77,74 @@ def test_api_starts_run_job() -> None:
             assert artifact["repeat_index"] == 1
     finally:
         llm_client.generate_text = original_generate_text  # type: ignore[assignment]
+
+
+def test_api_runs_pydantic_version() -> None:
+    class FakeGeneratedStructured:
+        def __init__(self, output: Any) -> None:
+            self.output = output
+            self.usage: dict[str, Any] = {}
+
+    def fake_generate_structured(
+        model: str,
+        prompt: str,
+        response_model: Any,
+        validation_context: dict[str, Any] | None,
+    ) -> FakeGeneratedStructured:
+        assert validation_context is not None
+        last_part = validation_context["parts"][-1]
+        last_paragraph_number = (
+            last_part["first_paragraph_number"] + len(last_part["paragraphs"]) - 1
+        )
+        output = response_model.model_validate(
+            [
+                {
+                    "identifier": 1,
+                    "summary": "One complete scene.",
+                    "title": "Complete Scene",
+                    "paragraph_number": last_paragraph_number,
+                }
+            ],
+            context=validation_context,
+        )
+        return FakeGeneratedStructured(output)
+
+    original_generate_structured = llm_client.generate_structured
+    llm_client.generate_structured = fake_generate_structured  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            examples_root = root / "examples"
+            shutil.copytree(
+                Path("examples") / "split-scenes",
+                examples_root / "split-scenes",
+            )
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+
+            response = TestClient(app, raise_server_exceptions=False).post(
+                "/api/experiments/split-scenes/versions/v001/runs"
+            )
+
+            assert response.status_code == 200
+            body = response.json()
+            artifact_paths = sorted(
+                (
+                    examples_root
+                    / "split-scenes"
+                    / "versions"
+                    / "v001"
+                    / "runs"
+                    / body["job_id"]
+                ).glob("*/*.json")
+            )
+            assert artifact_paths
+            artifacts = [
+                json.loads(path.read_text(encoding="utf-8"))
+                for path in artifact_paths
+            ]
+            assert any(artifact.get("output_json") for artifact in artifacts)
+    finally:
+        llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
 
 def test_api_rejects_empty_cases_without_calling_llm() -> None:
@@ -160,6 +229,7 @@ def main() -> int:
     tests = [
         test_api_lists_experiments,
         test_api_starts_run_job,
+        test_api_runs_pydantic_version,
         test_api_rejects_empty_cases_without_calling_llm,
         test_api_rejects_unsafe_case_id_without_calling_llm,
     ]
