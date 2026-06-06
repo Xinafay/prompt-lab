@@ -6,7 +6,7 @@ import shutil
 from dataclasses import asdict
 from pathlib import Path, PureWindowsPath
 
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from prompt_lab import llm_client
@@ -83,6 +83,10 @@ def _validate_review_id_path_segment(review_id: str) -> None:
 
 def _read_json(path: Path) -> dict[str, object]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _read_optional_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8") if path.is_file() else ""
 
 
 def _write_json(path: Path, value: dict[str, object]) -> None:
@@ -520,8 +524,57 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     def list_experiments() -> list[dict[str, object]]:
         return [item.model_dump(mode="json") for item in store.list_experiments()]
 
+    @app.get("/api/experiments/{experiment_id}/versions/{version}")
+    def get_experiment_version(
+        experiment_id: str, version: str
+    ) -> dict[str, object]:
+        experiment = store.load_experiment(experiment_id)
+        experiment_dir = store.experiment_dir(experiment_id)
+        prompt_template = store.read_text(
+            experiment_id, version, experiment.template.path
+        )
+        cases = store.load_cases(experiment_id, version)
+        return {
+            "experiment": experiment.model_dump(mode="json"),
+            "version": version,
+            "prompt": prompt_template,
+            "rubric": _read_optional_text(experiment_dir / "rubric.md"),
+            "cases": [case.model_dump(mode="json") for case in cases],
+        }
+
+    @app.get("/api/experiments/{experiment_id}/versions/{version}/runs")
+    def list_version_runs(experiment_id: str, version: str) -> dict[str, object]:
+        version_dir = store.version_dir(experiment_id, version)
+        run_batch_dir = _select_latest_run_batch_dir(version_dir / "runs")
+        if run_batch_dir is None:
+            return {"run_batch_id": None, "runs": []}
+        run_artifacts = [
+            RunArtifact.model_validate(json.loads(path.read_text(encoding="utf-8")))
+            for path in sorted(run_batch_dir.glob("*/*.json"))
+        ]
+        return {
+            "run_batch_id": run_batch_dir.name,
+            "runs": [run.model_dump(mode="json") for run in run_artifacts],
+        }
+
+    @app.get("/api/jobs/{job_id}")
+    def get_job(job_id: str) -> dict[str, object]:
+        try:
+            return asdict(job_manager.get(job_id))
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Job not found") from exc
+
+    @app.get("/api/jobs/{job_id}/events")
+    def get_job_events(job_id: str) -> list[dict[str, object]]:
+        try:
+            return [asdict(event) for event in job_manager.events(job_id)]
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Job not found") from exc
+
     @app.post("/api/experiments/{experiment_id}/versions/{version}/runs")
-    def run_experiment_version(experiment_id: str, version: str) -> dict[str, object]:
+    def run_experiment_version(
+        experiment_id: str, version: str, background_tasks: BackgroundTasks
+    ) -> dict[str, object]:
         experiment = store.load_experiment(experiment_id)
         cases = store.load_cases(experiment_id, version)
         if not cases:
@@ -546,51 +599,61 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             version=version,
             total_units=len(cases) * repeat_count,
         )
+        job_id = job.job_id
 
-        completed_units = 0
-        try:
-            for case, repeat_index in iter_case_major(cases, repeat_count=repeat_count):
-                if experiment.output.type == "pydantic":
-                    assert response_model is not None
-                    run = run_structured_case(
-                        version=version,
-                        run_batch_id=job.job_id,
-                        case=case,
-                        repeat_index=repeat_index,
-                        generator_model=experiment.models.generator_model,
-                        template_text=template_text,
-                        response_model=response_model,
-                        generate_structured=llm_client.generate_structured,
+        def execute_run_job() -> None:
+            completed_units = 0
+            try:
+                for case, repeat_index in iter_case_major(
+                    cases, repeat_count=repeat_count
+                ):
+                    job_manager.update(
+                        job_id,
+                        completed_units=completed_units,
+                        message=f"Running {case.id} repeat {repeat_index}",
                     )
-                else:
-                    run = run_text_case(
-                        version=version,
-                        run_batch_id=job.job_id,
-                        case=case,
-                        repeat_index=repeat_index,
-                        generator_model=experiment.models.generator_model,
-                        template_text=template_text,
-                        generate_text=llm_client.generate_text,
+                    if experiment.output.type == "pydantic":
+                        assert response_model is not None
+                        run = run_structured_case(
+                            version=version,
+                            run_batch_id=job_id,
+                            case=case,
+                            repeat_index=repeat_index,
+                            generator_model=experiment.models.generator_model,
+                            template_text=template_text,
+                            response_model=response_model,
+                            generate_structured=llm_client.generate_structured,
+                        )
+                    else:
+                        run = run_text_case(
+                            version=version,
+                            run_batch_id=job_id,
+                            case=case,
+                            repeat_index=repeat_index,
+                            generator_model=experiment.models.generator_model,
+                            template_text=template_text,
+                            generate_text=llm_client.generate_text,
+                        )
+                    store.write_run_artifact(
+                        experiment_id,
+                        version,
+                        f"runs/{job_id}/{case.id}/repeat-{repeat_index:03d}.json",
+                        run.model_dump(mode="json"),
                     )
-                store.write_run_artifact(
-                    experiment_id,
-                    version,
-                    f"runs/{job.job_id}/{case.id}/repeat-{repeat_index:03d}.json",
-                    run.model_dump(mode="json"),
-                )
-                completed_units += 1
-                job = job_manager.update(
-                    job.job_id,
-                    completed_units=completed_units,
-                    message=f"Completed {case.id} repeat {repeat_index}",
-                )
+                    completed_units += 1
+                    job_manager.update(
+                        job_id,
+                        completed_units=completed_units,
+                        message=f"Completed {case.id} repeat {repeat_index}",
+                    )
 
-            job = job_manager.complete(job.job_id, message="Run completed")
-        except Exception as exc:
-            current_job = job_manager.get(job.job_id)
-            if current_job.status not in {"completed", "failed"}:
-                job_manager.fail(job.job_id, message=str(exc) or type(exc).__name__)
-            raise
+                job_manager.complete(job_id, message="Run completed")
+            except Exception as exc:
+                current_job = job_manager.get(job_id)
+                if current_job.status not in {"completed", "failed"}:
+                    job_manager.fail(job_id, message=str(exc) or type(exc).__name__)
+
+        background_tasks.add_task(execute_run_job)
         return asdict(job)
 
     @app.post("/api/experiments/{experiment_id}/versions/{version}/judgments")
@@ -619,11 +682,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
 
         experiment_dir = store.experiment_dir(experiment_id)
         rubric_path = experiment_dir / "rubric.md"
-        rubric = (
-            rubric_path.read_text(encoding="utf-8")
-            if rubric_path.is_file()
-            else ""
-        )
+        rubric = _read_optional_text(rubric_path)
         prompt_template = store.read_text(
             experiment_id, version, experiment.template.path
         )
@@ -749,11 +808,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
 
         experiment_dir = store.experiment_dir(experiment_id)
         rubric_path = experiment_dir / "rubric.md"
-        rubric = (
-            rubric_path.read_text(encoding="utf-8")
-            if rubric_path.is_file()
-            else ""
-        )
+        rubric = _read_optional_text(rubric_path)
         baseline_prompt_template = store.read_text(
             experiment_id, baseline_version, experiment.template.path
         )

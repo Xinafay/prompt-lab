@@ -30,6 +30,85 @@ def test_api_lists_experiments() -> None:
         assert response.json()[0]["id"] == "demo"
 
 
+def test_api_gets_version_overview() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        example = root / "examples" / "demo"
+        version_dir = example / "versions" / "v001"
+        (version_dir / "cases").mkdir(parents=True)
+        (example / "experiment.json").write_text(
+            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"Demo experiment","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
+            encoding="utf-8",
+        )
+        (example / "rubric.md").write_text("Prefer concise answers.", encoding="utf-8")
+        (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
+        (version_dir / "cases" / "a.json").write_text(
+            '{"schema_version":"prompt_lab.case/v1","id":"a","title":"A","variables":{"value":"hello"}}',
+            encoding="utf-8",
+        )
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).get("/api/experiments/demo/versions/v001")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["experiment"]["id"] == "demo"
+        assert body["version"] == "v001"
+        assert body["prompt"] == "Say {{ value }}"
+        assert body["rubric"] == "Prefer concise answers."
+        assert body["cases"][0]["id"] == "a"
+
+
+def test_api_lists_latest_run_artifacts() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        example = root / "examples" / "demo"
+        version_dir = example / "versions" / "v001"
+        run_dir = version_dir / "runs" / "run_version-000001" / "a"
+        run_dir.mkdir(parents=True)
+        (example / "experiment.json").write_text(
+            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
+            encoding="utf-8",
+        )
+        (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
+        (version_dir / "cases").mkdir()
+        (version_dir / "cases" / "a.json").write_text(
+            '{"schema_version":"prompt_lab.case/v1","id":"a","title":"A","variables":{"value":"hello"}}',
+            encoding="utf-8",
+        )
+        (run_dir / "repeat-001.json").write_text(
+            '{"schema_version":"prompt_lab.run/v1","run_id":"r1","run_batch_id":"run_version-000001","version":"v001","case_id":"a","repeat_index":1,"generator_model":"local/a","status":"ok","rendered_prompt":"Say hello","raw_output":"ok","output_type":"text","output_text":"ok","usage":{}}',
+            encoding="utf-8",
+        )
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).get("/api/experiments/demo/versions/v001/runs")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["run_batch_id"] == "run_version-000001"
+        assert body["runs"][0]["case_id"] == "a"
+        assert body["runs"][0]["output_text"] == "ok"
+
+
+def test_api_lists_empty_runs_when_version_has_no_batches() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        example = root / "examples" / "demo"
+        version_dir = example / "versions" / "v001"
+        version_dir.mkdir(parents=True)
+        (example / "experiment.json").write_text(
+            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
+            encoding="utf-8",
+        )
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).get("/api/experiments/demo/versions/v001/runs")
+
+        assert response.status_code == 200
+        assert response.json() == {"run_batch_id": None, "runs": []}
+
+
 def test_api_starts_run_job() -> None:
     class FakeGeneratedText:
         output = "ok"
@@ -61,7 +140,17 @@ def test_api_starts_run_job() -> None:
             assert response.status_code == 200
             body = response.json()
             assert body["kind"] == "run_version"
-            assert body["status"] in {"running", "completed"}
+            assert body["status"] == "running"
+            job_response = TestClient(app).get(f"/api/jobs/{body['job_id']}")
+            assert job_response.status_code == 200
+            assert job_response.json()["status"] == "completed"
+            events_response = TestClient(app).get(
+                f"/api/jobs/{body['job_id']}/events"
+            )
+            assert events_response.status_code == 200
+            messages = [event["message"] for event in events_response.json()]
+            assert "Running a repeat 1" in messages
+            assert "Completed a repeat 1" in messages
             artifact_path = (
                 version_dir
                 / "runs"
@@ -228,6 +317,9 @@ def test_api_rejects_unsafe_case_id_without_calling_llm() -> None:
 def main() -> int:
     tests = [
         test_api_lists_experiments,
+        test_api_gets_version_overview,
+        test_api_lists_latest_run_artifacts,
+        test_api_lists_empty_runs_when_version_has_no_batches,
         test_api_starts_run_job,
         test_api_runs_pydantic_version,
         test_api_rejects_empty_cases_without_calling_llm,
