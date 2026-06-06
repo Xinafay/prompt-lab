@@ -11,6 +11,7 @@ def _now() -> str:
 
 
 _COUNTER = count(1)
+_TERMINAL_STATUSES = {"completed", "failed"}
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,8 @@ class JobManager:
         self._events: dict[str, list[JobEvent]] = {}
 
     def start_job(self, *, kind: str, experiment_id: str, version: str, total_units: int) -> JobStatus:
+        if total_units <= 0:
+            raise ValueError("total_units must be at least 1")
         with self._lock:
             job_id = f"{kind}-{next(_COUNTER):06d}"
             job = JobStatus(
@@ -63,14 +66,23 @@ class JobManager:
             return job
 
     def get(self, job_id: str) -> JobStatus:
-        return self._jobs[job_id]
+        with self._lock:
+            return self._jobs[job_id]
 
     def events(self, job_id: str) -> list[JobEvent]:
-        return list(self._events[job_id])
+        with self._lock:
+            return list(self._events[job_id])
 
     def update(self, job_id: str, *, completed_units: int, message: str) -> JobStatus:
         with self._lock:
-            job = replace(self._jobs[job_id], completed_units=completed_units, message=message)
+            old = self._jobs[job_id]
+            if old.status in _TERMINAL_STATUSES:
+                raise ValueError(f"Cannot update {old.status} job {job_id}")
+            if completed_units < 0 or completed_units > old.total_units:
+                raise ValueError(
+                    f"completed_units must be between 0 and total_units ({old.total_units})"
+                )
+            job = replace(old, completed_units=completed_units, message=message)
             self._jobs[job_id] = job
             self._append_event(job, message)
             return job
