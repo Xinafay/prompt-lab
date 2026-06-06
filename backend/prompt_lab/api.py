@@ -5,6 +5,7 @@ from dataclasses import asdict
 from pathlib import Path, PureWindowsPath
 
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, ConfigDict, Field
 
 from prompt_lab import llm_client
 from prompt_lab.config import PromptLabConfig
@@ -15,6 +16,12 @@ from prompt_lab.models.judgments import FindingDecisionSet, JudgmentArtifact
 from prompt_lab.pydantic_loader import load_model_entrypoint
 from prompt_lab.runner import iter_case_major, run_structured_case, run_text_case
 from prompt_lab.storage import PromptLabStore
+
+
+class HumanNotesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    notes: str = Field(default="")
 
 
 def _validate_case_id_path_segment(case_id: str) -> None:
@@ -43,6 +50,24 @@ def _validate_run_batch_id_path_segment(run_batch_id: str) -> None:
         or run_batch_id in {".", ".."}
     ):
         raise HTTPException(status_code=400, detail="Unsafe run batch id")
+
+
+def _validate_review_id_path_segment(review_id: str) -> None:
+    windows_path = PureWindowsPath(review_id)
+    if (
+        not review_id
+        or Path(review_id).is_absolute()
+        or windows_path.is_absolute()
+        or windows_path.drive
+        or "/" in review_id
+        or "\\" in review_id
+        or review_id in {".", ".."}
+    ):
+        raise HTTPException(status_code=400, detail="Unsafe review id")
+
+
+def _read_json(path: Path) -> dict[str, object]:
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _write_json(path: Path, value: dict[str, object]) -> None:
@@ -212,6 +237,21 @@ def _next_review_location(version_dir: Path) -> tuple[str, Path]:
         if not review_dir.exists():
             return review_id, review_dir
         index += 1
+
+
+def _resolve_existing_review_dir(version_dir: Path, review_id: str) -> Path:
+    _validate_review_id_path_segment(review_id)
+    reviews_dir = (version_dir / "reviews").resolve()
+    review_dir = (reviews_dir / review_id).resolve()
+    if (
+        review_dir == reviews_dir
+        or not review_dir.is_relative_to(reviews_dir)
+        or not review_dir.is_dir()
+    ):
+        raise HTTPException(status_code=404, detail="Review not found")
+    if not (review_dir / "judgment.json").is_file():
+        raise HTTPException(status_code=404, detail="Review not found")
+    return review_dir
 
 
 def create_app(config: PromptLabConfig | None = None) -> FastAPI:
@@ -404,6 +444,70 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             "review_id": review_id,
             "run_batch_id": selected_run_batch_id,
             "judgment": judgment.model_dump(mode="json"),
+        }
+
+    @app.put(
+        "/api/experiments/{experiment_id}/versions/{version}/reviews/{review_id}/decisions"
+    )
+    def update_review_decisions(
+        experiment_id: str,
+        version: str,
+        review_id: str,
+        decisions: FindingDecisionSet,
+    ) -> dict[str, object]:
+        version_dir = store.version_dir(experiment_id, version)
+        review_dir = _resolve_existing_review_dir(version_dir, review_id)
+        saved = decisions.model_dump(mode="json")
+        _write_json(review_dir / "decisions.json", saved)
+        return saved
+
+    @app.put(
+        "/api/experiments/{experiment_id}/versions/{version}/reviews/{review_id}/human-notes"
+    )
+    def update_review_human_notes(
+        experiment_id: str,
+        version: str,
+        review_id: str,
+        request: HumanNotesRequest,
+    ) -> dict[str, str]:
+        version_dir = store.version_dir(experiment_id, version)
+        review_dir = _resolve_existing_review_dir(version_dir, review_id)
+        (review_dir / "human_notes.md").write_text(request.notes, encoding="utf-8")
+        return {"human_notes": request.notes}
+
+    @app.get("/api/experiments/{experiment_id}/versions/{version}/reviews/{review_id}")
+    def get_review_state(
+        experiment_id: str, version: str, review_id: str
+    ) -> dict[str, object]:
+        version_dir = store.version_dir(experiment_id, version)
+        review_dir = _resolve_existing_review_dir(version_dir, review_id)
+        judgment = JudgmentArtifact.model_validate(_read_json(review_dir / "judgment.json"))
+        decisions_path = review_dir / "decisions.json"
+        if not decisions_path.is_file():
+            raise HTTPException(status_code=404, detail="Review not found")
+        decisions = FindingDecisionSet.model_validate(_read_json(decisions_path))
+        human_notes_path = review_dir / "human_notes.md"
+        judgment_markdown_path = review_dir / "judgment.md"
+        rubric_snapshot_path = review_dir / "rubric_snapshot.md"
+        return {
+            "review_id": review_id,
+            "judgment": judgment.model_dump(mode="json"),
+            "decisions": decisions.model_dump(mode="json"),
+            "human_notes": (
+                human_notes_path.read_text(encoding="utf-8")
+                if human_notes_path.is_file()
+                else ""
+            ),
+            "judgment_markdown": (
+                judgment_markdown_path.read_text(encoding="utf-8")
+                if judgment_markdown_path.is_file()
+                else ""
+            ),
+            "rubric_snapshot": (
+                rubric_snapshot_path.read_text(encoding="utf-8")
+                if rubric_snapshot_path.is_file()
+                else ""
+            ),
         }
 
     return app
