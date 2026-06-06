@@ -1,0 +1,337 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import Any
+
+from fastapi.testclient import TestClient
+
+from prompt_lab import llm_client
+from prompt_lab.api import create_app
+from prompt_lab.config import PromptLabConfig
+from prompt_lab.proposal import ProposalDraft, build_proposal_prompt
+from test_judge import valid_judgment_payload, write_json
+
+
+class FakeGeneratedStructured:
+    def __init__(self, output: Any) -> None:
+        self.output = output
+        self.usage: dict[str, Any] = {}
+
+
+def write_review_fixture(root: Path, *, output_type: str = "pydantic") -> Path:
+    example = root / "examples" / "demo"
+    version_dir = example / "versions" / "v001"
+    review_dir = version_dir / "reviews" / "review-001"
+    output: dict[str, Any]
+    if output_type == "pydantic":
+        output = {
+            "type": "pydantic",
+            "model_file": "model.py",
+            "model_entrypoint": "model.DemoOutput",
+        }
+    else:
+        output = {"type": "text"}
+    write_json(
+        example / "experiment.json",
+        {
+            "schema_version": "prompt_lab.experiment/v1",
+            "id": "demo",
+            "title": "Demo",
+            "description": "Demo experiment",
+            "active_version": "v001",
+            "output": output,
+            "template": {"engine": "jinja2", "path": "prompt.md"},
+            "models": {"generator_model": "local/a", "judge_model": "openai/judge"},
+            "run_defaults": {
+                "repeat_count": 1,
+                "llm_cache": "disabled",
+                "case_order": "case-major",
+            },
+        },
+    )
+    (example / "rubric.md").write_text("Keep answers complete.", encoding="utf-8")
+    (version_dir / "cases").mkdir(parents=True)
+    (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
+    if output_type == "pydantic":
+        (version_dir / "model.py").write_text(
+            "from pydantic import BaseModel\n\n"
+            "class DemoOutput(BaseModel):\n"
+            "    answer: str\n",
+            encoding="utf-8",
+        )
+    write_json(
+        version_dir / "cases" / "case-a.json",
+        {
+            "schema_version": "prompt_lab.case/v1",
+            "id": "case-a",
+            "title": "Case A",
+            "variables": {"value": "hello"},
+        },
+    )
+    write_json(
+        review_dir / "judgment.json",
+        valid_judgment_payload(
+            judge_model="openai/judge",
+            findings=[
+                {
+                    "finding_id": "f-accepted",
+                    "severity": "recommended",
+                    "area": "prompt",
+                    "category": "recurring_problem",
+                    "description": "The output misses the required summary.",
+                    "evidence": ["case-a repeat 1"],
+                    "suggested_change": "Require a concise summary.",
+                },
+                {
+                    "finding_id": "f-rejected",
+                    "severity": "optional",
+                    "area": "prompt",
+                    "category": "style",
+                    "description": "The tone could be friendlier.",
+                    "evidence": ["case-a repeat 1"],
+                    "suggested_change": "Make the tone warmer.",
+                },
+                {
+                    "finding_id": "f-deferred",
+                    "severity": "do_not_change_yet",
+                    "area": "prompt",
+                    "category": "scope",
+                    "description": "Add unrelated metadata.",
+                    "evidence": ["case-a repeat 1"],
+                    "suggested_change": "Add metadata.",
+                },
+            ],
+        ),
+    )
+    write_json(
+        review_dir / "decisions.json",
+        {
+            "schema_version": "prompt_lab.decisions/v1",
+            "finding_decisions": {
+                "f-accepted": {"decision": "accepted", "reason": "Required"},
+                "f-rejected": {"decision": "rejected", "reason": "Out of scope"},
+                "f-deferred": {"decision": "deferred", "reason": "Later"},
+            },
+        },
+    )
+    (review_dir / "rubric_snapshot.md").write_text(
+        "Prefer concise complete answers.", encoding="utf-8"
+    )
+    (review_dir / "human_notes.md").write_text(
+        "Keep the answer terse; do not add friendliness work.", encoding="utf-8"
+    )
+    return review_dir
+
+
+def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
+    prompt = build_proposal_prompt(
+        experiment_id="demo",
+        version="v001",
+        current_model="openai/judge",
+        output_type="pydantic",
+        prompt_template="Say {{ value }}",
+        model_source="class DemoOutput: ...",
+        rubric_snapshot="Prefer complete answers.",
+        judgment=valid_judgment_payload(
+            findings=[
+                {
+                    "finding_id": "f-accepted",
+                    "severity": "recommended",
+                    "area": "prompt",
+                    "category": "recurring_problem",
+                    "description": "Missing summary.",
+                    "evidence": ["case-a repeat 1"],
+                    "suggested_change": "Require summary.",
+                },
+                {
+                    "finding_id": "f-rejected",
+                    "severity": "optional",
+                    "area": "prompt",
+                    "category": "style",
+                    "description": "Make warmer.",
+                    "evidence": ["case-a repeat 1"],
+                    "suggested_change": "Use warmer tone.",
+                },
+                {
+                    "finding_id": "f-deferred",
+                    "severity": "optional",
+                    "area": "prompt",
+                    "category": "format",
+                    "description": "Add metadata.",
+                    "evidence": ["case-a repeat 1"],
+                    "suggested_change": "Add metadata.",
+                },
+            ],
+        ),
+        decisions={
+            "f-accepted": {"decision": "accepted", "reason": "Required"},
+            "f-rejected": {"decision": "rejected", "reason": "Out of scope"},
+            "f-deferred": {"decision": "deferred", "reason": "Later"},
+        },
+        human_notes="Human notes override all judge findings.",
+    )
+
+    assert "human notes override all judge findings" in prompt
+    assert "accepted findings are requested changes" in prompt
+    assert "rejected findings are constraints" in prompt
+    assert "deferred findings are ignored" in prompt
+    assert "preserve task scope" in prompt
+    assert "change `model.py` only when contract changes are clearly needed" in prompt
+    assert "f-accepted" in prompt
+    assert "f-rejected" in prompt
+    assert "f-deferred" not in prompt
+    assert "class DemoOutput" in prompt
+
+
+def test_api_generates_proposal_artifacts_with_traceable_source() -> None:
+    calls: list[dict[str, Any]] = []
+
+    def fake_generate_structured(
+        model: str,
+        prompt: str,
+        response_model: Any,
+        validation_context: dict[str, Any] | None,
+    ) -> FakeGeneratedStructured:
+        calls.append(
+            {
+                "model": model,
+                "prompt": prompt,
+                "response_model": response_model,
+                "validation_context": validation_context,
+            }
+        )
+        return FakeGeneratedStructured(
+            response_model(
+                prompt_md="Say {{ value }} with summary",
+                model_py="from pydantic import BaseModel\n\nclass DemoOutput(BaseModel):\n    answer: str\n    summary: str\n",
+                rationale_md="Accepted f-accepted and preserved rejected scope.",
+            )
+        )
+
+    original_generate_structured = llm_client.generate_structured
+    llm_client.generate_structured = fake_generate_structured  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            review_dir = write_review_fixture(root)
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+
+            response = TestClient(app).post(
+                "/api/experiments/demo/versions/v001/reviews/review-001/proposal"
+            )
+
+            assert response.status_code == 200
+            assert response.json()["proposal_dir"].endswith(
+                "versions/v001/reviews/review-001/proposal"
+            )
+            proposal_dir = review_dir / "proposal"
+            assert (proposal_dir / "prompt.md").read_text(encoding="utf-8") == (
+                "Say {{ value }} with summary"
+            )
+            assert (proposal_dir / "model.py").is_file()
+            assert (proposal_dir / "rationale.md").read_text(encoding="utf-8") == (
+                "Accepted f-accepted and preserved rejected scope."
+            )
+            source = json.loads(
+                (proposal_dir / "source.json").read_text(encoding="utf-8")
+            )
+            assert source["experiment_id"] == "demo"
+            assert source["source_version"] == "v001"
+            assert source["review_id"] == "review-001"
+            assert source["judgment_id"] == "j001"
+            assert source["generated_by_model"] == "openai/judge"
+            assert source["human_notes_present"] is True
+            assert source["decision_summary"] == {
+                "accepted": ["f-accepted"],
+                "rejected": ["f-rejected"],
+                "deferred": ["f-deferred"],
+            }
+            assert calls[0]["model"] == "openai/judge"
+            assert calls[0]["response_model"] is ProposalDraft
+            assert calls[0]["validation_context"] is None
+            assert "f-accepted" in calls[0]["prompt"]
+            assert "f-rejected" in calls[0]["prompt"]
+            assert "f-deferred" not in calls[0]["prompt"]
+    finally:
+        llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
+
+
+def test_api_create_version_copies_clean_source_and_replaces_pydantic_files() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        review_dir = write_review_fixture(root)
+        version_dir = review_dir.parents[1]
+        (version_dir / "runs" / "batch-001" / "case-a").mkdir(parents=True)
+        (version_dir / "runs" / "batch-001" / "case-a" / "repeat-001.json").write_text(
+            "{}", encoding="utf-8"
+        )
+        (version_dir / "comparisons" / "comparison-001").mkdir(parents=True)
+        proposal_dir = review_dir / "proposal"
+        proposal_dir.mkdir()
+        (proposal_dir / "prompt.md").write_text("Improved prompt", encoding="utf-8")
+        (proposal_dir / "model.py").write_text(
+            "from pydantic import BaseModel\n\n"
+            "class DemoOutput(BaseModel):\n"
+            "    answer: str\n"
+            "    summary: str\n",
+            encoding="utf-8",
+        )
+        (proposal_dir / "rationale.md").write_text("Why", encoding="utf-8")
+        write_json(proposal_dir / "source.json", {"experiment_id": "demo"})
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).post(
+            "/api/experiments/demo/versions/v001/reviews/review-001/proposal/create-version"
+        )
+
+        assert response.status_code == 200
+        assert response.json()["version"] == "v002"
+        new_version_dir = version_dir.parent / "v002"
+        assert (new_version_dir / "prompt.md").read_text(encoding="utf-8") == (
+            "Improved prompt"
+        )
+        assert "summary: str" in (new_version_dir / "model.py").read_text(
+            encoding="utf-8"
+        )
+        assert (new_version_dir / "cases" / "case-a.json").is_file()
+        assert not (new_version_dir / "runs").exists()
+        assert not (new_version_dir / "reviews").exists()
+        assert not (new_version_dir / "comparisons").exists()
+        assert (version_dir / "prompt.md").read_text(encoding="utf-8") == (
+            "Say {{ value }}"
+        )
+        assert "summary: str" not in (version_dir / "model.py").read_text(
+            encoding="utf-8"
+        )
+
+
+def test_api_create_version_returns_404_when_proposal_missing() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_review_fixture(root, output_type="text")
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).post(
+            "/api/experiments/demo/versions/v001/reviews/review-001/proposal/create-version"
+        )
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Proposal not found"
+
+
+def main() -> int:
+    tests: list[Any] = [
+        test_build_proposal_prompt_sorts_decisions_and_includes_rules,
+        test_api_generates_proposal_artifacts_with_traceable_source,
+        test_api_create_version_copies_clean_source_and_replaces_pydantic_files,
+        test_api_create_version_returns_404_when_proposal_missing,
+    ]
+    for test in tests:
+        test()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

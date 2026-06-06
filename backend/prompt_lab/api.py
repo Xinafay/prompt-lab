@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import re
+import shutil
 from dataclasses import asdict
 from pathlib import Path, PureWindowsPath
 
@@ -13,6 +15,7 @@ from prompt_lab.judge import build_judge_prompt
 from prompt_lab.jobs import JobManager
 from prompt_lab.models.artifacts import RunArtifact
 from prompt_lab.models.judgments import FindingDecisionSet, JudgmentArtifact
+from prompt_lab.proposal import ProposalDraft, build_proposal_prompt
 from prompt_lab.pydantic_loader import load_model_entrypoint
 from prompt_lab.runner import iter_case_major, run_structured_case, run_text_case
 from prompt_lab.storage import PromptLabStore
@@ -272,6 +275,45 @@ def _validate_decision_keys_match_judgment(
         raise HTTPException(status_code=400, detail="; ".join(detail_parts))
 
 
+def _decision_summary(decisions: FindingDecisionSet) -> dict[str, list[str]]:
+    summary = {"accepted": [], "rejected": [], "deferred": []}
+    for finding_id, decision in sorted(decisions.finding_decisions.items()):
+        summary[decision.decision].append(finding_id)
+    return summary
+
+
+def _resolve_version_local_write_path(version_dir: Path, relative_path: str) -> Path:
+    root = version_dir.resolve()
+    candidate = (root / relative_path).resolve()
+    if candidate == root or not candidate.is_relative_to(root):
+        raise HTTPException(status_code=400, detail="Unsafe version path")
+    return candidate
+
+
+def _next_numeric_version_dir(versions_root: Path) -> tuple[str, Path]:
+    highest = 0
+    for path in versions_root.iterdir() if versions_root.is_dir() else []:
+        if not path.is_dir():
+            continue
+        match = re.fullmatch(r"v(\d{3})", path.name)
+        if match is not None:
+            highest = max(highest, int(match.group(1)))
+    index = highest + 1
+    while True:
+        version = f"v{index:03d}"
+        version_dir = versions_root / version
+        if not version_dir.exists():
+            return version, version_dir
+        index += 1
+
+
+def _remove_generated_version_dirs(version_dir: Path) -> None:
+    for name in ["runs", "reviews", "comparisons"]:
+        path = version_dir / name
+        if path.exists():
+            shutil.rmtree(path)
+
+
 def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     resolved_config = config or PromptLabConfig.from_env()
     store = PromptLabStore(
@@ -497,6 +539,151 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         review_dir = _resolve_existing_review_dir(version_dir, review_id)
         (review_dir / "human_notes.md").write_text(request.notes, encoding="utf-8")
         return {"human_notes": request.notes}
+
+    @app.post(
+        "/api/experiments/{experiment_id}/versions/{version}/reviews/{review_id}/proposal"
+    )
+    def generate_review_proposal(
+        experiment_id: str, version: str, review_id: str
+    ) -> dict[str, object]:
+        experiment = store.load_experiment(experiment_id)
+        version_dir = store.version_dir(experiment_id, version)
+        review_dir = _resolve_existing_review_dir(version_dir, review_id)
+        judgment = JudgmentArtifact.model_validate(_read_json(review_dir / "judgment.json"))
+        decisions_path = review_dir / "decisions.json"
+        if not decisions_path.is_file():
+            raise HTTPException(status_code=404, detail="Review decisions not found")
+        decisions = FindingDecisionSet.model_validate(_read_json(decisions_path))
+        _validate_decision_keys_match_judgment(
+            judgment=judgment,
+            decisions=decisions,
+        )
+
+        prompt_template = store.read_text(
+            experiment_id, version, experiment.template.path
+        )
+        rubric_snapshot_path = review_dir / "rubric_snapshot.md"
+        rubric_snapshot = (
+            rubric_snapshot_path.read_text(encoding="utf-8")
+            if rubric_snapshot_path.is_file()
+            else ""
+        )
+        human_notes_path = review_dir / "human_notes.md"
+        human_notes = (
+            human_notes_path.read_text(encoding="utf-8")
+            if human_notes_path.is_file()
+            else ""
+        )
+        model_source = None
+        if experiment.output.type == "pydantic":
+            model_file = experiment.output.model_file
+            assert model_file is not None
+            model_source = store.read_text(experiment_id, version, model_file)
+
+        proposal_prompt = build_proposal_prompt(
+            experiment_id=experiment_id,
+            version=version,
+            current_model=experiment.models.judge_model,
+            output_type=experiment.output.type,
+            prompt_template=prompt_template,
+            model_source=model_source,
+            rubric_snapshot=rubric_snapshot,
+            judgment=judgment,
+            decisions=decisions,
+            human_notes=human_notes,
+        )
+        generated = llm_client.generate_structured(
+            experiment.models.judge_model,
+            proposal_prompt,
+            ProposalDraft,
+            None,
+        )
+        output = generated.output
+        proposal = (
+            output
+            if isinstance(output, ProposalDraft)
+            else ProposalDraft.model_validate(output)
+        )
+
+        proposal_dir = review_dir / "proposal"
+        proposal_dir.mkdir(parents=True, exist_ok=True)
+        (proposal_dir / "prompt.md").write_text(
+            proposal.prompt_md, encoding="utf-8"
+        )
+        model_proposal_path = proposal_dir / "model.py"
+        if proposal.model_py is not None:
+            model_proposal_path.write_text(proposal.model_py, encoding="utf-8")
+        elif model_proposal_path.exists():
+            model_proposal_path.unlink()
+        (proposal_dir / "rationale.md").write_text(
+            proposal.rationale_md, encoding="utf-8"
+        )
+        source = {
+            "experiment_id": experiment_id,
+            "source_version": version,
+            "review_id": review_id,
+            "judgment_id": judgment.judgment_id,
+            "decision_summary": _decision_summary(decisions),
+            "decisions_path": "decisions.json",
+            "human_notes_present": bool(human_notes.strip()),
+            "generated_by_model": experiment.models.judge_model,
+            "output_type": experiment.output.type,
+        }
+        _write_json(proposal_dir / "source.json", source)
+        return {
+            "proposal_dir": str(proposal_dir),
+            "proposal": proposal.model_dump(mode="json"),
+            "source": source,
+        }
+
+    @app.post(
+        "/api/experiments/{experiment_id}/versions/{version}/reviews/{review_id}/proposal/create-version"
+    )
+    def create_version_from_review_proposal(
+        experiment_id: str, version: str, review_id: str
+    ) -> dict[str, object]:
+        experiment = store.load_experiment(experiment_id)
+        source_version_dir = store.version_dir(experiment_id, version)
+        review_dir = _resolve_existing_review_dir(source_version_dir, review_id)
+        proposal_dir = review_dir / "proposal"
+        proposal_prompt_path = proposal_dir / "prompt.md"
+        if not proposal_prompt_path.is_file():
+            raise HTTPException(status_code=404, detail="Proposal not found")
+        if not (proposal_dir / "source.json").is_file():
+            raise HTTPException(status_code=404, detail="Proposal not found")
+
+        versions_root = source_version_dir.parent
+        new_version, new_version_dir = _next_numeric_version_dir(versions_root)
+        shutil.copytree(source_version_dir, new_version_dir)
+        _remove_generated_version_dirs(new_version_dir)
+
+        prompt_target = _resolve_version_local_write_path(
+            new_version_dir, experiment.template.path
+        )
+        prompt_target.parent.mkdir(parents=True, exist_ok=True)
+        prompt_target.write_text(
+            proposal_prompt_path.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        proposal_model_path = proposal_dir / "model.py"
+        if experiment.output.type == "pydantic" and proposal_model_path.is_file():
+            model_file = experiment.output.model_file
+            assert model_file is not None
+            model_target = _resolve_version_local_write_path(
+                new_version_dir, model_file
+            )
+            model_target.parent.mkdir(parents=True, exist_ok=True)
+            model_target.write_text(
+                proposal_model_path.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
+        return {
+            "version": new_version,
+            "source_version": version,
+            "review_id": review_id,
+            "version_dir": str(new_version_dir),
+        }
 
     @app.get("/api/experiments/{experiment_id}/versions/{version}/reviews/{review_id}")
     def get_review_state(
