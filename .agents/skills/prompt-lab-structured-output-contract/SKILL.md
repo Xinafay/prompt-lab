@@ -1,0 +1,37 @@
+---
+name: "prompt-lab-structured-output-contract"
+description: "Use when creating or changing Prompt Lab Pydantic models, validators, structured-output prompts, or model entrypoints."
+---
+
+# Prompt Lab Structured Output Contract
+
+Use this skill when an experiment uses `output.type = "pydantic"` or when a text prompt is being converted to structured output.
+
+## Quick Start
+
+1. Treat the current prompt/rubric as the semantic source of truth.
+2. Define or update `model.py` with explicit Pydantic fields and descriptions.
+3. Keep the prompt's output instruction minimal and include `<<MODEL>>`.
+4. Set `experiment.json`:
+
+```json
+{
+  "output": {
+    "type": "pydantic",
+    "model_file": "model.py",
+    "model_entrypoint": "model.YourModel",
+    "validation_context_from_case": "structured_validation_context"
+  }
+}
+```
+
+5. Preserve validation errors as run artifacts. They are evidence for prompt/model improvement.
+
+## Contract Rules
+
+- Field order can affect LLM behavior; put fields in the order you want the model to reason about them.
+- Field descriptions are prompt text. Keep them concrete and aligned with `prompt.md`.
+- Validators should enforce hard constraints, not subjective quality preferences.
+- Prefer prompt changes over model changes when the output shape is already adequate.
+- Change `model.py` when accepted findings or human notes show missing fields, wrong field order, unclear descriptions, wrong types, or validator problems.
+

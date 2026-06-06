@@ -1,0 +1,26 @@
+{
+  "schema_version": "prompt_lab.experiment/v1",
+  "id": "split-scenes",
+  "title": "Split scenes",
+  "description": "Split a chapter into contiguous structured scenes.",
+  "active_version": "v001",
+  "output": {
+    "type": "pydantic",
+    "model_file": "model.py",
+    "model_entrypoint": "model.SceneList",
+    "validation_context_from_case": "structured_validation_context"
+  },
+  "template": {
+    "engine": "jinja2",
+    "path": "prompt.md"
+  },
+  "models": {
+    "generator_model": "local/example-small-model",
+    "judge_model": "openai/example-large-model"
+  },
+  "run_defaults": {
+    "repeat_count": 3,
+    "llm_cache": "disabled",
+    "case_order": "case-major"
+  }
+}

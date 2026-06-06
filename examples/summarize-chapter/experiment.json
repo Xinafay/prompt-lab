@@ -1,0 +1,23 @@
+{
+  "schema_version": "prompt_lab.experiment/v1",
+  "id": "summarize-chapter",
+  "title": "Summarize chapter",
+  "description": "Write one concise paragraph summary of a chapter with scene boundaries.",
+  "active_version": "v001",
+  "output": {
+    "type": "text"
+  },
+  "template": {
+    "engine": "jinja2",
+    "path": "prompt.md"
+  },
+  "models": {
+    "generator_model": "local/example-small-model",
+    "judge_model": "openai/example-large-model"
+  },
+  "run_defaults": {
+    "repeat_count": 3,
+    "llm_cache": "disabled",
+    "case_order": "case-major"
+  }
+}

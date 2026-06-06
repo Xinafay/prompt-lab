@@ -1,0 +1,4 @@
+-r requirements.txt
+pyright
+rich==14.2.0
+python-dotenv

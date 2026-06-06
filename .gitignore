@@ -1,0 +1,14 @@
+.DS_Store
+.env
+.servers.jsonc
+.models.jsonc
+.cache/
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+node_modules/
+dist/
+build/
+

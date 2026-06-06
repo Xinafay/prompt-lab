@@ -1,0 +1,21 @@
+{
+  // Hosted OpenAI API.
+  "openai": {
+    "type": "openai",
+    "api_key": "env:OPENAI_API_KEY"
+  },
+
+  // Local OpenAI-compatible server, for example vLLM, LM Studio, Ollama proxy, etc.
+  "local": {
+    "type": "local",
+    "host": "http://localhost:8080",
+    "api_key": "not_needed",
+    "no_verify_tls": false,
+    "wol": {
+      "mac": "00:11:22:33:44:55",
+      "broadcast": "255.255.255.255",
+      "port": 9
+    }
+  }
+}
+
