@@ -1,4 +1,5 @@
 -r requirements.txt
+httpx
 pyright
 rich==14.2.0
 python-dotenv
