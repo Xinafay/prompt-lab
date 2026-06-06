@@ -90,3 +90,121 @@ export interface RunsResponse {
   run_batch_id: string | null;
   runs: RunArtifact[];
 }
+
+export type FindingSeverity =
+  | "recommended"
+  | "optional"
+  | "do_not_change_yet"
+  | "regression_risk";
+
+export type FindingDecisionValue = "accepted" | "rejected" | "deferred";
+
+export interface EvidenceFinding {
+  finding_id: string;
+  description: string;
+  evidence: string[];
+}
+
+export interface JudgmentFinding {
+  finding_id: string;
+  severity: FindingSeverity;
+  area: string;
+  category: string;
+  description: string;
+  evidence: string[];
+  suggested_change: string;
+}
+
+export interface DecisionPoint {
+  decision_id: string;
+  description: string;
+  options: string[];
+  recommended_option: string;
+}
+
+export interface JudgmentArtifact {
+  schema_version: "prompt_lab.judgment/v1";
+  judgment_id: string;
+  version: string;
+  run_batch_ids: string[];
+  judge_model: string;
+  summary: string;
+  what_looks_correct: EvidenceFinding[];
+  findings: JudgmentFinding[];
+  decision_points: DecisionPoint[];
+}
+
+export interface FindingDecision {
+  decision: FindingDecisionValue;
+  reason?: string | null;
+}
+
+export interface FindingDecisionSet {
+  schema_version: "prompt_lab.decisions/v1";
+  finding_decisions: Record<string, FindingDecision>;
+}
+
+export interface ReviewState {
+  review_id: string;
+  judgment: JudgmentArtifact;
+  decisions: FindingDecisionSet;
+  human_notes: string;
+  judgment_markdown: string;
+  rubric_snapshot: string;
+}
+
+export interface JudgmentResponse {
+  review_id: string;
+  run_batch_id: string;
+  judgment: JudgmentArtifact;
+}
+
+export interface ProposalDraft {
+  prompt_md: string;
+  model_py?: string | null;
+  rationale_md: string;
+}
+
+export interface ProposalResponse {
+  proposal_dir: string;
+  proposal: ProposalDraft;
+  source: Record<string, unknown>;
+}
+
+export interface CreatedVersionResponse {
+  version: string;
+  source_version: string;
+  review_id: string;
+  version_dir: string;
+}
+
+export type ComparisonRecommendation =
+  | "keep_new_version"
+  | "revise_new_version"
+  | "revert_to_baseline"
+  | "inconclusive";
+
+export interface ComparisonArtifact {
+  schema_version: "prompt_lab.comparison/v1";
+  comparison_id: string;
+  baseline_version: string;
+  candidate_version: string;
+  baseline_run_batch_ids: string[];
+  candidate_run_batch_ids: string[];
+  judge_model: string;
+  summary: string;
+  improvements: string[];
+  regressions: string[];
+  unchanged_problems: string[];
+  new_problems: string[];
+  stability_changes: string[];
+  recommendation: ComparisonRecommendation;
+  decision_points: DecisionPoint[];
+}
+
+export interface ComparisonResponse {
+  comparison_id: string;
+  baseline_run_batch_id: string;
+  candidate_run_batch_id: string;
+  comparison: ComparisonArtifact;
+}

@@ -2,16 +2,36 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   apiGet,
+  compareVersions,
+  createProposalVersion,
+  generateProposal,
   getJob,
   getJobEvents,
+  getReviewState,
   getVersionOverview,
   getVersionRuns,
-  runVersion
+  judgeVersion,
+  runVersion,
+  updateHumanNotes,
+  updateReviewDecisions
 } from "./api";
+import { ComparisonView } from "./components/ComparisonView";
 import { ExperimentOverview } from "./components/ExperimentOverview";
 import { ExperimentsList } from "./components/ExperimentsList";
+import { ProposalView } from "./components/ProposalView";
+import { ReviewView } from "./components/ReviewView";
 import { RunsView } from "./components/RunsView";
-import type { Experiment, JobStatus, RunsResponse, VersionOverview } from "./types";
+import type {
+  ComparisonArtifact,
+  CreatedVersionResponse,
+  Experiment,
+  FindingDecisionValue,
+  JobStatus,
+  ProposalResponse,
+  ReviewState,
+  RunsResponse,
+  VersionOverview
+} from "./types";
 
 type LoadState =
   | { status: "loading" }
@@ -30,14 +50,64 @@ function App() {
     useState<Experiment | null>(null);
   const [detailState, setDetailState] = useState<DetailState>({ status: "idle" });
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
+  const [reviewState, setReviewState] = useState<ReviewState | null>(null);
+  const [proposalResponse, setProposalResponse] =
+    useState<ProposalResponse | null>(null);
+  const [createdVersion, setCreatedVersion] =
+    useState<CreatedVersionResponse | null>(null);
+  const [comparison, setComparison] = useState<ComparisonArtifact | null>(null);
+  const [baselineVersion, setBaselineVersion] = useState("v001");
+  const [candidateVersion, setCandidateVersion] = useState("v001");
+  const [workflowBusy, setWorkflowBusy] = useState(false);
+  const [workflowMessage, setWorkflowMessage] = useState<string | null>(null);
+  const [decisionsDirty, setDecisionsDirty] = useState(false);
+  const [humanNotesDirty, setHumanNotesDirty] = useState(false);
   const selectedKeyRef = useRef<string | null>(null);
   const runRequestIdRef = useRef(0);
+  const workflowRequestIdRef = useRef(0);
+  const baselineVersionRef = useRef("v001");
+  const candidateVersionRef = useRef("v001");
 
   function selectExperiment(experiment: Experiment | null) {
     selectedKeyRef.current =
       experiment === null ? null : `${experiment.id}:${experiment.active_version}`;
     runRequestIdRef.current += 1;
+    workflowRequestIdRef.current += 1;
     setSelectedExperiment(experiment);
+    setReviewState(null);
+    setProposalResponse(null);
+    setCreatedVersion(null);
+    setComparison(null);
+    setWorkflowMessage(null);
+    setWorkflowBusy(false);
+    setDecisionsDirty(false);
+    setHumanNotesDirty(false);
+    if (experiment !== null) {
+      setCandidateVersion(experiment.active_version);
+      setBaselineVersion("v001");
+      candidateVersionRef.current = experiment.active_version;
+      baselineVersionRef.current = "v001";
+    }
+  }
+
+  function isSelectionCurrent(selectionKey: string): boolean {
+    return selectedKeyRef.current === selectionKey;
+  }
+
+  function beginWorkflow(selectionKey: string, message?: string): number {
+    const requestId = workflowRequestIdRef.current + 1;
+    workflowRequestIdRef.current = requestId;
+    setWorkflowBusy(true);
+    if (message !== undefined) {
+      setWorkflowMessage(message);
+    }
+    return requestId;
+  }
+
+  function isWorkflowCurrent(requestId: number, selectionKey: string): boolean {
+    return (
+      workflowRequestIdRef.current === requestId && isSelectionCurrent(selectionKey)
+    );
   }
 
   useEffect(() => {
@@ -179,6 +249,250 @@ function App() {
     }
   }
 
+  async function handleJudgeVersion() {
+    if (selectedExperiment === null) return;
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    const selectionKey = `${experimentId}:${version}`;
+    const requestId = beginWorkflow(selectionKey, "Judging latest runs...");
+    try {
+      const response = await judgeVersion(experimentId, version);
+      const review = await getReviewState(experimentId, version, response.review_id);
+      if (!isWorkflowCurrent(requestId, selectionKey)) return;
+      setReviewState(review);
+      setProposalResponse(null);
+      setCreatedVersion(null);
+      setDecisionsDirty(false);
+      setHumanNotesDirty(false);
+      setWorkflowMessage(`Loaded ${response.review_id}`);
+    } catch (error) {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+      }
+    } finally {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowBusy(false);
+      }
+    }
+  }
+
+  function handleDecisionChange(
+    findingId: string,
+    decision: FindingDecisionValue,
+    reason: string | null
+  ) {
+    setReviewState((current) => {
+      if (current === null) return current;
+      return {
+        ...current,
+        decisions: {
+          ...current.decisions,
+          finding_decisions: {
+            ...current.decisions.finding_decisions,
+            [findingId]: {
+              decision,
+              reason: reason?.trim() ? reason : null
+            }
+          }
+        }
+      };
+    });
+    setDecisionsDirty(true);
+    setProposalResponse(null);
+    setCreatedVersion(null);
+  }
+
+  async function handleSaveDecisions() {
+    if (selectedExperiment === null || reviewState === null) return;
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    const selectionKey = `${experimentId}:${version}`;
+    const requestId = beginWorkflow(selectionKey);
+    try {
+      const decisions = await updateReviewDecisions(
+        experimentId,
+        version,
+        reviewState.review_id,
+        reviewState.decisions
+      );
+      if (!isWorkflowCurrent(requestId, selectionKey)) return;
+      setReviewState((current) =>
+        current === null || current.review_id !== reviewState.review_id
+          ? current
+          : { ...current, decisions }
+      );
+      setDecisionsDirty(false);
+      setWorkflowMessage("Decisions saved.");
+    } catch (error) {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+      }
+    } finally {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowBusy(false);
+      }
+    }
+  }
+
+  function handleHumanNotesChange(notes: string) {
+    setReviewState((current) =>
+      current === null ? current : { ...current, human_notes: notes }
+    );
+    setHumanNotesDirty(true);
+    setProposalResponse(null);
+    setCreatedVersion(null);
+  }
+
+  async function handleSaveHumanNotes() {
+    if (selectedExperiment === null || reviewState === null) return;
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    const selectionKey = `${experimentId}:${version}`;
+    const requestId = beginWorkflow(selectionKey);
+    try {
+      const response = await updateHumanNotes(
+        experimentId,
+        version,
+        reviewState.review_id,
+        reviewState.human_notes
+      );
+      if (!isWorkflowCurrent(requestId, selectionKey)) return;
+      setReviewState((current) =>
+        current === null || current.review_id !== reviewState.review_id
+          ? current
+          : { ...current, human_notes: response.human_notes }
+      );
+      setHumanNotesDirty(false);
+      setWorkflowMessage("Human notes saved.");
+    } catch (error) {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+      }
+    } finally {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowBusy(false);
+      }
+    }
+  }
+
+  async function handleGenerateProposal() {
+    if (selectedExperiment === null || reviewState === null) return;
+    if (decisionsDirty || humanNotesDirty) {
+      setWorkflowMessage("Save decisions and human notes before generating a proposal.");
+      return;
+    }
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    const selectionKey = `${experimentId}:${version}`;
+    const requestId = beginWorkflow(selectionKey, "Generating proposal...");
+    try {
+      const response = await generateProposal(
+        experimentId,
+        version,
+        reviewState.review_id
+      );
+      if (!isWorkflowCurrent(requestId, selectionKey)) return;
+      setProposalResponse(response);
+      setCreatedVersion(null);
+      setWorkflowMessage("Proposal generated.");
+    } catch (error) {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+      }
+    } finally {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowBusy(false);
+      }
+    }
+  }
+
+  async function handleCreateVersion() {
+    if (selectedExperiment === null || reviewState === null) return;
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    const selectionKey = `${experimentId}:${version}`;
+    const requestId = beginWorkflow(selectionKey);
+    try {
+      const response = await createProposalVersion(
+        experimentId,
+        version,
+        reviewState.review_id
+      );
+      if (!isWorkflowCurrent(requestId, selectionKey)) return;
+      setCreatedVersion(response);
+      candidateVersionRef.current = response.version;
+      setCandidateVersion(response.version);
+      setComparison(null);
+      setWorkflowMessage(`Created ${response.version}.`);
+    } catch (error) {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+      }
+    } finally {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowBusy(false);
+      }
+    }
+  }
+
+  async function handleCompareVersions() {
+    if (selectedExperiment === null) return;
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    const selectionKey = `${experimentId}:${version}`;
+    const requestedBaseline = baselineVersion;
+    const requestedCandidate = candidateVersion;
+    const requestId = beginWorkflow(selectionKey, "Comparing versions...");
+    try {
+      const response = await compareVersions(
+        experimentId,
+        requestedBaseline,
+        requestedCandidate
+      );
+      if (
+        !isWorkflowCurrent(requestId, selectionKey) ||
+        requestedBaseline !== baselineVersionRef.current ||
+        requestedCandidate !== candidateVersionRef.current
+      ) {
+        return;
+      }
+      setComparison(response.comparison);
+      setWorkflowMessage(`Loaded ${response.comparison_id}.`);
+    } catch (error) {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+      }
+    } finally {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowBusy(false);
+      }
+    }
+  }
+
+  function handleBaselineVersionChange(version: string) {
+    baselineVersionRef.current = version;
+    setBaselineVersion(version);
+    setComparison(null);
+    setWorkflowMessage(null);
+  }
+
+  function handleCandidateVersionChange(version: string) {
+    candidateVersionRef.current = version;
+    setCandidateVersion(version);
+    setComparison(null);
+    setWorkflowMessage(null);
+  }
+
+  const knownVersions = useMemo(() => {
+    const versions = new Set<string>();
+    if (selectedExperiment !== null) versions.add(selectedExperiment.active_version);
+    versions.add("v001");
+    if (createdVersion !== null) versions.add(createdVersion.version);
+    versions.add(baselineVersion);
+    versions.add(candidateVersion);
+    return [...versions].sort();
+  }, [baselineVersion, candidateVersion, createdVersion, selectedExperiment]);
+
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -248,6 +562,37 @@ function App() {
                     cases={detailState.overview.cases}
                     runBatchId={detailState.runs.run_batch_id}
                     runs={detailState.runs.runs}
+                  />
+                  {workflowMessage !== null ? (
+                    <div className="workflow-message">{workflowMessage}</div>
+                  ) : null}
+                  <ReviewView
+                    isBusy={workflowBusy}
+                    onDecisionChange={handleDecisionChange}
+                    onHumanNotesChange={handleHumanNotesChange}
+                    onJudge={handleJudgeVersion}
+                    onSaveDecisions={handleSaveDecisions}
+                    onSaveHumanNotes={handleSaveHumanNotes}
+                    reviewState={reviewState}
+                  />
+                  <ProposalView
+                    createdVersion={createdVersion}
+                    hasUnsavedReviewChanges={decisionsDirty || humanNotesDirty}
+                    isBusy={workflowBusy}
+                    onCreateVersion={handleCreateVersion}
+                    onGenerateProposal={handleGenerateProposal}
+                    proposalResponse={proposalResponse}
+                    reviewState={reviewState}
+                  />
+                  <ComparisonView
+                    baselineVersion={baselineVersion}
+                    candidateVersion={candidateVersion}
+                    comparison={comparison}
+                    isBusy={workflowBusy}
+                    knownVersions={knownVersions}
+                    onBaselineVersionChange={handleBaselineVersionChange}
+                    onCandidateVersionChange={handleCandidateVersionChange}
+                    onCompare={handleCompareVersions}
                   />
                 </>
               ) : null}
