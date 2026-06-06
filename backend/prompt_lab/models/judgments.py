@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 FindingSeverity = Literal[
     "recommended", "optional", "do_not_change_yet", "regression_risk"
 ]
 FindingDecisionValue = Literal["accepted", "rejected", "deferred"]
+NonEmptyString = Annotated[str, Field(min_length=1)]
 
 
 class EvidenceFinding(BaseModel):
@@ -16,9 +17,9 @@ class EvidenceFinding(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    finding_id: str = Field(min_length=1)
-    description: str = Field(min_length=1)
-    evidence: list[str]
+    finding_id: NonEmptyString
+    description: NonEmptyString
+    evidence: list[NonEmptyString] = Field(min_length=1)
 
 
 class JudgmentFinding(BaseModel):
@@ -26,13 +27,13 @@ class JudgmentFinding(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    finding_id: str = Field(min_length=1)
+    finding_id: NonEmptyString
     severity: FindingSeverity
-    area: str = Field(min_length=1)
-    category: str = Field(min_length=1)
-    description: str = Field(min_length=1)
-    evidence: list[str] = Field(min_length=1)
-    suggested_change: str = Field(min_length=1)
+    area: NonEmptyString
+    category: NonEmptyString
+    description: NonEmptyString
+    evidence: list[NonEmptyString] = Field(min_length=1)
+    suggested_change: NonEmptyString
 
 
 class DecisionPoint(BaseModel):
@@ -40,10 +41,16 @@ class DecisionPoint(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    decision_id: str = Field(min_length=1)
-    description: str = Field(min_length=1)
-    options: list[str] = Field(min_length=1)
-    recommended_option: str = Field(min_length=1)
+    decision_id: NonEmptyString
+    description: NonEmptyString
+    options: list[NonEmptyString] = Field(min_length=1)
+    recommended_option: NonEmptyString
+
+    @model_validator(mode="after")
+    def validate_recommended_option(self) -> Self:
+        if self.recommended_option not in self.options:
+            raise ValueError("recommended_option must be one of options")
+        return self
 
 
 class JudgmentArtifact(BaseModel):
@@ -52,11 +59,11 @@ class JudgmentArtifact(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schema_version: Literal["prompt_lab.judgment/v1"]
-    judgment_id: str = Field(min_length=1)
-    version: str = Field(min_length=1)
-    run_batch_ids: list[str] = Field(min_length=1)
-    judge_model: str = Field(min_length=1)
-    summary: str = Field(min_length=1)
+    judgment_id: NonEmptyString
+    version: NonEmptyString
+    run_batch_ids: list[NonEmptyString] = Field(min_length=1)
+    judge_model: NonEmptyString
+    summary: NonEmptyString
     what_looks_correct: list[EvidenceFinding]
     findings: list[JudgmentFinding]
     decision_points: list[DecisionPoint]
@@ -68,7 +75,7 @@ class FindingDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     decision: FindingDecisionValue
-    reason: str | None = Field(default=None, min_length=1)
+    reason: NonEmptyString | None = None
 
 
 class FindingDecisionSet(BaseModel):
@@ -77,10 +84,27 @@ class FindingDecisionSet(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schema_version: Literal["prompt_lab.decisions/v1"] = "prompt_lab.decisions/v1"
-    finding_decisions: dict[str, FindingDecision]
+    finding_decisions: dict[NonEmptyString, FindingDecision]
+
+    @field_validator("finding_decisions", mode="before")
+    @classmethod
+    def validate_raw_finding_ids(cls, value: object) -> object:
+        if isinstance(value, dict) and "" in value:
+            raise ValueError("finding_decisions cannot contain empty finding ids")
+        return value
+
+    @model_validator(mode="after")
+    def validate_finding_ids(self) -> Self:
+        if "" in self.finding_decisions:
+            raise ValueError("finding_decisions cannot contain empty finding ids")
+        return self
 
     @classmethod
-    def from_finding_ids(cls, finding_ids: list[str]) -> Self:
+    def from_finding_ids(cls, finding_ids: list[NonEmptyString]) -> Self:
+        if "" in finding_ids:
+            raise ValueError("finding_ids cannot contain empty ids")
+        if len(finding_ids) != len(set(finding_ids)):
+            raise ValueError("finding_ids cannot contain duplicate ids")
         return cls(
             finding_decisions={
                 finding_id: FindingDecision(decision="accepted")
