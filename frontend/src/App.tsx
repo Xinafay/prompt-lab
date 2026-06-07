@@ -32,6 +32,7 @@ import type {
   RunsResponse,
   VersionOverview
 } from "./types";
+import { parseExperimentId, writeSelectedExperimentId } from "./urlState";
 
 type LoadState =
   | { status: "loading" }
@@ -83,6 +84,7 @@ function App() {
     setDecisionsDirty(false);
     setHumanNotesDirty(false);
     if (experiment !== null) {
+      writeSelectedExperimentId(experiment.id);
       setCandidateVersion(experiment.active_version);
       setBaselineVersion("v001");
       candidateVersionRef.current = experiment.active_version;
@@ -119,7 +121,14 @@ function App() {
         if (!cancelled) {
           setState({ status: "loaded", experiments });
           if (selectedKeyRef.current === null) {
-            selectExperiment(experiments[0] ?? null);
+            const requestedExperimentId = parseExperimentId(window.location.search);
+            const requestedExperiment =
+              requestedExperimentId === null
+                ? null
+                : experiments.find(
+                    (experiment) => experiment.id === requestedExperimentId
+                  ) ?? null;
+            selectExperiment(requestedExperiment ?? experiments[0] ?? null);
           }
         }
       } catch (error) {
