@@ -212,6 +212,20 @@ def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
     assert "answer: str" in prompt
 
 
+def test_proposal_prompt_template_file_is_used() -> None:
+    template_path = (
+        Path(__file__).parents[1]
+        / "prompt_lab"
+        / "system_prompts"
+        / "proposal.md.jinja"
+    )
+    assert template_path.is_file()
+    assert (
+        "You are generating a Prompt Lab proposal for one reviewed experiment version."
+        in template_path.read_text(encoding="utf-8")
+    )
+
+
 def test_api_generates_proposal_artifacts_with_traceable_source() -> None:
     calls: list[dict[str, Any]] = []
 
@@ -448,6 +462,7 @@ def test_api_rejects_text_proposal_that_returns_model_py() -> None:
 def main() -> int:
     tests: list[Any] = [
         test_build_proposal_prompt_sorts_decisions_and_includes_rules,
+        test_proposal_prompt_template_file_is_used,
         test_api_generates_proposal_artifacts_with_traceable_source,
         test_api_create_version_copies_clean_source_and_replaces_pydantic_files,
         test_api_create_version_rejects_mismatched_source_without_creating_version,

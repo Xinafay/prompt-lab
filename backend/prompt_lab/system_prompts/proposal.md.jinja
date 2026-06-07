@@ -1,0 +1,45 @@
+You are generating a Prompt Lab proposal for one reviewed experiment version.
+
+Return JSON matching ProposalDraft exactly.
+
+Rules:
+
+- human notes override all judge findings.
+
+- accepted findings are requested changes.
+
+- rejected findings are constraints.
+
+- deferred findings are ignored.
+
+- preserve task scope.
+
+- change `model.py` only when contract changes are clearly needed.
+
+- If the experiment output is text, normally leave model_py absent.
+
+- If the experiment output is pydantic, prefer prompt changes unless the output contract clearly needs a model.py change.
+
+Experiment id: {{ experiment_id }}
+
+Source version: {{ version }}
+
+Current model: {{ current_model }}
+
+{% if current_model_section is not none -%}
+{{ current_model_section }}
+
+{% endif -%}
+Output type: {{ output_type }}
+
+{{ current_prompt_section }}
+
+{{ rubric_section }}
+
+{{ human_notes_section }}
+
+{{ accepted_findings_section }}
+
+{{ rejected_findings_section }}
+
+{{ proposal_schema_section }}

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from prompt_lab.models.judgments import FindingDecisionSet, JudgmentArtifact
+from prompt_lab.prompt_sections import fenced_section, json_block
+from prompt_lab.prompt_templates import render_system_prompt
 
 
 class ProposalDraft(BaseModel):
@@ -27,14 +28,6 @@ class ProposalSource(BaseModel):
     source_version: str = Field(min_length=1)
     review_id: str = Field(min_length=1)
     judgment_id: str = Field(min_length=1)
-
-
-def _json_block(value: object) -> str:
-    return json.dumps(value, ensure_ascii=False, indent=2)
-
-
-def _section(name: str, body: str, *, fence: str = "text") -> str:
-    return f"<<<{name}\n```{fence}\n{body}\n```\n{name}>>>"
 
 
 def _decision_value(raw_decision: object) -> str:
@@ -93,44 +86,38 @@ def build_proposal_prompt(
         else:
             rejected_findings.append(payload)
 
-    sections = [
-        "You are generating a Prompt Lab proposal for one reviewed experiment version.",
-        "Return JSON matching ProposalDraft exactly.",
-        "Rules:",
-        "- human notes override all judge findings.",
-        "- accepted findings are requested changes.",
-        "- rejected findings are constraints.",
-        "- deferred findings are ignored.",
-        "- preserve task scope.",
-        "- change `model.py` only when contract changes are clearly needed.",
-        "- If the experiment output is text, normally leave model_py absent.",
-        "- If the experiment output is pydantic, prefer prompt changes unless the output contract clearly needs a model.py change.",
-        f"Experiment id: {experiment_id}",
-        f"Source version: {version}",
-        f"Current model: {current_model or 'not specified'}",
-        f"Output type: {output_type}",
-        _section("CURRENT_PROMPT_MD", prompt_template),
-        _section("RUBRIC_SNAPSHOT_MD", rubric_snapshot),
-        _section("HUMAN_NOTES_MD", human_notes),
-        _section(
-            "ACCEPTED_FINDINGS_JSON",
-            _json_block(accepted_findings),
-            fence="json",
-        ),
-        _section(
-            "REJECTED_FINDINGS_AS_CONSTRAINTS_JSON",
-            _json_block(rejected_findings),
-            fence="json",
-        ),
-        _section(
-            "PROPOSAL_SCHEMA_JSON",
-            _json_block(ProposalDraft.model_json_schema()),
-            fence="json",
-        ),
-    ]
-    if model_source is not None:
-        sections.insert(
-            14,
-            _section("CURRENT_MODEL_PY", model_source, fence="python"),
-        )
-    return "\n\n".join(sections)
+    current_model_section = (
+        fenced_section("CURRENT_MODEL_PY", model_source, fence="python")
+        if model_source is not None
+        else None
+    )
+    return render_system_prompt(
+        "proposal.md.jinja",
+        {
+            "experiment_id": experiment_id,
+            "version": version,
+            "current_model": current_model or "not specified",
+            "current_model_section": current_model_section,
+            "output_type": output_type,
+            "current_prompt_section": fenced_section(
+                "CURRENT_PROMPT_MD", prompt_template
+            ),
+            "rubric_section": fenced_section("RUBRIC_SNAPSHOT_MD", rubric_snapshot),
+            "human_notes_section": fenced_section("HUMAN_NOTES_MD", human_notes),
+            "accepted_findings_section": fenced_section(
+                "ACCEPTED_FINDINGS_JSON",
+                json_block(accepted_findings),
+                fence="json",
+            ),
+            "rejected_findings_section": fenced_section(
+                "REJECTED_FINDINGS_AS_CONSTRAINTS_JSON",
+                json_block(rejected_findings),
+                fence="json",
+            ),
+            "proposal_schema_section": fenced_section(
+                "PROPOSAL_SCHEMA_JSON",
+                json_block(ProposalDraft.model_json_schema()),
+                fence="json",
+            ),
+        },
+    )

@@ -288,6 +288,19 @@ def test_build_comparison_prompt_includes_versions_runs_rubric_and_id_guidance()
     assert "COMPARISON_SCHEMA_JSON" in prompt
 
 
+def test_comparison_prompt_template_file_is_used() -> None:
+    template_path = (
+        Path(__file__).parents[1]
+        / "prompt_lab"
+        / "system_prompts"
+        / "comparison.md.jinja"
+    )
+    assert template_path.is_file()
+    assert "You are comparing two Prompt Lab experiment versions." in template_path.read_text(
+        encoding="utf-8"
+    )
+
+
 def test_api_creates_comparison_under_candidate_version() -> None:
     captured: dict[str, Any] = {}
 
@@ -608,6 +621,7 @@ def main() -> int:
         test_comparison_artifact_validates_design_shape,
         test_comparison_artifact_rejects_invalid_recommendation_and_empty_items,
         test_build_comparison_prompt_includes_versions_runs_rubric_and_id_guidance,
+        test_comparison_prompt_template_file_is_used,
         test_api_creates_comparison_under_candidate_version,
         test_api_allocates_next_comparison_without_overwriting,
         test_api_rejects_mismatched_case_ids_without_comparing,

@@ -381,6 +381,19 @@ def test_build_judge_prompt_includes_validation_errors_and_repeats() -> None:
     assert "answer must be a string" in prompt
 
 
+def test_judge_prompt_template_file_is_used() -> None:
+    template_path = (
+        Path(__file__).parents[1]
+        / "prompt_lab"
+        / "system_prompts"
+        / "judge.md.jinja"
+    )
+    assert template_path.is_file()
+    assert "You are judging one Prompt Lab experiment version." in template_path.read_text(
+        encoding="utf-8"
+    )
+
+
 def test_api_creates_judgment_and_default_accepted_decisions() -> None:
     captured: dict[str, Any] = {}
 
@@ -703,6 +716,7 @@ def main() -> int:
         test_nested_artifacts_reject_extra_fields,
         test_decisions_default_to_accepted,
         test_build_judge_prompt_includes_validation_errors_and_repeats,
+        test_judge_prompt_template_file_is_used,
         test_api_creates_judgment_and_default_accepted_decisions,
         test_api_allocates_next_review_without_overwriting_decisions,
         test_api_selects_latest_run_batch_by_mtime_not_name,
