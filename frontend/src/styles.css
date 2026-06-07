@@ -28,9 +28,9 @@ select {
 }
 
 .app-shell {
-  width: min(1120px, calc(100vw - 48px));
+  width: min(1560px, calc(100vw - 24px));
   margin: 0 auto;
-  padding: 40px 0;
+  padding: 16px 0;
 }
 
 .app-header {
@@ -38,13 +38,13 @@ select {
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 24px;
+  margin-bottom: 12px;
 }
 
 .app-header h1 {
   margin: 0;
   color: #111827;
-  font-size: 32px;
+  font-size: 24px;
   font-weight: 720;
   line-height: 1.1;
 }
@@ -61,16 +61,19 @@ select {
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 12px 32px rgb(16 24 40 / 0.06);
-  overflow: hidden;
 }
 
 .tool-layout {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: 280px minmax(0, 1fr);
   min-height: 720px;
 }
 
 .experiments-panel {
+  position: sticky;
+  top: 12px;
+  height: calc(100vh - 24px);
+  overflow: auto;
   border-right: 1px solid #e4e7ec;
   background: #fbfcfd;
 }
@@ -111,8 +114,21 @@ select {
 }
 
 .experiment-nav-item.is-selected {
-  background: #eef6ff;
-  box-shadow: inset 3px 0 0 #2563eb;
+  background: #eaf2ff;
+  box-shadow:
+    inset 4px 0 0 #2563eb,
+    inset 0 0 0 1px #bfdbfe;
+}
+
+.experiment-nav-item:focus-visible,
+.workbench-tab:focus-visible,
+.primary-action:focus-visible,
+.secondary-action:focus-visible,
+.comparison-controls select:focus-visible,
+.reason-input:focus-visible,
+.notes-input:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
 }
 
 .experiment-nav-title {
@@ -132,8 +148,85 @@ select {
 
 .detail-panel {
   min-width: 0;
-  padding: 22px;
+  padding: 16px;
   background: #ffffff;
+}
+
+.workflow-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: -16px -16px 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid #d9dde3;
+  background: #ffffff;
+}
+
+.workflow-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.workflow-context strong {
+  overflow-wrap: anywhere;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.workflow-context span {
+  overflow-wrap: anywhere;
+}
+
+.workflow-status {
+  color: #475467;
+}
+
+.workflow-actions {
+  flex: 0 0 auto;
+}
+
+.workbench-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 12px 0;
+  border-bottom: 1px solid #e4e7ec;
+}
+
+.workbench-tab {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.workbench-tab:hover {
+  color: #111827;
+  background: #f4f7fa;
+}
+
+.workbench-tab.is-active {
+  border-bottom-color: #2563eb;
+  color: #1d4ed8;
+}
+
+.workbench-body {
+  min-width: 0;
 }
 
 .overview-grid {
@@ -193,7 +286,8 @@ select {
 }
 
 .overview-section,
-.runs-panel {
+.runs-panel,
+.cases-compact-panel {
   min-width: 0;
   border: 1px solid #e4e7ec;
   border-radius: 8px;
@@ -281,8 +375,81 @@ select {
   background: #f8fafc;
 }
 
-.runs-panel {
+.runs-panel,
+.cases-compact-panel {
   margin-top: 16px;
+}
+
+.workbench-body > .runs-panel,
+.workbench-body > .review-panel,
+.workbench-body > .proposal-panel,
+.workbench-body > .comparison-panel,
+.workbench-body > .cases-compact-panel {
+  margin-top: 0;
+}
+
+.workbench-body > .review-panel > .section-heading .secondary-action,
+.workbench-body > .proposal-panel > .section-heading .secondary-action,
+.workbench-body > .comparison-panel > .section-heading .secondary-action {
+  display: none;
+}
+
+.workbench-body > .proposal-panel .proposal-content > .primary-action {
+  display: none;
+}
+
+.cases-compact-list {
+  display: grid;
+}
+
+.case-compact-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 260px) minmax(0, 1fr) minmax(130px, auto);
+  gap: 14px;
+  align-items: start;
+  padding: 12px 16px;
+  border-bottom: 1px solid #eef1f5;
+}
+
+.case-compact-row:last-child {
+  border-bottom: 0;
+}
+
+.case-compact-row h4,
+.case-compact-row p {
+  margin: 0;
+}
+
+.case-compact-row h4 {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.case-compact-row p,
+.case-compact-row summary {
+  overflow-wrap: anywhere;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.case-compact-row summary {
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.case-compact-row pre {
+  max-height: 180px;
+  margin: 8px 0 0;
+  overflow: auto;
+  color: #1f2937;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .runs-table-wrap {
@@ -715,6 +882,9 @@ select {
   }
 
   .experiments-panel {
+    position: static;
+    height: auto;
+    overflow: visible;
     border-right: 0;
     border-bottom: 1px solid #e4e7ec;
   }
@@ -723,8 +893,27 @@ select {
     padding: 16px;
   }
 
+  .workflow-toolbar {
+    position: static;
+    display: grid;
+    margin: -16px -16px 0;
+  }
+
+  .workflow-actions,
+  .workflow-actions .primary-action {
+    width: 100%;
+  }
+
+  .workbench-tabs {
+    overflow-x: auto;
+  }
+
   .overview-header {
     display: grid;
+  }
+
+  .case-compact-row {
+    grid-template-columns: 1fr;
   }
 
   .primary-action {

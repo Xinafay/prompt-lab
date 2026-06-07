@@ -15,12 +15,14 @@ import {
   updateReviewDecisions
 } from "./api";
 import { ComparisonView } from "./components/ComparisonView";
-import { ExperimentOverview } from "./components/ExperimentOverview";
 import { ExperimentsList } from "./components/ExperimentsList";
 import { ProposalView } from "./components/ProposalView";
 import { ReviewView } from "./components/ReviewView";
 import { RunsView } from "./components/RunsView";
+import { WorkbenchTabs, type WorkbenchTab } from "./components/WorkbenchTabs";
+import { WorkflowToolbar } from "./components/WorkflowToolbar";
 import type {
+  Case,
   ComparisonArtifact,
   CreatedVersionResponse,
   Experiment,
@@ -45,6 +47,29 @@ type DetailState =
   | { status: "loaded"; overview: VersionOverview; runs: RunsResponse }
   | { status: "error"; message: string };
 
+function formatJson(value: unknown): string {
+  return JSON.stringify(value, null, 2) ?? "undefined";
+}
+
+function compactValuePreview(value: unknown): string {
+  const rendered = typeof value === "string" ? value : JSON.stringify(value);
+  if (rendered === undefined) {
+    return "undefined";
+  }
+  return rendered.length > 180 ? `${rendered.slice(0, 180)}...` : rendered;
+}
+
+function variableSummary(artifactCase: Case): string {
+  const keys = Object.keys(artifactCase.variables);
+  if (keys.length === 0) {
+    return "No variables";
+  }
+  return keys
+    .slice(0, 4)
+    .map((key) => `${key}: ${compactValuePreview(artifactCase.variables[key])}`)
+    .join(" | ");
+}
+
 function App() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [selectedExperiment, setSelectedExperiment] =
@@ -57,6 +82,7 @@ function App() {
   const [createdVersion, setCreatedVersion] =
     useState<CreatedVersionResponse | null>(null);
   const [comparison, setComparison] = useState<ComparisonArtifact | null>(null);
+  const [activeTab, setActiveTab] = useState<WorkbenchTab>("overview");
   const [baselineVersion, setBaselineVersion] = useState("v001");
   const [candidateVersion, setCandidateVersion] = useState("v001");
   const [workflowBusy, setWorkflowBusy] = useState(false);
@@ -83,6 +109,7 @@ function App() {
     setWorkflowBusy(false);
     setDecisionsDirty(false);
     setHumanNotesDirty(false);
+    setActiveTab("overview");
     if (experiment !== null) {
       writeSelectedExperimentId(experiment.id);
       setCandidateVersion(experiment.active_version);
@@ -232,6 +259,7 @@ function App() {
         return;
       }
       setDetailState({ status: "loaded", overview, runs });
+      setActiveTab("runs");
     } catch (error) {
       if (!isCurrentRequest()) {
         return;
@@ -301,6 +329,7 @@ function App() {
       setDecisionsDirty(false);
       setHumanNotesDirty(false);
       setWorkflowMessage(`Loaded ${response.review_id}`);
+      setActiveTab("review");
     } catch (error) {
       if (isWorkflowCurrent(requestId, selectionKey)) {
         setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
@@ -431,6 +460,7 @@ function App() {
       setProposalResponse(response);
       setCreatedVersion(null);
       setWorkflowMessage("Proposal generated.");
+      setActiveTab("proposal");
     } catch (error) {
       if (isWorkflowCurrent(requestId, selectionKey)) {
         setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
@@ -494,6 +524,7 @@ function App() {
       }
       setComparison(response.comparison);
       setWorkflowMessage(`Loaded ${response.comparison_id}.`);
+      setActiveTab("compare");
     } catch (error) {
       if (isWorkflowCurrent(requestId, selectionKey)) {
         setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
@@ -580,56 +611,172 @@ function App() {
 
               {detailState.status === "loaded" ? (
                 <>
-                  {jobStatus !== null ? (
-                    <div className={`job-banner job-${jobStatus.status}`}>
-                      <strong>{jobStatus.status}</strong>
-                      <span>
-                        {jobStatus.message} · {jobStatus.completed_units}/
-                        {jobStatus.total_units}
-                      </span>
-                    </div>
-                  ) : null}
-                  <ExperimentOverview
-                    isRunning={jobStatus?.status === "running"}
-                    onRunVersion={handleRunVersion}
-                    overview={detailState.overview}
+                  <WorkflowToolbar
+                    activeVersion={detailState.overview.version}
+                    experiment={detailState.overview.experiment}
+                    jobStatus={jobStatus}
+                    workflowMessage={workflowMessage}
+                    primaryAction={
+                      activeTab === "review" ? (
+                        <button
+                          className="primary-action"
+                          disabled={workflowBusy}
+                          onClick={handleJudgeVersion}
+                          type="button"
+                        >
+                          {workflowBusy ? "Judging..." : "Judge latest runs"}
+                        </button>
+                      ) : activeTab === "proposal" && proposalResponse !== null ? (
+                        <button
+                          className="primary-action"
+                          disabled={workflowBusy}
+                          onClick={handleCreateVersion}
+                          type="button"
+                        >
+                          Create next version
+                        </button>
+                      ) : activeTab === "proposal" ? (
+                        <button
+                          className="primary-action"
+                          disabled={
+                            workflowBusy ||
+                            reviewState === null ||
+                            decisionsDirty ||
+                            humanNotesDirty
+                          }
+                          onClick={handleGenerateProposal}
+                          type="button"
+                        >
+                          {workflowBusy ? "Generating..." : "Generate proposal"}
+                        </button>
+                      ) : activeTab === "compare" ? (
+                        <button
+                          className="primary-action"
+                          disabled={workflowBusy}
+                          onClick={handleCompareVersions}
+                          type="button"
+                        >
+                          {workflowBusy ? "Comparing..." : "Compare versions"}
+                        </button>
+                      ) : (
+                        <button
+                          className="primary-action"
+                          disabled={jobStatus?.status === "running"}
+                          onClick={handleRunVersion}
+                          type="button"
+                        >
+                          {jobStatus?.status === "running"
+                            ? "Running..."
+                            : "Run version"}
+                        </button>
+                      )
+                    }
                   />
-                  <RunsView
-                    cases={detailState.overview.cases}
-                    runBatchId={detailState.runs.run_batch_id}
-                    runs={detailState.runs.runs}
-                  />
-                  {workflowMessage !== null ? (
-                    <div className="workflow-message">{workflowMessage}</div>
-                  ) : null}
-                  <ReviewView
-                    isBusy={workflowBusy}
-                    onDecisionChange={handleDecisionChange}
-                    onHumanNotesChange={handleHumanNotesChange}
-                    onJudge={handleJudgeVersion}
-                    onSaveDecisions={handleSaveDecisions}
-                    onSaveHumanNotes={handleSaveHumanNotes}
-                    reviewState={reviewState}
-                  />
-                  <ProposalView
-                    createdVersion={createdVersion}
-                    hasUnsavedReviewChanges={decisionsDirty || humanNotesDirty}
-                    isBusy={workflowBusy}
-                    onCreateVersion={handleCreateVersion}
-                    onGenerateProposal={handleGenerateProposal}
-                    proposalResponse={proposalResponse}
-                    reviewState={reviewState}
-                  />
-                  <ComparisonView
-                    baselineVersion={baselineVersion}
-                    candidateVersion={candidateVersion}
-                    comparison={comparison}
-                    isBusy={workflowBusy}
-                    knownVersions={knownVersions}
-                    onBaselineVersionChange={handleBaselineVersionChange}
-                    onCandidateVersionChange={handleCandidateVersionChange}
-                    onCompare={handleCompareVersions}
-                  />
+
+                  <WorkbenchTabs activeTab={activeTab} onTabChange={setActiveTab} />
+
+                  <div className="workbench-body">
+                    {activeTab === "overview" ? (
+                      <section className="overview-grid" aria-label="Experiment overview">
+                        <div className="overview-header">
+                          <div>
+                            <h2>{detailState.overview.experiment.title}</h2>
+                            <p>
+                              {detailState.overview.experiment.description ||
+                                "No description provided."}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="overview-section">
+                          <div className="section-heading">
+                            <h3>Prompt</h3>
+                            <span>{detailState.overview.version}</span>
+                          </div>
+                          <pre className="code-block">{detailState.overview.prompt}</pre>
+                        </div>
+
+                        <div className="overview-section">
+                          <div className="section-heading">
+                            <h3>Rubric</h3>
+                          </div>
+                          <pre className="text-block">
+                            {detailState.overview.rubric.trim() ||
+                              "No rubric found."}
+                          </pre>
+                        </div>
+                      </section>
+                    ) : null}
+
+                    {activeTab === "cases" ? (
+                      <section className="cases-compact-panel" aria-label="Cases">
+                        <div className="section-heading">
+                          <h3>Cases</h3>
+                          <span>{detailState.overview.cases.length}</span>
+                        </div>
+                        <div className="cases-compact-list">
+                          {detailState.overview.cases.map((artifactCase) => (
+                            <article className="case-compact-row" key={artifactCase.id}>
+                              <div>
+                                <h4>{artifactCase.title}</h4>
+                                <p>{artifactCase.id}</p>
+                              </div>
+                              <p>{variableSummary(artifactCase)}</p>
+                              <details>
+                                <summary>Variables JSON</summary>
+                                <pre>{formatJson(artifactCase.variables)}</pre>
+                              </details>
+                            </article>
+                          ))}
+                        </div>
+                      </section>
+                    ) : null}
+
+                    {activeTab === "runs" ? (
+                      <RunsView
+                        cases={detailState.overview.cases}
+                        runBatchId={detailState.runs.run_batch_id}
+                        runs={detailState.runs.runs}
+                      />
+                    ) : null}
+
+                    {activeTab === "review" ? (
+                      <ReviewView
+                        isBusy={workflowBusy}
+                        onDecisionChange={handleDecisionChange}
+                        onHumanNotesChange={handleHumanNotesChange}
+                        onJudge={handleJudgeVersion}
+                        onSaveDecisions={handleSaveDecisions}
+                        onSaveHumanNotes={handleSaveHumanNotes}
+                        reviewState={reviewState}
+                      />
+                    ) : null}
+
+                    {activeTab === "proposal" ? (
+                      <ProposalView
+                        createdVersion={createdVersion}
+                        hasUnsavedReviewChanges={decisionsDirty || humanNotesDirty}
+                        isBusy={workflowBusy}
+                        onCreateVersion={handleCreateVersion}
+                        onGenerateProposal={handleGenerateProposal}
+                        proposalResponse={proposalResponse}
+                        reviewState={reviewState}
+                      />
+                    ) : null}
+
+                    {activeTab === "compare" ? (
+                      <ComparisonView
+                        baselineVersion={baselineVersion}
+                        candidateVersion={candidateVersion}
+                        comparison={comparison}
+                        isBusy={workflowBusy}
+                        knownVersions={knownVersions}
+                        onBaselineVersionChange={handleBaselineVersionChange}
+                        onCandidateVersionChange={handleCandidateVersionChange}
+                        onCompare={handleCompareVersions}
+                      />
+                    ) : null}
+                  </div>
                 </>
               ) : null}
             </div>
