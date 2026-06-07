@@ -14,6 +14,7 @@ import {
   updateHumanNotes,
   updateReviewDecisions
 } from "./api";
+import { CaseBrowser } from "./components/CaseBrowser";
 import { ComparisonView } from "./components/ComparisonView";
 import { ExperimentsList } from "./components/ExperimentsList";
 import { ProposalView } from "./components/ProposalView";
@@ -22,7 +23,6 @@ import { RunsView } from "./components/RunsView";
 import { WorkbenchTabs, type WorkbenchTab } from "./components/WorkbenchTabs";
 import { WorkflowToolbar } from "./components/WorkflowToolbar";
 import type {
-  Case,
   ComparisonArtifact,
   CreatedVersionResponse,
   Experiment,
@@ -46,29 +46,6 @@ type DetailState =
   | { status: "loading" }
   | { status: "loaded"; overview: VersionOverview; runs: RunsResponse }
   | { status: "error"; message: string };
-
-function formatJson(value: unknown): string {
-  return JSON.stringify(value, null, 2) ?? "undefined";
-}
-
-function compactValuePreview(value: unknown): string {
-  const rendered = typeof value === "string" ? value : JSON.stringify(value);
-  if (rendered === undefined) {
-    return "undefined";
-  }
-  return rendered.length > 180 ? `${rendered.slice(0, 180)}...` : rendered;
-}
-
-function variableSummary(artifactCase: Case): string {
-  const keys = Object.keys(artifactCase.variables);
-  if (keys.length === 0) {
-    return "No variables";
-  }
-  return keys
-    .slice(0, 4)
-    .map((key) => `${key}: ${compactValuePreview(artifactCase.variables[key])}`)
-    .join(" | ");
-}
 
 function App() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
@@ -709,27 +686,7 @@ function App() {
                     ) : null}
 
                     {activeTab === "cases" ? (
-                      <section className="cases-compact-panel" aria-label="Cases">
-                        <div className="section-heading">
-                          <h3>Cases</h3>
-                          <span>{detailState.overview.cases.length}</span>
-                        </div>
-                        <div className="cases-compact-list">
-                          {detailState.overview.cases.map((artifactCase) => (
-                            <article className="case-compact-row" key={artifactCase.id}>
-                              <div>
-                                <h4>{artifactCase.title}</h4>
-                                <p>{artifactCase.id}</p>
-                              </div>
-                              <p>{variableSummary(artifactCase)}</p>
-                              <details>
-                                <summary>Variables JSON</summary>
-                                <pre>{formatJson(artifactCase.variables)}</pre>
-                              </details>
-                            </article>
-                          ))}
-                        </div>
-                      </section>
+                      <CaseBrowser cases={detailState.overview.cases} />
                     ) : null}
 
                     {activeTab === "runs" ? (
