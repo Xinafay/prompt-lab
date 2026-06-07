@@ -125,6 +125,18 @@ def write_review_fixture(root: Path, *, output_type: str = "pydantic") -> Path:
     return review_dir
 
 
+def runtime_review_dir(root: Path) -> Path:
+    return (
+        root
+        / "experiments"
+        / "demo"
+        / "versions"
+        / "v001"
+        / "reviews"
+        / "review-001"
+    )
+
+
 def write_valid_proposal_source(review_dir: Path) -> None:
     write_json(
         review_dir / "proposal" / "source.json",
@@ -268,7 +280,7 @@ def test_api_generates_proposal_artifacts_with_traceable_source() -> None:
             assert response.json()["proposal_dir"].endswith(
                 "versions/v001/reviews/review-001/proposal"
             )
-            proposal_dir = review_dir / "proposal"
+            proposal_dir = runtime_review_dir(root) / "proposal"
             assert (proposal_dir / "prompt.md").read_text(encoding="utf-8") == (
                 "Say {{ value }} with summary"
             )
@@ -335,7 +347,7 @@ def test_api_generates_dry_run_proposal_without_live_llm() -> None:
             assert body["proposal"]["prompt_md"]
             assert body["proposal"]["model_py"] is not None
             assert body["proposal"]["rationale_md"]
-            proposal_dir = review_dir / "proposal"
+            proposal_dir = runtime_review_dir(root) / "proposal"
             assert (proposal_dir / "prompt.md").is_file()
             assert (proposal_dir / "model.py").is_file()
             assert (proposal_dir / "rationale.md").is_file()
@@ -380,7 +392,8 @@ def test_api_create_version_copies_clean_source_and_replaces_pydantic_files() ->
 
         assert response.status_code == 200
         assert response.json()["version"] == "v002"
-        new_version_dir = version_dir.parent / "v002"
+        runtime_version_dir = runtime_review_dir(root).parents[1]
+        new_version_dir = runtime_version_dir.parent / "v002"
         assert (new_version_dir / "prompt.md").read_text(encoding="utf-8") == (
             "Improved prompt"
         )
@@ -391,10 +404,10 @@ def test_api_create_version_copies_clean_source_and_replaces_pydantic_files() ->
         assert not (new_version_dir / "runs").exists()
         assert not (new_version_dir / "reviews").exists()
         assert not (new_version_dir / "comparisons").exists()
-        assert (version_dir / "prompt.md").read_text(encoding="utf-8") == (
+        assert (runtime_version_dir / "prompt.md").read_text(encoding="utf-8") == (
             "Say {{ value }}"
         )
-        assert "summary: str" not in (version_dir / "model.py").read_text(
+        assert "summary: str" not in (runtime_version_dir / "model.py").read_text(
             encoding="utf-8"
         )
 
@@ -425,7 +438,7 @@ def test_api_create_version_rejects_mismatched_source_without_creating_version()
 
         assert response.status_code == 400
         assert "Proposal source mismatch" in response.json()["detail"]
-        assert not (version_dir.parent / "v002").exists()
+        assert not (runtime_review_dir(root).parents[1].parent / "v002").exists()
 
 
 def test_api_create_version_cleans_partial_version_when_replacement_fails() -> None:
@@ -449,7 +462,7 @@ def test_api_create_version_cleans_partial_version_when_replacement_fails() -> N
         )
 
         assert response.status_code == 400
-        assert not (version_dir.parent / "v002").exists()
+        assert not (runtime_review_dir(root).parents[1].parent / "v002").exists()
 
 
 def test_api_create_version_returns_404_when_proposal_missing() -> None:
@@ -497,7 +510,7 @@ def test_api_rejects_text_proposal_that_returns_model_py() -> None:
             assert response.json()["detail"] == (
                 "Text output proposals cannot include model_py"
             )
-            assert not (review_dir / "proposal").exists()
+            assert not (runtime_review_dir(root) / "proposal").exists()
     finally:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 

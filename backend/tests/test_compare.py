@@ -138,6 +138,10 @@ def write_demo_experiment(root: Path, *, repeat_count: int = 2) -> tuple[Path, P
     return baseline_dir, candidate_dir
 
 
+def runtime_version_dir(root: Path, version: str) -> Path:
+    return root / "experiments" / "demo" / "versions" / version
+
+
 def write_run_batch(
     version_dir: Path,
     batch_id: str,
@@ -342,8 +346,9 @@ def test_api_creates_comparison_under_candidate_version() -> None:
                 version="v002",
                 answer_prefix="candidate",
             )
-            captured["candidate_dir"] = candidate_dir
             app = create_app(PromptLabConfig.from_env(project_root=root))
+            runtime_candidate_dir = runtime_version_dir(root, "v002")
+            captured["candidate_dir"] = runtime_candidate_dir
 
             response = TestClient(app, raise_server_exceptions=False).post(
                 "/api/experiments/demo/comparisons",
@@ -364,7 +369,7 @@ def test_api_creates_comparison_under_candidate_version() -> None:
             assert "Candidate prompt: say {{ value }} and include a summary." in captured[
                 "prompt"
             ]
-            comparison_dir = candidate_dir / "comparisons" / "comparison-001"
+            comparison_dir = runtime_candidate_dir / "comparisons" / "comparison-001"
             assert (comparison_dir / "comparison.json").is_file()
             assert (comparison_dir / "comparison.md").is_file()
             assert (comparison_dir / "rubric_snapshot.md").read_text(
@@ -402,6 +407,7 @@ def test_api_creates_dry_run_comparison_without_live_llm() -> None:
                 answer_prefix="candidate",
             )
             app = create_app(PromptLabConfig.from_env(project_root=root))
+            runtime_candidate_dir = runtime_version_dir(root, "v002")
 
             response = TestClient(app, raise_server_exceptions=False).post(
                 "/api/experiments/demo/comparisons",
@@ -420,7 +426,7 @@ def test_api_creates_dry_run_comparison_without_live_llm() -> None:
             assert body["comparison"]["comparison_id"] == "comparison-001"
             assert body["comparison"]["baseline_version"] == "v001"
             assert body["comparison"]["candidate_version"] == "v002"
-            comparison_dir = candidate_dir / "comparisons" / "comparison-001"
+            comparison_dir = runtime_candidate_dir / "comparisons" / "comparison-001"
             assert (comparison_dir / "comparison.json").is_file()
             assert (comparison_dir / "comparison.md").is_file()
             assert (comparison_dir / "rubric_snapshot.md").is_file()
@@ -465,6 +471,8 @@ def test_api_allocates_next_comparison_without_overwriting() -> None:
                 '{"sentinel":"keep me"}\n', encoding="utf-8"
             )
             app = create_app(PromptLabConfig.from_env(project_root=root))
+            runtime_candidate_dir = runtime_version_dir(root, "v002")
+            runtime_first_dir = runtime_candidate_dir / "comparisons" / "comparison-001"
 
             response = TestClient(app, raise_server_exceptions=False).post(
                 "/api/experiments/demo/comparisons",
@@ -473,8 +481,8 @@ def test_api_allocates_next_comparison_without_overwriting() -> None:
 
             assert response.status_code == 200
             assert response.json()["comparison_id"] == "comparison-002"
-            assert (candidate_dir / "comparisons" / "comparison-002").is_dir()
-            assert "keep me" in (first_dir / "comparison.json").read_text(
+            assert (runtime_candidate_dir / "comparisons" / "comparison-002").is_dir()
+            assert "keep me" in (runtime_first_dir / "comparison.json").read_text(
                 encoding="utf-8"
             )
     finally:
@@ -524,6 +532,7 @@ def test_api_rejects_mismatched_case_ids_without_comparing() -> None:
                 case_ids=["case-a", "case-extra"],
             )
             app = create_app(PromptLabConfig.from_env(project_root=root))
+            runtime_candidate_dir = runtime_version_dir(root, "v002")
 
             response = TestClient(app, raise_server_exceptions=False).post(
                 "/api/experiments/demo/comparisons",
@@ -533,7 +542,7 @@ def test_api_rejects_mismatched_case_ids_without_comparing() -> None:
             assert response.status_code == 400
             assert "case ids must match" in response.json()["detail"]
             assert calls == []
-            assert not (candidate_dir / "comparisons").exists()
+            assert not (runtime_candidate_dir / "comparisons").exists()
     finally:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
@@ -656,6 +665,7 @@ def test_api_rejects_comparison_metadata_mismatch_without_writing() -> None:
                 answer_prefix="candidate",
             )
             app = create_app(PromptLabConfig.from_env(project_root=root))
+            runtime_candidate_dir = runtime_version_dir(root, "v002")
 
             response = TestClient(app, raise_server_exceptions=False).post(
                 "/api/experiments/demo/comparisons",
@@ -666,7 +676,7 @@ def test_api_rejects_comparison_metadata_mismatch_without_writing() -> None:
             assert "Comparison candidate_run_batch_ids must be ['candidate-batch']" in (
                 response.json()["detail"]
             )
-            assert not (candidate_dir / "comparisons").exists()
+            assert not (runtime_candidate_dir / "comparisons").exists()
     finally:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 

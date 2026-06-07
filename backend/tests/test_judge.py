@@ -147,6 +147,10 @@ def write_demo_experiment(
     return version_dir
 
 
+def runtime_version_dir(root: Path) -> Path:
+    return root / "experiments" / "demo" / "versions" / "v001"
+
+
 def write_run_batch(
     version_dir: Path,
     batch_id: str,
@@ -449,7 +453,7 @@ def test_api_creates_judgment_and_default_accepted_decisions() -> None:
             assert captured["response_model"] is JudgmentArtifact
             assert captured["validation_context"] is None
             assert "answer must be a string" in captured["prompt"]
-            review_dir = version_dir / "reviews" / "review-001"
+            review_dir = runtime_version_dir(root) / "reviews" / "review-001"
             assert (review_dir / "judgment.json").is_file()
             assert (review_dir / "judgment.md").is_file()
             assert (review_dir / "rubric_snapshot.md").read_text(
@@ -493,7 +497,7 @@ def test_api_creates_dry_run_judgment_without_live_llm() -> None:
             assert body["judgment"]["version"] == "v001"
             assert body["judgment"]["run_batch_ids"] == ["batch-001"]
             assert body["judgment"]["judge_model"] == "openai/judge"
-            review_dir = version_dir / "reviews" / "review-001"
+            review_dir = runtime_version_dir(root) / "reviews" / "review-001"
             assert (review_dir / "judgment.json").is_file()
             assert (review_dir / "judgment.md").is_file()
             decisions = json.loads(
@@ -534,8 +538,9 @@ def test_api_allocates_next_review_without_overwriting_decisions() -> None:
             first = client.post("/api/experiments/demo/versions/v001/judgments")
             assert first.status_code == 200
             assert first.json()["review_id"] == "review-001"
+            runtime_dir = runtime_version_dir(root)
             first_decisions_path = (
-                version_dir / "reviews" / "review-001" / "decisions.json"
+                runtime_dir / "reviews" / "review-001" / "decisions.json"
             )
             first_decisions_path.write_text(
                 '{"schema_version":"prompt_lab.decisions/v1","finding_decisions":{"sentinel":{"decision":"accepted","reason":"keep me"}}}\n',
@@ -546,7 +551,7 @@ def test_api_allocates_next_review_without_overwriting_decisions() -> None:
 
             assert second.status_code == 200
             assert second.json()["review_id"] == "review-002"
-            assert (version_dir / "reviews" / "review-002" / "decisions.json").is_file()
+            assert (runtime_dir / "reviews" / "review-002" / "decisions.json").is_file()
             assert "keep me" in first_decisions_path.read_text(encoding="utf-8")
     finally:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
@@ -712,7 +717,7 @@ def test_api_rejects_judgment_metadata_mismatch_without_writing_review() -> None
             assert "Judgment run_batch_ids must be ['batch-001']" in response.json()[
                 "detail"
             ]
-            assert not (version_dir / "reviews").exists()
+            assert not (runtime_version_dir(root) / "reviews").exists()
     finally:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
