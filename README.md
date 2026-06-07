@@ -44,6 +44,14 @@ pnpm dev
 
 The Vite app proxies `/api` to `http://127.0.0.1:8000`.
 
+Open a specific experiment by adding the experiment query parameter:
+
+```text
+http://127.0.0.1:5173/?experiment=split-scenes
+```
+
+The UI keeps the selected experiment in this parameter so refreshes preserve the current workspace.
+
 ## Local Checks
 
 Backend regression checks:
@@ -68,14 +76,15 @@ pnpm build
 
 1. Open the frontend.
 2. Confirm `split-scenes` and `summarize-chapter` examples are listed.
-3. Open `summarize-chapter`.
-4. Run the active version.
-5. Confirm progress shows the current case/repeat and run artifacts appear.
-6. Judge the latest runs.
-7. Reject or defer at least one finding and add human notes.
-8. Generate a proposal.
-9. Create the next version.
-10. Compare the new version with `v001`.
+3. Open `summarize-chapter` or use `?experiment=summarize-chapter`.
+4. Optionally enable `Dry-run` in the workflow toolbar to generate deterministic artifacts without calling model providers.
+5. Run the active version.
+6. Confirm progress shows the current case/repeat and run artifacts appear in the `Runs` tab.
+7. Judge the latest runs.
+8. Reject or defer at least one finding and add human notes.
+9. Generate a proposal.
+10. Create the next version.
+11. Compare the new version with `v001`.
 
 Live smoke requires configured model servers and may make real LLM calls:
 

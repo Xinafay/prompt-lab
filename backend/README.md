@@ -14,6 +14,32 @@ PYTHONPATH=backend .venv/bin/python -m uvicorn prompt_lab.app:app --reload
 
 The API serves under `http://127.0.0.1:8000`.
 
+## Dry-Run Workflows
+
+Workflow endpoints default to live model calls. Send `{"dry_run": true}` to generate deterministic fake artifacts without provider transport:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/experiments/split-scenes/versions/v001/runs \
+  -H 'content-type: application/json' \
+  -d '{"dry_run": true}'
+
+curl -X POST http://127.0.0.1:8000/api/experiments/split-scenes/versions/v001/judgments \
+  -H 'content-type: application/json' \
+  -d '{"dry_run": true}'
+```
+
+Proposal generation accepts the same body at the review proposal endpoint. Comparisons accept `dry_run` alongside `baseline_version` and `candidate_version`.
+
+## Prompt Templates
+
+Judge, proposal, and comparison system prompts live in editable Markdown/Jinja files:
+
+- `backend/prompt_lab/system_prompts/judge.md.jinja`
+- `backend/prompt_lab/system_prompts/proposal.md.jinja`
+- `backend/prompt_lab/system_prompts/comparison.md.jinja`
+
+Python code builds structured context and renders these templates through `prompt_lab.prompt_templates`. Keep the structured-output marker `<<MODEL>>` in templates that rely on fake structured responses.
+
 ## Runtime Paths
 
 Prompt Lab defaults to repository-local paths:
