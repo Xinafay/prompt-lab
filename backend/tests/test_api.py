@@ -13,6 +13,38 @@ from prompt_lab.api import create_app
 from prompt_lab.config import PromptLabConfig
 
 
+def demo_experiment_payload(
+    *, experiment_id: str = "demo", active_version: str = "v001"
+) -> dict[str, object]:
+    return {
+        "schema_version": "prompt_lab.experiment/v1",
+        "id": experiment_id,
+        "title": "Demo",
+        "description": "",
+        "active_version": active_version,
+        "output": {"type": "text"},
+        "template": {"engine": "jinja2", "path": "prompt.md"},
+        "models": {
+            "generator_model": "local/a",
+            "judge_model": "openai/b",
+        },
+        "run_defaults": {
+            "repeat_count": 1,
+            "llm_cache": "disabled",
+            "case_order": "case-major",
+        },
+    }
+
+
+def write_demo_experiment_manifest(root: Path) -> None:
+    example = root / "examples" / "demo"
+    (example / "versions" / "v001").mkdir(parents=True)
+    (example / "experiment.json").write_text(
+        json.dumps(demo_experiment_payload(), ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
 def test_api_lists_experiments() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -28,6 +60,77 @@ def test_api_lists_experiments() -> None:
 
         assert response.status_code == 200
         assert response.json()[0]["id"] == "demo"
+
+
+def test_api_updates_experiment_manifest_under_experiments() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_demo_experiment_manifest(root)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        payload = demo_experiment_payload()
+        payload["title"] = "Updated"
+        payload["description"] = "Saved from Settings"
+        payload["models"] = {
+            "generator_model": "local/updated",
+            "judge_model": "openai/updated",
+        }
+        payload["run_defaults"] = {
+            "repeat_count": 4,
+            "llm_cache": "disabled",
+            "case_order": "case-major",
+        }
+
+        response = TestClient(app).put("/api/experiments/demo", json=payload)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["title"] == "Updated"
+        saved = json.loads(
+            (root / "experiments" / "demo" / "experiment.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert saved["description"] == "Saved from Settings"
+        assert saved["models"]["generator_model"] == "local/updated"
+        assert saved["run_defaults"]["repeat_count"] == 4
+        example_saved = json.loads(
+            (root / "examples" / "demo" / "experiment.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert example_saved["title"] == "Demo"
+
+
+def test_api_rejects_experiment_update_id_mismatch() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_demo_experiment_manifest(root)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        payload = demo_experiment_payload(experiment_id="other")
+
+        response = TestClient(app, raise_server_exceptions=False).put(
+            "/api/experiments/demo",
+            json=payload,
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Experiment id mismatch"
+
+
+def test_api_rejects_experiment_update_missing_active_version() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_demo_experiment_manifest(root)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        payload = demo_experiment_payload(active_version="v999")
+
+        response = TestClient(app, raise_server_exceptions=False).put(
+            "/api/experiments/demo",
+            json=payload,
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Version not found"
 
 
 def test_api_seeds_examples_into_experiments_on_startup() -> None:
@@ -491,6 +594,9 @@ def test_api_rejects_unsafe_case_id_without_calling_llm() -> None:
 def main() -> int:
     tests = [
         test_api_lists_experiments,
+        test_api_updates_experiment_manifest_under_experiments,
+        test_api_rejects_experiment_update_id_mismatch,
+        test_api_rejects_experiment_update_missing_active_version,
         test_api_seeds_examples_into_experiments_on_startup,
         test_api_gets_version_overview,
         test_api_lists_latest_run_artifacts,

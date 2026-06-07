@@ -25,7 +25,7 @@ from prompt_lab.dry_run import (
 from prompt_lab.experiment_seed import seed_experiments_from_examples
 from prompt_lab.judge import build_judge_prompt
 from prompt_lab.jobs import JobManager
-from prompt_lab.models.artifacts import RunArtifact
+from prompt_lab.models.artifacts import ExperimentArtifact, RunArtifact
 from prompt_lab.models.judgments import (
     ComparisonArtifact,
     FindingDecisionSet,
@@ -559,6 +559,20 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     @app.get("/api/experiments")
     def list_experiments() -> list[dict[str, object]]:
         return [item.model_dump(mode="json") for item in store.list_experiments()]
+
+    @app.put("/api/experiments/{experiment_id}")
+    def update_experiment(
+        experiment_id: str, experiment: ExperimentArtifact
+    ) -> dict[str, object]:
+        if experiment.id != experiment_id:
+            raise HTTPException(status_code=400, detail="Experiment id mismatch")
+        try:
+            store.save_experiment(experiment_id, experiment)
+        except NotFoundError as exc:
+            if str(exc) == "Version not found":
+                raise HTTPException(status_code=400, detail="Version not found") from exc
+            raise
+        return experiment.model_dump(mode="json")
 
     @app.get("/api/experiments/{experiment_id}/versions/{version}")
     def get_experiment_version(
