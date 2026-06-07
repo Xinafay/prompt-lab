@@ -22,6 +22,7 @@ from prompt_lab.dry_run import (
     dry_structured_response_json,
     dry_text_response,
 )
+from prompt_lab.experiment_seed import seed_experiments_from_examples
 from prompt_lab.judge import build_judge_prompt
 from prompt_lab.jobs import JobManager
 from prompt_lab.models.artifacts import RunArtifact
@@ -537,6 +538,10 @@ def _load_latest_validated_run_batch(
 
 def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     resolved_config = config or PromptLabConfig.from_env()
+    seed_experiments_from_examples(
+        experiments_root=resolved_config.experiments_root,
+        examples_root=resolved_config.examples_root,
+    )
     store = PromptLabStore(
         experiments_root=resolved_config.experiments_root,
         examples_root=resolved_config.examples_root,

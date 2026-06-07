@@ -30,6 +30,35 @@ def test_api_lists_experiments() -> None:
         assert response.json()[0]["id"] == "demo"
 
 
+def test_api_seeds_examples_into_experiments_on_startup() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        example = root / "examples" / "demo"
+        version = example / "versions" / "v001"
+        version.mkdir(parents=True)
+        (example / "experiment.json").write_text(
+            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
+            encoding="utf-8",
+        )
+        (version / "prompt.md").write_text("Hello {{ name }}", encoding="utf-8")
+        cases = version / "cases"
+        cases.mkdir()
+        (cases / "case-a.json").write_text(
+            '{"schema_version":"prompt_lab.case/v1","id":"case-a","title":"Case A","variables":{"name":"Ada"}}',
+            encoding="utf-8",
+        )
+
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        response = TestClient(app).get("/api/experiments")
+
+        assert response.status_code == 200
+        assert [item["id"] for item in response.json()] == ["demo"]
+        assert (root / "experiments" / "demo" / "experiment.json").is_file()
+        assert (
+            root / "experiments" / "demo" / "versions" / "v001" / "prompt.md"
+        ).is_file()
+
+
 def test_api_gets_version_overview() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -174,7 +203,11 @@ def test_api_starts_run_job() -> None:
             assert "Running a repeat 1" in stream_response.text
             assert "Completed a repeat 1" in stream_response.text
             artifact_path = (
-                version_dir
+                root
+                / "experiments"
+                / "demo"
+                / "versions"
+                / "v001"
                 / "runs"
                 / body["job_id"]
                 / "a"
@@ -221,7 +254,11 @@ def test_api_dry_run_text_version_avoids_live_llm() -> None:
             assert response.status_code == 200
             body = response.json()
             artifact_path = (
-                version_dir
+                root
+                / "experiments"
+                / "demo"
+                / "versions"
+                / "v001"
                 / "runs"
                 / body["job_id"]
                 / "a"
@@ -286,7 +323,8 @@ def test_api_runs_pydantic_version() -> None:
             body = response.json()
             artifact_paths = sorted(
                 (
-                    examples_root
+                    root
+                    / "experiments"
                     / "split-scenes"
                     / "versions"
                     / "v001"
@@ -334,7 +372,8 @@ def test_api_dry_run_pydantic_version_avoids_live_llm() -> None:
             body = response.json()
             artifact_paths = sorted(
                 (
-                    examples_root
+                    root
+                    / "experiments"
                     / "split-scenes"
                     / "versions"
                     / "v001"
@@ -435,6 +474,7 @@ def test_api_rejects_unsafe_case_id_without_calling_llm() -> None:
 def main() -> int:
     tests = [
         test_api_lists_experiments,
+        test_api_seeds_examples_into_experiments_on_startup,
         test_api_gets_version_overview,
         test_api_lists_latest_run_artifacts,
         test_api_lists_empty_runs_when_version_has_no_batches,
