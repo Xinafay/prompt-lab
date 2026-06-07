@@ -8,6 +8,11 @@ from pydantic import BaseModel
 from shared.llm.chat import Chat
 from shared.llm.chat_get_structured_lite import chat_get_structured_lite
 from shared.llm.chat_get_text import chat_get_text
+from shared.llm.structured_lite import StructuredLiteExhaustedError
+
+
+class PromptLabStructuredValidationError(Exception):
+    """Raised when structured generation exhausts validation repair attempts."""
 
 
 @dataclass(frozen=True)
@@ -42,7 +47,11 @@ def generate_text(model: str, prompt: str) -> GeneratedText:
         {"model": model},
         cache_enabled=False,
     )
-    return GeneratedText(output=result.output, usage=result.usage or {}, raw_response=_raw_response(result))
+    return GeneratedText(
+        output=result.output,
+        usage=result.usage or {},
+        raw_response=_raw_response(result),
+    )
 
 
 def generate_structured(
@@ -52,12 +61,19 @@ def generate_structured(
     validation_context: dict[str, Any] | None,
 ) -> GeneratedStructured:
     """Generate structured output with Prompt Lab cache policy."""
-    result = chat_get_structured_lite(
-        Chat(),
-        prompt,
-        preset={"model": model},
-        response_model=response_model,
-        validation_context=validation_context,
-        cache_enabled=False,
+    try:
+        result = chat_get_structured_lite(
+            Chat(),
+            prompt,
+            preset={"model": model},
+            response_model=response_model,
+            validation_context=validation_context,
+            cache_enabled=False,
+        )
+    except StructuredLiteExhaustedError as exc:
+        raise PromptLabStructuredValidationError(str(exc)) from exc
+    return GeneratedStructured(
+        output=result.output,
+        usage=result.usage or {},
+        raw_response=_raw_response(result),
     )
-    return GeneratedStructured(output=result.output, usage=result.usage or {}, raw_response=_raw_response(result))

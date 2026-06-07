@@ -5,12 +5,11 @@ import {
   compareVersions,
   createProposalVersion,
   generateProposal,
-  getJob,
-  getJobEvents,
   getReviewState,
   getVersionOverview,
   getVersionRuns,
   judgeVersion,
+  jobEventsStreamUrl,
   runVersion,
   updateHumanNotes,
   updateReviewDecisions
@@ -26,6 +25,7 @@ import type {
   CreatedVersionResponse,
   Experiment,
   FindingDecisionValue,
+  JobEvent,
   JobStatus,
   ProposalResponse,
   ReviewState,
@@ -216,21 +216,7 @@ function App() {
       }
       setJobStatus(job);
 
-      while (job.status === "running") {
-        await new Promise((resolve) => window.setTimeout(resolve, 400));
-        const [latestJob, events] = await Promise.all([
-          getJob(job.job_id),
-          getJobEvents(job.job_id)
-        ]);
-        if (!isCurrentRequest()) {
-          return;
-        }
-        const latestEvent = events.at(-1);
-        job = latestEvent
-          ? { ...latestJob, message: latestEvent.message }
-          : latestJob;
-        setJobStatus(job);
-      }
+      job = await followJobEvents(job.job_id, job, isCurrentRequest);
 
       const runs = await getVersionRuns(experimentId, version);
       if (!isCurrentRequest()) {
@@ -247,6 +233,47 @@ function App() {
         message: error instanceof Error ? error.message : "Unknown error"
       });
     }
+  }
+
+  function followJobEvents(
+    jobId: string,
+    initialJob: JobStatus,
+    isCurrentRequest: () => boolean
+  ): Promise<JobStatus> {
+    if (initialJob.status !== "running") {
+      return Promise.resolve(initialJob);
+    }
+
+    return new Promise((resolve, reject) => {
+      const source = new EventSource(jobEventsStreamUrl(jobId));
+      let latestJob = initialJob;
+
+      source.addEventListener("job", (event) => {
+        if (!isCurrentRequest()) {
+          source.close();
+          resolve(latestJob);
+          return;
+        }
+        const jobEvent = JSON.parse((event as MessageEvent).data) as JobEvent;
+        latestJob = {
+          ...latestJob,
+          status: jobEvent.status,
+          completed_units: jobEvent.completed_units,
+          total_units: jobEvent.total_units,
+          message: jobEvent.message
+        };
+        setJobStatus(latestJob);
+        if (latestJob.status !== "running") {
+          source.close();
+          resolve(latestJob);
+        }
+      });
+
+      source.addEventListener("error", () => {
+        source.close();
+        reject(new Error("Lost job event stream."));
+      });
+    });
   }
 
   async function handleJudgeVersion() {

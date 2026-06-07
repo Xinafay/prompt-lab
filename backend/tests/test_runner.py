@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from pydantic import BaseModel
-from shared.llm.structured_lite import StructuredLiteExhaustedError
 
+from prompt_lab.llm_client import PromptLabStructuredValidationError
 from prompt_lab.models.artifacts import CaseArtifact
 from prompt_lab.runner import iter_case_major, run_structured_case, run_text_case
 
@@ -156,7 +156,7 @@ def test_run_structured_case_stores_validation_errors() -> None:
         response_model: type[BaseModel],
         validation_context: dict[str, object] | None,
     ) -> object:
-        raise StructuredLiteExhaustedError(ValueError("invalid structured output"), [])
+        raise PromptLabStructuredValidationError("invalid structured output")
 
     run = run_structured_case(
         version="v001",

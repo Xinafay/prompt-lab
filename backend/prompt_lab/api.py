@@ -3,10 +3,13 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import time
+from collections.abc import Iterator
 from dataclasses import asdict
 from pathlib import Path, PureWindowsPath
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from prompt_lab import llm_client
@@ -24,6 +27,7 @@ from prompt_lab.proposal import ProposalDraft, ProposalSource, build_proposal_pr
 from prompt_lab.pydantic_loader import load_model_entrypoint
 from prompt_lab.runner import iter_case_major, run_structured_case, run_text_case
 from prompt_lab.storage import PromptLabStore
+from prompt_lab.errors import NotFoundError
 
 
 class HumanNotesRequest(BaseModel):
@@ -520,6 +524,13 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     job_manager = JobManager()
     app = FastAPI(title="Prompt Lab")
 
+    @app.exception_handler(NotFoundError)
+    def handle_not_found_error(
+        request: object, exc: NotFoundError
+    ) -> JSONResponse:
+        del request
+        return JSONResponse(status_code=404, content={"detail": str(exc)})
+
     @app.get("/api/experiments")
     def list_experiments() -> list[dict[str, object]]:
         return [item.model_dump(mode="json") for item in store.list_experiments()]
@@ -570,6 +581,39 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             return [asdict(event) for event in job_manager.events(job_id)]
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Job not found") from exc
+
+    @app.get("/api/jobs/{job_id}/events/stream")
+    def stream_job_events(job_id: str) -> StreamingResponse:
+        try:
+            job_manager.get(job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Job not found") from exc
+
+        def event_stream() -> Iterator[str]:
+            last_event_id = 0
+            while True:
+                try:
+                    events = job_manager.events(job_id)
+                    job = job_manager.get(job_id)
+                except KeyError:
+                    yield 'event: error\ndata: {"detail":"Job not found"}\n\n'
+                    return
+
+                for event in events:
+                    if event.event_id <= last_event_id:
+                        continue
+                    last_event_id = event.event_id
+                    yield (
+                        f"id: {event.event_id}\n"
+                        "event: job\n"
+                        f"data: {json.dumps(asdict(event), ensure_ascii=False)}\n\n"
+                    )
+
+                if job.status in {"completed", "failed"}:
+                    return
+                time.sleep(0.1)
+
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
 
     @app.post("/api/experiments/{experiment_id}/versions/{version}/runs")
     def run_experiment_version(

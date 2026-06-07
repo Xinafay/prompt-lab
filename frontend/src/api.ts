@@ -68,6 +68,10 @@ export function getJobEvents(jobId: string): Promise<JobEvent[]> {
   return apiGet<JobEvent[]>(`/api/jobs/${encodeURIComponent(jobId)}/events`);
 }
 
+export function jobEventsStreamUrl(jobId: string): string {
+  return `/api/jobs/${encodeURIComponent(jobId)}/events/stream`;
+}
+
 export function judgeVersion(
   experimentId: string,
   version: string

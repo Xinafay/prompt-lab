@@ -35,7 +35,7 @@ The UI supports the MVP flow:
 
 - list experiments;
 - inspect the active version prompt, rubric, cases, and run artifacts;
-- run the active version and poll job progress;
+- run the active version and stream job progress over SSE;
 - judge latest runs;
 - save accepted/rejected/deferred finding decisions and human notes;
 - generate a prompt/model proposal;

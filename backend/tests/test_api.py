@@ -109,6 +109,19 @@ def test_api_lists_empty_runs_when_version_has_no_batches() -> None:
         assert response.json() == {"run_batch_id": None, "runs": []}
 
 
+def test_api_missing_experiment_returns_404() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app, raise_server_exceptions=False).get(
+            "/api/experiments/missing/versions/v001"
+        )
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Experiment not found"
+
+
 def test_api_starts_run_job() -> None:
     class FakeGeneratedText:
         output = "ok"
@@ -151,6 +164,15 @@ def test_api_starts_run_job() -> None:
             messages = [event["message"] for event in events_response.json()]
             assert "Running a repeat 1" in messages
             assert "Completed a repeat 1" in messages
+            stream_response = TestClient(app).get(
+                f"/api/jobs/{body['job_id']}/events/stream"
+            )
+            assert stream_response.status_code == 200
+            assert stream_response.headers["content-type"].startswith(
+                "text/event-stream"
+            )
+            assert "Running a repeat 1" in stream_response.text
+            assert "Completed a repeat 1" in stream_response.text
             artifact_path = (
                 version_dir
                 / "runs"
@@ -320,6 +342,7 @@ def main() -> int:
         test_api_gets_version_overview,
         test_api_lists_latest_run_artifacts,
         test_api_lists_empty_runs_when_version_has_no_batches,
+        test_api_missing_experiment_returns_404,
         test_api_starts_run_job,
         test_api_runs_pydantic_version,
         test_api_rejects_empty_cases_without_calling_llm,
