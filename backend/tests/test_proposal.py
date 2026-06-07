@@ -193,6 +193,7 @@ def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
     )
 
     assert "human notes override all judge findings" in prompt
+    assert "<<MODEL>>" in prompt
     assert "accepted findings are requested changes" in prompt
     assert "rejected findings are constraints" in prompt
     assert "deferred findings are ignored" in prompt
@@ -303,6 +304,48 @@ def test_api_generates_proposal_artifacts_with_traceable_source() -> None:
             assert "Out of scope" in calls[0]["prompt"]
             assert "f-deferred" not in calls[0]["prompt"]
             assert "class DemoOutput(BaseModel)" in calls[0]["prompt"]
+    finally:
+        llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
+
+
+def test_api_generates_dry_run_proposal_without_live_llm() -> None:
+    def fake_generate_structured(
+        model: str,
+        prompt: str,
+        response_model: Any,
+        validation_context: dict[str, Any] | None,
+    ) -> FakeGeneratedStructured:
+        raise AssertionError("dry-run proposal must not call live structured LLM")
+
+    original_generate_structured = llm_client.generate_structured
+    llm_client.generate_structured = fake_generate_structured  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            review_dir = write_review_fixture(root)
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+
+            response = TestClient(app, raise_server_exceptions=False).post(
+                "/api/experiments/demo/versions/v001/reviews/review-001/proposal",
+                json={"dry_run": True},
+            )
+
+            assert response.status_code == 200
+            body = response.json()
+            assert body["proposal"]["prompt_md"]
+            assert body["proposal"]["model_py"] is not None
+            assert body["proposal"]["rationale_md"]
+            proposal_dir = review_dir / "proposal"
+            assert (proposal_dir / "prompt.md").is_file()
+            assert (proposal_dir / "model.py").is_file()
+            assert (proposal_dir / "rationale.md").is_file()
+            source = json.loads(
+                (proposal_dir / "source.json").read_text(encoding="utf-8")
+            )
+            assert source["experiment_id"] == "demo"
+            assert source["source_version"] == "v001"
+            assert source["review_id"] == "review-001"
+            assert source["generated_by_model"] == "openai/judge"
     finally:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
@@ -464,6 +507,7 @@ def main() -> int:
         test_build_proposal_prompt_sorts_decisions_and_includes_rules,
         test_proposal_prompt_template_file_is_used,
         test_api_generates_proposal_artifacts_with_traceable_source,
+        test_api_generates_dry_run_proposal_without_live_llm,
         test_api_create_version_copies_clean_source_and_replaces_pydantic_files,
         test_api_create_version_rejects_mismatched_source_without_creating_version,
         test_api_create_version_cleans_partial_version_when_replacement_fails,

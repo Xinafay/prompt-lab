@@ -15,7 +15,13 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from prompt_lab import llm_client
 from prompt_lab.compare import build_comparison_prompt
 from prompt_lab.config import PromptLabConfig
-from prompt_lab.dry_run import dry_structured_response_json, dry_text_response
+from prompt_lab.dry_run import (
+    dry_comparison_response_json,
+    dry_judgment_response_json,
+    dry_proposal_response_json,
+    dry_structured_response_json,
+    dry_text_response,
+)
 from prompt_lab.judge import build_judge_prompt
 from prompt_lab.jobs import JobManager
 from prompt_lab.models.artifacts import RunArtifact
@@ -42,9 +48,16 @@ class ComparisonRequest(BaseModel):
 
     baseline_version: str = Field(min_length=1)
     candidate_version: str = Field(min_length=1)
+    dry_run: bool = False
 
 
 class RunVersionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dry_run: bool = False
+
+
+class DryRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dry_run: bool = False
@@ -745,8 +758,12 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
 
     @app.post("/api/experiments/{experiment_id}/versions/{version}/judgments")
     def judge_experiment_version(
-        experiment_id: str, version: str, run_batch_id: str | None = None
+        experiment_id: str,
+        version: str,
+        request: DryRunRequest | None = None,
+        run_batch_id: str | None = None,
     ) -> dict[str, object]:
+        dry_run = request.dry_run if request is not None else False
         experiment = store.load_experiment(experiment_id)
         version_dir = store.version_dir(experiment_id, version)
         runs_dir = version_dir / "runs"
@@ -810,12 +827,25 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             cases=cases,
             run_artifacts=run_artifacts,
         )
-        generated = llm_client.generate_structured(
-            experiment.models.judge_model,
-            judge_prompt,
-            JudgmentArtifact,
-            None,
-        )
+        if dry_run:
+            generated = llm_client.generate_structured_from_fake_response(
+                experiment.models.judge_model,
+                judge_prompt,
+                JudgmentArtifact,
+                None,
+                dry_judgment_response_json(
+                    version=version,
+                    run_batch_id=selected_run_batch_id,
+                    judge_model=experiment.models.judge_model,
+                ),
+            )
+        else:
+            generated = llm_client.generate_structured(
+                experiment.models.judge_model,
+                judge_prompt,
+                JudgmentArtifact,
+                None,
+            )
         output = generated.output
         judgment = (
             output
@@ -852,6 +882,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         experiment = store.load_experiment(experiment_id)
         baseline_version = request.baseline_version
         candidate_version = request.candidate_version
+        dry_run = request.dry_run
         baseline_version_dir = store.version_dir(experiment_id, baseline_version)
         candidate_version_dir = store.version_dir(experiment_id, candidate_version)
 
@@ -921,12 +952,28 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 candidate_run_artifacts=candidate_run_artifacts,
                 comparison_id=comparison_id,
             )
-            generated = llm_client.generate_structured(
-                experiment.models.judge_model,
-                comparison_prompt,
-                ComparisonArtifact,
-                None,
-            )
+            if dry_run:
+                generated = llm_client.generate_structured_from_fake_response(
+                    experiment.models.judge_model,
+                    comparison_prompt,
+                    ComparisonArtifact,
+                    None,
+                    dry_comparison_response_json(
+                        comparison_id=comparison_id,
+                        baseline_version=baseline_version,
+                        candidate_version=candidate_version,
+                        baseline_run_batch_id=baseline_run_batch_id,
+                        candidate_run_batch_id=candidate_run_batch_id,
+                        judge_model=experiment.models.judge_model,
+                    ),
+                )
+            else:
+                generated = llm_client.generate_structured(
+                    experiment.models.judge_model,
+                    comparison_prompt,
+                    ComparisonArtifact,
+                    None,
+                )
             output = generated.output
             comparison = (
                 output
@@ -1000,8 +1047,12 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         "/api/experiments/{experiment_id}/versions/{version}/reviews/{review_id}/proposal"
     )
     def generate_review_proposal(
-        experiment_id: str, version: str, review_id: str
+        experiment_id: str,
+        version: str,
+        review_id: str,
+        request: DryRunRequest | None = None,
     ) -> dict[str, object]:
+        dry_run = request.dry_run if request is not None else False
         experiment = store.load_experiment(experiment_id)
         version_dir = store.version_dir(experiment_id, version)
         review_dir = _resolve_existing_review_dir(version_dir, review_id)
@@ -1048,12 +1099,25 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             decisions=decisions,
             human_notes=human_notes,
         )
-        generated = llm_client.generate_structured(
-            experiment.models.judge_model,
-            proposal_prompt,
-            ProposalDraft,
-            None,
-        )
+        if dry_run:
+            generated = llm_client.generate_structured_from_fake_response(
+                experiment.models.judge_model,
+                proposal_prompt,
+                ProposalDraft,
+                None,
+                dry_proposal_response_json(
+                    prompt_template=prompt_template,
+                    model_source=model_source,
+                    output_type=experiment.output.type,
+                ),
+            )
+        else:
+            generated = llm_client.generate_structured(
+                experiment.models.judge_model,
+                proposal_prompt,
+                ProposalDraft,
+                None,
+            )
         output = generated.output
         proposal = (
             output

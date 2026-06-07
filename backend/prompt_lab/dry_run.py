@@ -21,6 +21,97 @@ def dry_structured_response_json(
     )
 
 
+def dry_judgment_response_json(
+    *,
+    version: str,
+    run_batch_id: str,
+    judge_model: str,
+) -> str:
+    return json.dumps(
+        {
+            "schema_version": "prompt_lab.judgment/v1",
+            "judgment_id": "dry-run-judgment",
+            "version": version,
+            "run_batch_ids": [run_batch_id],
+            "judge_model": judge_model,
+            "summary": "Dry-run judgment generated from deterministic fake LLM JSON.",
+            "what_looks_correct": [
+                {
+                    "finding_id": "dry-run-correct",
+                    "description": "The review workflow produced parseable run evidence.",
+                    "evidence": [f"{run_batch_id} dry-run evidence"],
+                }
+            ],
+            "findings": [
+                {
+                    "finding_id": "dry-run-finding",
+                    "severity": "optional",
+                    "area": "prompt",
+                    "category": "dry_run",
+                    "description": "Dry-run placeholder finding for artifact workflow validation.",
+                    "evidence": [f"{run_batch_id} dry-run evidence"],
+                    "suggested_change": "Replace dry-run output with a live judge review.",
+                }
+            ],
+            "decision_points": [],
+        },
+        ensure_ascii=False,
+    )
+
+
+def dry_proposal_response_json(
+    *,
+    prompt_template: str,
+    model_source: str | None,
+    output_type: str,
+) -> str:
+    payload = {
+        "prompt_md": prompt_template
+        or "Dry-run prompt proposal placeholder.",
+        "model_py": model_source if output_type == "pydantic" else None,
+        "rationale_md": (
+            "Dry-run proposal generated from deterministic fake LLM JSON. "
+            "No live model was called."
+        ),
+    }
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def dry_comparison_response_json(
+    *,
+    comparison_id: str,
+    baseline_version: str,
+    candidate_version: str,
+    baseline_run_batch_id: str,
+    candidate_run_batch_id: str,
+    judge_model: str,
+) -> str:
+    return json.dumps(
+        {
+            "schema_version": "prompt_lab.comparison/v1",
+            "comparison_id": comparison_id,
+            "baseline_version": baseline_version,
+            "candidate_version": candidate_version,
+            "baseline_run_batch_ids": [baseline_run_batch_id],
+            "candidate_run_batch_ids": [candidate_run_batch_id],
+            "judge_model": judge_model,
+            "summary": "Dry-run comparison generated from deterministic fake LLM JSON.",
+            "improvements": [
+                "Dry-run candidate artifacts were available for comparison."
+            ],
+            "regressions": [],
+            "unchanged_problems": [],
+            "new_problems": [],
+            "stability_changes": [
+                "Dry-run comparison validated the artifact writing workflow."
+            ],
+            "recommendation": "inconclusive",
+            "decision_points": [],
+        },
+        ensure_ascii=False,
+    )
+
+
 def sample_model_payload(
     annotation: Any,
     *,

@@ -265,6 +265,7 @@ def test_build_comparison_prompt_includes_versions_runs_rubric_and_id_guidance()
     )
 
     assert "compare semantic quality" in prompt
+    assert "<<MODEL>>" in prompt
     assert "do not require identical generated IDs unless the rubric requires it" in prompt
     assert "Prefer complete answers and valid JSON." in prompt
     assert "Baseline prompt: say {{ value }}." in prompt
@@ -369,6 +370,60 @@ def test_api_creates_comparison_under_candidate_version() -> None:
             assert (comparison_dir / "rubric_snapshot.md").read_text(
                 encoding="utf-8"
             ) == "Prefer complete answers and valid JSON."
+    finally:
+        llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
+
+
+def test_api_creates_dry_run_comparison_without_live_llm() -> None:
+    def fake_generate_structured(
+        model: str,
+        prompt: str,
+        response_model: Any,
+        validation_context: dict[str, Any] | None,
+    ) -> FakeGeneratedStructured:
+        raise AssertionError("dry-run comparison must not call live structured LLM")
+
+    original_generate_structured = llm_client.generate_structured
+    llm_client.generate_structured = fake_generate_structured  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline_dir, candidate_dir = write_demo_experiment(root)
+            write_run_batch(
+                baseline_dir,
+                "baseline-batch",
+                version="v001",
+                answer_prefix="baseline",
+            )
+            write_run_batch(
+                candidate_dir,
+                "candidate-batch",
+                version="v002",
+                answer_prefix="candidate",
+            )
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+
+            response = TestClient(app, raise_server_exceptions=False).post(
+                "/api/experiments/demo/comparisons",
+                json={
+                    "baseline_version": "v001",
+                    "candidate_version": "v002",
+                    "dry_run": True,
+                },
+            )
+
+            assert response.status_code == 200
+            body = response.json()
+            assert body["comparison_id"] == "comparison-001"
+            assert body["baseline_run_batch_id"] == "baseline-batch"
+            assert body["candidate_run_batch_id"] == "candidate-batch"
+            assert body["comparison"]["comparison_id"] == "comparison-001"
+            assert body["comparison"]["baseline_version"] == "v001"
+            assert body["comparison"]["candidate_version"] == "v002"
+            comparison_dir = candidate_dir / "comparisons" / "comparison-001"
+            assert (comparison_dir / "comparison.json").is_file()
+            assert (comparison_dir / "comparison.md").is_file()
+            assert (comparison_dir / "rubric_snapshot.md").is_file()
     finally:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
@@ -623,6 +678,7 @@ def main() -> int:
         test_build_comparison_prompt_includes_versions_runs_rubric_and_id_guidance,
         test_comparison_prompt_template_file_is_used,
         test_api_creates_comparison_under_candidate_version,
+        test_api_creates_dry_run_comparison_without_live_llm,
         test_api_allocates_next_comparison_without_overwriting,
         test_api_rejects_mismatched_case_ids_without_comparing,
         test_api_selects_latest_run_batches_for_both_versions_by_mtime,
