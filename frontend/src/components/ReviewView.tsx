@@ -3,6 +3,8 @@ import type { FindingDecisionValue, ReviewState } from "../types";
 interface ReviewViewProps {
   reviewState: ReviewState | null;
   isBusy: boolean;
+  hasUnsavedDecisionChanges: boolean;
+  hasUnsavedHumanNotesChanges: boolean;
   onJudge: () => void;
   onDecisionChange: (
     findingId: string,
@@ -29,12 +31,31 @@ function labelDecision(value: FindingDecisionValue): string {
 export function ReviewView({
   reviewState,
   isBusy,
+  hasUnsavedDecisionChanges,
+  hasUnsavedHumanNotesChanges,
   onJudge,
   onDecisionChange,
   onSaveDecisions,
   onHumanNotesChange,
   onSaveHumanNotes
 }: ReviewViewProps) {
+  const decisionCounts =
+    reviewState === null
+      ? null
+      : reviewState.judgment.findings.reduce(
+          (counts, finding) => {
+            const decision =
+              reviewState.decisions.finding_decisions[finding.finding_id]
+                ?.decision ?? "accepted";
+            counts[decision] += 1;
+            return counts;
+          },
+          { accepted: 0, rejected: 0, deferred: 0 } satisfies Record<
+            FindingDecisionValue,
+            number
+          >
+        );
+
   return (
     <section className="review-panel" aria-label="Review">
       <div className="section-heading">
@@ -70,7 +91,29 @@ export function ReviewView({
           </div>
 
           <div className="review-section">
-            <h4>Findings</h4>
+            <div className="review-section-toolbar">
+              <div>
+                <h4>Findings</h4>
+                {decisionCounts !== null ? (
+                  <div className="review-counts" aria-label="Decision counts">
+                    <span>Accepted {decisionCounts.accepted}</span>
+                    <span>Rejected {decisionCounts.rejected}</span>
+                    <span>Deferred {decisionCounts.deferred}</span>
+                  </div>
+                ) : null}
+              </div>
+              <button
+                className="secondary-action"
+                disabled={isBusy || !hasUnsavedDecisionChanges}
+                onClick={onSaveDecisions}
+                type="button"
+              >
+                Save decisions
+              </button>
+            </div>
+            {hasUnsavedDecisionChanges ? (
+              <p className="dirty-copy">Unsaved decision changes.</p>
+            ) : null}
             {reviewState.judgment.findings.map((finding) => {
               const savedDecision =
                 reviewState.decisions.finding_decisions[finding.finding_id] ??
@@ -132,14 +175,6 @@ export function ReviewView({
                 </article>
               );
             })}
-            <button
-              className="secondary-action"
-              disabled={isBusy}
-              onClick={onSaveDecisions}
-              type="button"
-            >
-              Save decisions
-            </button>
           </div>
 
           <div className="review-section">
@@ -157,7 +192,22 @@ export function ReviewView({
           </div>
 
           <div className="review-section">
-            <h4>Human notes</h4>
+            <div className="review-section-toolbar">
+              <div>
+                <h4>Human notes</h4>
+                {hasUnsavedHumanNotesChanges ? (
+                  <p className="dirty-copy">Unsaved notes.</p>
+                ) : null}
+              </div>
+              <button
+                className="secondary-action"
+                disabled={isBusy || !hasUnsavedHumanNotesChanges}
+                onClick={onSaveHumanNotes}
+                type="button"
+              >
+                Save notes
+              </button>
+            </div>
             <textarea
               className="notes-input"
               disabled={isBusy}
@@ -165,14 +215,6 @@ export function ReviewView({
               rows={5}
               value={reviewState.human_notes}
             />
-            <button
-              className="secondary-action"
-              disabled={isBusy}
-              onClick={onSaveHumanNotes}
-              type="button"
-            >
-              Save notes
-            </button>
           </div>
         </div>
       )}

@@ -38,11 +38,18 @@ export function ComparisonView({
   onCandidateVersionChange,
   onCompare
 }: ComparisonViewProps) {
+  const sameVersion = baselineVersion === candidateVersion;
+
   return (
     <section className="comparison-panel" aria-label="Comparison">
       <div className="section-heading">
         <h3>Comparison</h3>
-        <button className="secondary-action" disabled={isBusy} onClick={onCompare} type="button">
+        <button
+          className="secondary-action"
+          disabled={isBusy || sameVersion}
+          onClick={onCompare}
+          type="button"
+        >
           {isBusy ? "Comparing..." : "Compare versions"}
         </button>
       </div>
@@ -77,6 +84,12 @@ export function ComparisonView({
         </label>
       </div>
 
+      {sameVersion ? (
+        <div className="comparison-note">
+          Choose two different versions before comparing.
+        </div>
+      ) : null}
+
       {comparison === null ? (
         <div className="empty-inline">
           No comparison report. Run both versions before comparing.
@@ -85,7 +98,11 @@ export function ComparisonView({
         <div className="comparison-report">
           <div className="review-summary">
             <h4>Recommendation</h4>
-            <p>{comparison.recommendation}</p>
+            <p>
+              <span className="recommendation-pill">
+                {comparison.recommendation}
+              </span>
+            </p>
             <p>{comparison.summary}</p>
           </div>
           <ComparisonList title="Improvements" items={comparison.improvements} />

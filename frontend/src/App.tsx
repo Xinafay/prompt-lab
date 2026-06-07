@@ -524,6 +524,10 @@ function App() {
     const selectionKey = `${experimentId}:${version}`;
     const requestedBaseline = baselineVersion;
     const requestedCandidate = candidateVersion;
+    if (requestedBaseline === requestedCandidate) {
+      setWorkflowMessage("Choose two different versions before comparing.");
+      return;
+    }
     const dryRun = workflowMode === "dry-run";
     const requestId = beginWorkflow(
       selectionKey,
@@ -679,7 +683,7 @@ function App() {
                       ) : activeTab === "compare" ? (
                         <button
                           className="primary-action"
-                          disabled={workflowBusy}
+                          disabled={workflowBusy || baselineVersion === candidateVersion}
                           onClick={handleCompareVersions}
                           type="button"
                         >
@@ -749,6 +753,8 @@ function App() {
 
                     {activeTab === "review" ? (
                       <ReviewView
+                        hasUnsavedDecisionChanges={decisionsDirty}
+                        hasUnsavedHumanNotesChanges={humanNotesDirty}
                         isBusy={workflowBusy}
                         onDecisionChange={handleDecisionChange}
                         onHumanNotesChange={handleHumanNotesChange}

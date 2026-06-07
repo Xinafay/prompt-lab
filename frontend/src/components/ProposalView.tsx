@@ -1,4 +1,8 @@
+import { useEffect, useState } from "react";
+
 import type { CreatedVersionResponse, ProposalResponse, ReviewState } from "../types";
+
+type ProposalSection = "prompt" | "model" | "rationale";
 
 interface ProposalViewProps {
   reviewState: ReviewState | null;
@@ -19,6 +23,18 @@ export function ProposalView({
   onGenerateProposal,
   onCreateVersion
 }: ProposalViewProps) {
+  const [activeSection, setActiveSection] = useState<ProposalSection>("prompt");
+  const hasModel = Boolean(proposalResponse?.proposal.model_py);
+  const visibleSections: ProposalSection[] = hasModel
+    ? ["prompt", "model", "rationale"]
+    : ["prompt", "rationale"];
+
+  useEffect(() => {
+    if (activeSection === "model" && !hasModel) {
+      setActiveSection("prompt");
+    }
+  }, [activeSection, hasModel]);
+
   return (
     <section className="proposal-panel" aria-label="Proposal">
       <div className="section-heading">
@@ -47,28 +63,60 @@ export function ProposalView({
         </div>
       ) : (
         <div className="proposal-content">
-          <div className="proposal-section">
-            <h4>Proposed prompt</h4>
-            <pre className="code-block">{proposalResponse.proposal.prompt_md}</pre>
+          <div className="proposal-toolbar">
+            <div className="proposal-tabs" role="tablist" aria-label="Proposal sections">
+              {visibleSections.map((section) => (
+                <button
+                  aria-selected={activeSection === section}
+                  className={
+                    activeSection === section
+                      ? "proposal-tab is-active"
+                      : "proposal-tab"
+                  }
+                  key={section}
+                  onClick={() => setActiveSection(section)}
+                  role="tab"
+                  type="button"
+                >
+                  {section === "prompt"
+                    ? "Prompt"
+                    : section === "model"
+                      ? "Model"
+                      : "Rationale"}
+                </button>
+              ))}
+            </div>
+            <button
+              className="primary-action"
+              disabled={isBusy}
+              onClick={onCreateVersion}
+              type="button"
+            >
+              Create next version
+            </button>
           </div>
-          {proposalResponse.proposal.model_py ? (
+
+          {activeSection === "prompt" ? (
+            <div className="proposal-section">
+              <h4>Proposed prompt</h4>
+              <pre className="code-block">{proposalResponse.proposal.prompt_md}</pre>
+            </div>
+          ) : null}
+
+          {activeSection === "model" && proposalResponse.proposal.model_py ? (
             <div className="proposal-section">
               <h4>Proposed model</h4>
               <pre className="code-block">{proposalResponse.proposal.model_py}</pre>
             </div>
           ) : null}
-          <div className="proposal-section">
-            <h4>Rationale</h4>
-            <pre className="text-block">{proposalResponse.proposal.rationale_md}</pre>
-          </div>
-          <button
-            className="primary-action"
-            disabled={isBusy}
-            onClick={onCreateVersion}
-            type="button"
-          >
-            Create next version
-          </button>
+
+          {activeSection === "rationale" ? (
+            <div className="proposal-section">
+              <h4>Rationale</h4>
+              <pre className="text-block">{proposalResponse.proposal.rationale_md}</pre>
+            </div>
+          ) : null}
+
           {createdVersion !== null ? (
             <p className="success-copy">Created {createdVersion.version}</p>
           ) : null}
