@@ -5,6 +5,7 @@ import {
   compareVersions,
   createProposalVersion,
   generateProposal,
+  getJob,
   getReviewState,
   getVersionOverview,
   getVersionRuns,
@@ -32,7 +33,8 @@ import type {
   ProposalResponse,
   ReviewState,
   RunsResponse,
-  VersionOverview
+  VersionOverview,
+  WorkflowMode
 } from "./types";
 import { parseExperimentId, writeSelectedExperimentId } from "./urlState";
 
@@ -60,6 +62,7 @@ function App() {
     useState<CreatedVersionResponse | null>(null);
   const [comparison, setComparison] = useState<ComparisonArtifact | null>(null);
   const [activeTab, setActiveTab] = useState<WorkbenchTab>("overview");
+  const [workflowMode, setWorkflowMode] = useState<WorkflowMode>("live");
   const [baselineVersion, setBaselineVersion] = useState("v001");
   const [candidateVersion, setCandidateVersion] = useState("v001");
   const [workflowBusy, setWorkflowBusy] = useState(false);
@@ -223,7 +226,8 @@ function App() {
         message: "Starting run",
         started_at: new Date().toISOString()
       });
-      let job = await runVersion(experimentId, version);
+      const dryRun = workflowMode === "dry-run";
+      let job = await runVersion(experimentId, version, { dry_run: dryRun });
       if (!isCurrentRequest()) {
         return;
       }
@@ -236,6 +240,11 @@ function App() {
         return;
       }
       setDetailState({ status: "loaded", overview, runs });
+      setWorkflowMessage(
+        dryRun
+          ? `Dry-run generated ${runs.run_batch_id ?? "a run batch"}.`
+          : `Run completed: ${runs.run_batch_id ?? "latest batch"}.`
+      );
       setActiveTab("runs");
     } catch (error) {
       if (!isCurrentRequest()) {
@@ -285,7 +294,24 @@ function App() {
 
       source.addEventListener("error", () => {
         source.close();
-        reject(new Error("Lost job event stream."));
+        void (async () => {
+          for (let attempt = 0; attempt < 12; attempt += 1) {
+            const job = await getJob(jobId);
+            latestJob = job;
+            if (isCurrentRequest()) {
+              setJobStatus(latestJob);
+            }
+            if (latestJob.status === "running") {
+              await new Promise((pollResolve) => {
+                window.setTimeout(pollResolve, 500);
+              });
+              continue;
+            }
+            resolve(latestJob);
+            return;
+          }
+          reject(new Error("Lost job event stream."));
+        })().catch(() => reject(new Error("Lost job event stream.")));
       });
     });
   }
@@ -295,9 +321,13 @@ function App() {
     const experimentId = selectedExperiment.id;
     const version = selectedExperiment.active_version;
     const selectionKey = `${experimentId}:${version}`;
-    const requestId = beginWorkflow(selectionKey, "Judging latest runs...");
+    const dryRun = workflowMode === "dry-run";
+    const requestId = beginWorkflow(
+      selectionKey,
+      dryRun ? "Dry-run judging latest runs..." : "Judging latest runs..."
+    );
     try {
-      const response = await judgeVersion(experimentId, version);
+      const response = await judgeVersion(experimentId, version, dryRun);
       const review = await getReviewState(experimentId, version, response.review_id);
       if (!isWorkflowCurrent(requestId, selectionKey)) return;
       setReviewState(review);
@@ -305,7 +335,11 @@ function App() {
       setCreatedVersion(null);
       setDecisionsDirty(false);
       setHumanNotesDirty(false);
-      setWorkflowMessage(`Loaded ${response.review_id}`);
+      setWorkflowMessage(
+        dryRun
+          ? `Loaded dry-run review ${response.review_id}.`
+          : `Loaded ${response.review_id}`
+      );
       setActiveTab("review");
     } catch (error) {
       if (isWorkflowCurrent(requestId, selectionKey)) {
@@ -426,17 +460,22 @@ function App() {
     const experimentId = selectedExperiment.id;
     const version = selectedExperiment.active_version;
     const selectionKey = `${experimentId}:${version}`;
-    const requestId = beginWorkflow(selectionKey, "Generating proposal...");
+    const dryRun = workflowMode === "dry-run";
+    const requestId = beginWorkflow(
+      selectionKey,
+      dryRun ? "Dry-run generating proposal..." : "Generating proposal..."
+    );
     try {
       const response = await generateProposal(
         experimentId,
         version,
-        reviewState.review_id
+        reviewState.review_id,
+        dryRun
       );
       if (!isWorkflowCurrent(requestId, selectionKey)) return;
       setProposalResponse(response);
       setCreatedVersion(null);
-      setWorkflowMessage("Proposal generated.");
+      setWorkflowMessage(dryRun ? "Dry-run proposal generated." : "Proposal generated.");
       setActiveTab("proposal");
     } catch (error) {
       if (isWorkflowCurrent(requestId, selectionKey)) {
@@ -485,12 +524,17 @@ function App() {
     const selectionKey = `${experimentId}:${version}`;
     const requestedBaseline = baselineVersion;
     const requestedCandidate = candidateVersion;
-    const requestId = beginWorkflow(selectionKey, "Comparing versions...");
+    const dryRun = workflowMode === "dry-run";
+    const requestId = beginWorkflow(
+      selectionKey,
+      dryRun ? "Dry-run comparing versions..." : "Comparing versions..."
+    );
     try {
       const response = await compareVersions(
         experimentId,
         requestedBaseline,
-        requestedCandidate
+        requestedCandidate,
+        dryRun
       );
       if (
         !isWorkflowCurrent(requestId, selectionKey) ||
@@ -500,7 +544,11 @@ function App() {
         return;
       }
       setComparison(response.comparison);
-      setWorkflowMessage(`Loaded ${response.comparison_id}.`);
+      setWorkflowMessage(
+        dryRun
+          ? `Loaded dry-run comparison ${response.comparison_id}.`
+          : `Loaded ${response.comparison_id}.`
+      );
       setActiveTab("compare");
     } catch (error) {
       if (isWorkflowCurrent(requestId, selectionKey)) {
@@ -592,7 +640,9 @@ function App() {
                     activeVersion={detailState.overview.version}
                     experiment={detailState.overview.experiment}
                     jobStatus={jobStatus}
+                    onWorkflowModeChange={setWorkflowMode}
                     workflowMessage={workflowMessage}
+                    workflowMode={workflowMode}
                     primaryAction={
                       activeTab === "review" ? (
                         <button

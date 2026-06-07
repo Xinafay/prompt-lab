@@ -91,6 +91,12 @@ export interface RunsResponse {
   runs: RunArtifact[];
 }
 
+export type WorkflowMode = "live" | "dry-run";
+
+export interface RunVersionRequest {
+  dry_run?: boolean;
+}
+
 export type FindingSeverity =
   | "recommended"
   | "optional"

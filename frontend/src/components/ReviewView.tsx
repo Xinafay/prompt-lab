@@ -45,7 +45,9 @@ export function ReviewView({
       </div>
 
       {reviewState === null ? (
-        <div className="empty-inline">No judgment loaded.</div>
+        <div className="empty-inline">
+          No judgment loaded. Run and judge the latest run batch.
+        </div>
       ) : (
         <div className="review-content">
           <div className="review-summary">

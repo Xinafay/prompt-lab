@@ -42,7 +42,9 @@ export function RunsView({ cases, runBatchId, runs }: RunsViewProps) {
       </div>
 
       {runs.length === 0 ? (
-        <div className="empty-inline">No run artifacts yet.</div>
+        <div className="empty-inline">
+          No run artifacts yet. Run this version to create run artifacts.
+        </div>
       ) : (
         <div className="runs-table-wrap">
           <table className="runs-table">

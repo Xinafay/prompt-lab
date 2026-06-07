@@ -124,6 +124,7 @@ select {
 .workbench-tab:focus-visible,
 .primary-action:focus-visible,
 .secondary-action:focus-visible,
+.dry-run-toggle:focus-within,
 .case-browser-header input:focus-visible,
 .case-browser-item:focus-visible,
 .comparison-controls select:focus-visible,
@@ -194,8 +195,50 @@ select {
   color: #475467;
 }
 
+.workflow-mode-badge {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.workflow-mode-badge.mode-dry-run {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
 .workflow-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   flex: 0 0 auto;
+}
+
+.dry-run-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dry-run-toggle input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
 }
 
 .workbench-tabs {
@@ -1073,6 +1116,14 @@ select {
 
   .workflow-actions,
   .workflow-actions .primary-action {
+    width: 100%;
+  }
+
+  .workflow-actions {
+    display: grid;
+  }
+
+  .dry-run-toggle {
     width: 100%;
   }
 

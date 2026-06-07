@@ -7,6 +7,7 @@ import type {
   JudgmentResponse,
   ProposalResponse,
   ReviewState,
+  RunVersionRequest,
   RunsResponse,
   VersionOverview
 } from "./types";
@@ -51,12 +52,14 @@ export function getVersionRuns(
 
 export function runVersion(
   experimentId: string,
-  version: string
+  version: string,
+  request?: RunVersionRequest
 ): Promise<JobStatus> {
   return apiPost<JobStatus>(
     `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
       version
-    )}/runs`
+    )}/runs`,
+    request
   );
 }
 
@@ -74,12 +77,14 @@ export function jobEventsStreamUrl(jobId: string): string {
 
 export function judgeVersion(
   experimentId: string,
-  version: string
+  version: string,
+  dryRun = false
 ): Promise<JudgmentResponse> {
   return apiPost<JudgmentResponse>(
     `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
       version
-    )}/judgments`
+    )}/judgments`,
+    dryRun ? { dry_run: true } : undefined
   );
 }
 
@@ -126,12 +131,14 @@ export function updateHumanNotes(
 export function generateProposal(
   experimentId: string,
   version: string,
-  reviewId: string
+  reviewId: string,
+  dryRun = false
 ): Promise<ProposalResponse> {
   return apiPost<ProposalResponse>(
     `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
       version
-    )}/reviews/${encodeURIComponent(reviewId)}/proposal`
+    )}/reviews/${encodeURIComponent(reviewId)}/proposal`,
+    dryRun ? { dry_run: true } : undefined
   );
 }
 
@@ -150,13 +157,15 @@ export function createProposalVersion(
 export function compareVersions(
   experimentId: string,
   baselineVersion: string,
-  candidateVersion: string
+  candidateVersion: string,
+  dryRun = false
 ): Promise<ComparisonResponse> {
   return apiPost<ComparisonResponse>(
     `/api/experiments/${encodeURIComponent(experimentId)}/comparisons`,
     {
       baseline_version: baselineVersion,
-      candidate_version: candidateVersion
+      candidate_version: candidateVersion,
+      dry_run: dryRun
     }
   );
 }

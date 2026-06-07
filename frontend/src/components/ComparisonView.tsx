@@ -78,7 +78,9 @@ export function ComparisonView({
       </div>
 
       {comparison === null ? (
-        <div className="empty-inline">No comparison report.</div>
+        <div className="empty-inline">
+          No comparison report. Run both versions before comparing.
+        </div>
       ) : (
         <div className="comparison-report">
           <div className="review-summary">
