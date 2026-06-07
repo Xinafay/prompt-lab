@@ -12,11 +12,13 @@ import {
   judgeVersion,
   jobEventsStreamUrl,
   runVersion,
+  updateExperiment,
   updateHumanNotes,
   updateReviewDecisions
 } from "./api";
 import { CaseBrowser } from "./components/CaseBrowser";
 import { ComparisonView } from "./components/ComparisonView";
+import { ExperimentSettings } from "./components/ExperimentSettings";
 import { ExperimentsList } from "./components/ExperimentsList";
 import { ProposalView } from "./components/ProposalView";
 import { ReviewView } from "./components/ReviewView";
@@ -67,6 +69,8 @@ function App() {
   const [candidateVersion, setCandidateVersion] = useState("v001");
   const [workflowBusy, setWorkflowBusy] = useState(false);
   const [workflowMessage, setWorkflowMessage] = useState<string | null>(null);
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [decisionsDirty, setDecisionsDirty] = useState(false);
   const [humanNotesDirty, setHumanNotesDirty] = useState(false);
   const selectedKeyRef = useRef<string | null>(null);
@@ -86,7 +90,9 @@ function App() {
     setCreatedVersion(null);
     setComparison(null);
     setWorkflowMessage(null);
+    setSettingsMessage(null);
     setWorkflowBusy(false);
+    setSettingsBusy(false);
     setDecisionsDirty(false);
     setHumanNotesDirty(false);
     setActiveTab("overview");
@@ -579,6 +585,44 @@ function App() {
     setWorkflowMessage(null);
   }
 
+  async function refreshExperimentsAfterSettingsSave(savedExperiment: Experiment) {
+    const [experiments, overview, runs] = await Promise.all([
+      apiGet<Experiment[]>("/api/experiments"),
+      getVersionOverview(savedExperiment.id, savedExperiment.active_version),
+      getVersionRuns(savedExperiment.id, savedExperiment.active_version)
+    ]);
+    setState({ status: "loaded", experiments });
+    setSelectedExperiment(savedExperiment);
+    selectedKeyRef.current = `${savedExperiment.id}:${savedExperiment.active_version}`;
+    setDetailState({ status: "loaded", overview, runs });
+    setCandidateVersion(savedExperiment.active_version);
+    candidateVersionRef.current = savedExperiment.active_version;
+    if (!experiments.some((experiment) => experiment.id === savedExperiment.id)) {
+      setWorkflowMessage("Saved experiment is no longer listed.");
+    }
+  }
+
+  async function handleSaveExperimentSettings(experiment: Experiment) {
+    if (selectedExperiment === null) return;
+    setSettingsBusy(true);
+    setSettingsMessage(null);
+    try {
+      const savedExperiment = await updateExperiment(selectedExperiment.id, experiment);
+      await refreshExperimentsAfterSettingsSave(savedExperiment);
+      setSettingsMessage("Settings saved.");
+      setActiveTab("settings");
+    } catch (error) {
+      setSettingsMessage(error instanceof Error ? error.message : "Unknown error");
+      throw error;
+    } finally {
+      setSettingsBusy(false);
+    }
+  }
+
+  function handleResetExperimentSettings() {
+    setSettingsMessage(null);
+  }
+
   const knownVersions = useMemo(() => {
     const versions = new Set<string>();
     if (selectedExperiment !== null) versions.add(selectedExperiment.active_version);
@@ -737,6 +781,16 @@ function App() {
                           </pre>
                         </div>
                       </section>
+                    ) : null}
+
+                    {activeTab === "settings" ? (
+                      <ExperimentSettings
+                        experiment={detailState.overview.experiment}
+                        isBusy={settingsBusy}
+                        message={settingsMessage}
+                        onReset={handleResetExperimentSettings}
+                        onSave={handleSaveExperimentSettings}
+                      />
                     ) : null}
 
                     {activeTab === "cases" ? (
