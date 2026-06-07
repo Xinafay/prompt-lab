@@ -1,6 +1,7 @@
 import type {
   ComparisonResponse,
   CreatedVersionResponse,
+  Experiment,
   FindingDecisionSet,
   JobEvent,
   JobStatus,
@@ -36,6 +37,16 @@ export function getVersionOverview(
     `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
       version
     )}`
+  );
+}
+
+export function updateExperiment(
+  experimentId: string,
+  experiment: Experiment
+): Promise<Experiment> {
+  return apiPut<Experiment>(
+    `/api/experiments/${encodeURIComponent(experimentId)}`,
+    experiment
   );
 }
 

@@ -1,5 +1,6 @@
 export type WorkbenchTab =
   | "overview"
+  | "settings"
   | "cases"
   | "runs"
   | "review"
@@ -13,6 +14,7 @@ interface WorkbenchTabsProps {
 
 const tabs: Array<{ id: WorkbenchTab; label: string }> = [
   { id: "overview", label: "Overview" },
+  { id: "settings", label: "Settings" },
   { id: "cases", label: "Cases" },
   { id: "runs", label: "Runs" },
   { id: "review", label: "Review" },
