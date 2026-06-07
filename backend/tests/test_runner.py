@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from prompt_lab.dry_run import dry_structured_response_json, dry_text_response
 from prompt_lab.llm_client import PromptLabStructuredValidationError
 from prompt_lab.models.artifacts import CaseArtifact
 from prompt_lab.runner import iter_case_major, run_structured_case, run_text_case
@@ -208,6 +209,16 @@ def test_run_structured_case_stores_execution_errors() -> None:
     assert "transport failed" in run.execution_error
 
 
+def test_dry_run_text_response_is_deterministic() -> None:
+    assert dry_text_response("case-a", 2) == "Dry run response for case case-a repeat 2."
+
+
+def test_dry_run_structured_response_matches_model() -> None:
+    response = dry_structured_response_json(DemoOutput)
+
+    assert DemoOutput.model_validate_json(response).name == "dry-run"
+
+
 def main() -> int:
     tests = [
         test_iter_case_major_groups_repeats_per_case,
@@ -216,6 +227,8 @@ def main() -> int:
         test_run_structured_case_saves_json_output,
         test_run_structured_case_stores_validation_errors,
         test_run_structured_case_stores_execution_errors,
+        test_dry_run_text_response_is_deterministic,
+        test_dry_run_structured_response_matches_model,
     ]
     for test in tests:
         test()

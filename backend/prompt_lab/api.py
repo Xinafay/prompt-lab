@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from prompt_lab import llm_client
 from prompt_lab.compare import build_comparison_prompt
 from prompt_lab.config import PromptLabConfig
+from prompt_lab.dry_run import dry_structured_response_json, dry_text_response
 from prompt_lab.judge import build_judge_prompt
 from prompt_lab.jobs import JobManager
 from prompt_lab.models.artifacts import RunArtifact
@@ -41,6 +42,12 @@ class ComparisonRequest(BaseModel):
 
     baseline_version: str = Field(min_length=1)
     candidate_version: str = Field(min_length=1)
+
+
+class RunVersionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dry_run: bool = False
 
 
 def _validate_case_id_path_segment(case_id: str) -> None:
@@ -617,8 +624,12 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
 
     @app.post("/api/experiments/{experiment_id}/versions/{version}/runs")
     def run_experiment_version(
-        experiment_id: str, version: str, background_tasks: BackgroundTasks
+        experiment_id: str,
+        version: str,
+        background_tasks: BackgroundTasks,
+        request: RunVersionRequest | None = None,
     ) -> dict[str, object]:
+        dry_run = request.dry_run if request is not None else False
         experiment = store.load_experiment(experiment_id)
         cases = store.load_cases(experiment_id, version)
         if not cases:
@@ -658,6 +669,27 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                     )
                     if experiment.output.type == "pydantic":
                         assert response_model is not None
+                        generate_structured = llm_client.generate_structured
+                        if dry_run:
+                            response_text = dry_structured_response_json(
+                                response_model,
+                                validation_context=case.structured_validation_context,
+                            )
+
+                            def generate_structured(
+                                model: str,
+                                prompt: str,
+                                response_model: type[BaseModel],
+                                validation_context: dict[str, object] | None,
+                            ) -> object:
+                                return llm_client.generate_structured_from_fake_response(
+                                    model,
+                                    prompt,
+                                    response_model,
+                                    validation_context,
+                                    response_text,
+                                )
+
                         run = run_structured_case(
                             version=version,
                             run_batch_id=job_id,
@@ -666,9 +698,20 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                             generator_model=experiment.models.generator_model,
                             template_text=template_text,
                             response_model=response_model,
-                            generate_structured=llm_client.generate_structured,
+                            generate_structured=generate_structured,
                         )
                     else:
+                        generate_text = llm_client.generate_text
+                        if dry_run:
+                            response_text = dry_text_response(case.id, repeat_index)
+
+                            def generate_text(model: str, prompt: str) -> object:
+                                return llm_client.generate_text_from_fake_response(
+                                    model,
+                                    prompt,
+                                    response_text,
+                                )
+
                         run = run_text_case(
                             version=version,
                             run_batch_id=job_id,
@@ -676,7 +719,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                             repeat_index=repeat_index,
                             generator_model=experiment.models.generator_model,
                             template_text=template_text,
-                            generate_text=llm_client.generate_text,
+                            generate_text=generate_text,
                         )
                     store.write_run_artifact(
                         experiment_id,

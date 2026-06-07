@@ -88,10 +88,59 @@ def test_structured_wrapper_disables_cache() -> None:
     assert calls[0]["cache_enabled"] is False
 
 
+def test_text_fake_response_uses_dry_run_usage() -> None:
+    result = llm_client.generate_text_from_fake_response(
+        "local/model",
+        "Prompt",
+        "fake text",
+    )
+
+    assert result.output == "fake text"
+    assert result.usage == {"dry_run": True}
+    assert result.raw_response[0]["role"] == "user"
+    assert result.raw_response[0]["content"] == "Prompt"
+    assert result.raw_response[1]["role"] == "assistant"
+    assert result.raw_response[1]["content"] == "fake text"
+
+
+def test_structured_fake_response_validates_with_structured_lite() -> None:
+    result = llm_client.generate_structured_from_fake_response(
+        "local/model",
+        "Prompt <<MODEL>>",
+        DemoModel,
+        {"x": 1},
+        '{"name": "Ada"}',
+    )
+
+    assert result.output.model_dump() == {"name": "Ada"}
+    assert result.usage == {"dry_run": True}
+    assert result.raw_response[0]["role"] == "user"
+    assert result.raw_response[1]["role"] == "assistant"
+
+
+def test_structured_fake_response_wraps_validation_errors() -> None:
+    try:
+        llm_client.generate_structured_from_fake_response(
+            "local/model",
+            "Prompt <<MODEL>>",
+            DemoModel,
+            None,
+            '{"name": 1}',
+        )
+    except llm_client.PromptLabStructuredValidationError as exc:
+        assert "name" in str(exc)
+        assert "Input should be a valid string" in str(exc)
+    else:
+        raise AssertionError("Expected PromptLabStructuredValidationError")
+
+
 def main() -> int:
     tests = [
         test_text_wrapper_disables_cache,
         test_structured_wrapper_disables_cache,
+        test_text_fake_response_uses_dry_run_usage,
+        test_structured_fake_response_validates_with_structured_lite,
+        test_structured_fake_response_wraps_validation_errors,
     ]
     for test in tests:
         test()

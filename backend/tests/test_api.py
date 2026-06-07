@@ -190,6 +190,52 @@ def test_api_starts_run_job() -> None:
         llm_client.generate_text = original_generate_text  # type: ignore[assignment]
 
 
+def test_api_dry_run_text_version_avoids_live_llm() -> None:
+    def fail_live_generate_text(model: str, prompt: str) -> object:
+        raise AssertionError("dry_run must not call live text generator")
+
+    original_generate_text = llm_client.generate_text
+    llm_client.generate_text = fail_live_generate_text  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            example = root / "examples" / "demo"
+            version_dir = example / "versions" / "v001"
+            (version_dir / "cases").mkdir(parents=True)
+            (example / "experiment.json").write_text(
+                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
+                encoding="utf-8",
+            )
+            (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
+            (version_dir / "cases" / "a.json").write_text(
+                '{"schema_version":"prompt_lab.case/v1","id":"a","title":"A","variables":{"value":"hello"}}',
+                encoding="utf-8",
+            )
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+
+            response = TestClient(app).post(
+                "/api/experiments/demo/versions/v001/runs",
+                json={"dry_run": True},
+            )
+
+            assert response.status_code == 200
+            body = response.json()
+            artifact_path = (
+                version_dir
+                / "runs"
+                / body["job_id"]
+                / "a"
+                / "repeat-001.json"
+            )
+            artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+            assert artifact["status"] == "ok"
+            assert artifact["rendered_prompt"] == "Say hello"
+            assert artifact["output_text"] == "Dry run response for case a repeat 1."
+            assert artifact["usage"] == {"dry_run": True}
+    finally:
+        llm_client.generate_text = original_generate_text  # type: ignore[assignment]
+
+
 def test_api_runs_pydantic_version() -> None:
     class FakeGeneratedStructured:
         def __init__(self, output: Any) -> None:
@@ -253,6 +299,56 @@ def test_api_runs_pydantic_version() -> None:
                 json.loads(path.read_text(encoding="utf-8"))
                 for path in artifact_paths
             ]
+            assert any(artifact.get("output_json") for artifact in artifacts)
+    finally:
+        llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
+
+
+def test_api_dry_run_pydantic_version_avoids_live_llm() -> None:
+    def fail_live_generate_structured(
+        model: str,
+        prompt: str,
+        response_model: Any,
+        validation_context: dict[str, Any] | None,
+    ) -> object:
+        raise AssertionError("dry_run must not call live structured generator")
+
+    original_generate_structured = llm_client.generate_structured
+    llm_client.generate_structured = fail_live_generate_structured  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            examples_root = root / "examples"
+            shutil.copytree(
+                Path("examples") / "split-scenes",
+                examples_root / "split-scenes",
+            )
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+
+            response = TestClient(app, raise_server_exceptions=False).post(
+                "/api/experiments/split-scenes/versions/v001/runs",
+                json={"dry_run": True},
+            )
+
+            assert response.status_code == 200
+            body = response.json()
+            artifact_paths = sorted(
+                (
+                    examples_root
+                    / "split-scenes"
+                    / "versions"
+                    / "v001"
+                    / "runs"
+                    / body["job_id"]
+                ).glob("*/*.json")
+            )
+            assert artifact_paths
+            artifacts = [
+                json.loads(path.read_text(encoding="utf-8"))
+                for path in artifact_paths
+            ]
+            assert all(artifact["status"] == "ok" for artifact in artifacts)
+            assert all(artifact["usage"] == {"dry_run": True} for artifact in artifacts)
             assert any(artifact.get("output_json") for artifact in artifacts)
     finally:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
@@ -344,7 +440,9 @@ def main() -> int:
         test_api_lists_empty_runs_when_version_has_no_batches,
         test_api_missing_experiment_returns_404,
         test_api_starts_run_job,
+        test_api_dry_run_text_version_avoids_live_llm,
         test_api_runs_pydantic_version,
+        test_api_dry_run_pydantic_version_avoids_live_llm,
         test_api_rejects_empty_cases_without_calling_llm,
         test_api_rejects_unsafe_case_id_without_calling_llm,
     ]
