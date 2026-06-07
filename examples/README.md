@@ -22,3 +22,8 @@ Each experiment chooses its tested generator model and its judge model in
 `generator_model` is the model being evaluated. `judge_model` is used for
 judgment, proposal generation, and comparison. Both values use the
 `<server>/<model>` format, where `<server>` must be configured in `.servers.jsonc`.
+
+The running app does not write into `examples/`. At backend startup, examples are
+copied into `experiments/` only when the runtime workspace is missing or has no
+experiment manifests. Edit and run experiments from `experiments/`; update
+`examples/` only when changing the golden starter templates.

@@ -3,6 +3,7 @@
 .servers.jsonc
 .models.jsonc
 .cache/
+experiments/
 .venv/
 venv/
 env/
@@ -11,4 +12,3 @@ __pycache__/
 node_modules/
 dist/
 build/
-

@@ -42,10 +42,15 @@ Python code builds structured context and renders these templates through `promp
 
 ## Runtime Paths
 
-Prompt Lab defaults to repository-local paths:
+Prompt Lab has two repository-local experiment roots:
 
-- `experiments/`
-- `examples/`
+- `examples/` - committed golden templates, used only to seed a new workspace.
+- `experiments/` - local runtime workspace, ignored by git.
+
+On backend startup, if `experiments/` does not exist or contains no
+`*/experiment.json` manifests, Prompt Lab copies top-level example experiment
+directories from `examples/` into `experiments/`. Once seeded, the backend lists,
+loads, and writes only `experiments/`.
 
 Environment overrides:
 

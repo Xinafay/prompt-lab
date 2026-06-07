@@ -32,6 +32,12 @@ model are selected per experiment in `experiment.json`:
 Model references use the `<server>/<model>` format, where `<server>` must match a
 key in `.servers.jsonc`.
 
+`examples/` contains committed golden templates. On backend startup, if
+`experiments/` does not exist or contains no `*/experiment.json` manifests, Prompt
+Lab copies examples into `experiments/`. Runtime reads, generated artifacts, and
+future GUI edits use `experiments/` only. The `experiments/` directory is ignored
+by git.
+
 Install frontend dependencies:
 
 ```bash
