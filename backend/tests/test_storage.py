@@ -8,7 +8,7 @@ from prompt_lab.errors import NotFoundError
 from prompt_lab.storage import PromptLabStore
 
 
-def test_store_lists_example_experiments() -> None:
+def test_store_does_not_list_examples_directly() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
         example = root / "examples" / "demo"
@@ -21,7 +21,7 @@ def test_store_lists_example_experiments() -> None:
 
         store = PromptLabStore(experiments_root=root / "experiments", examples_root=root / "examples")
 
-        assert [item.id for item in store.list_experiments()] == ["demo"]
+        assert store.list_experiments() == []
 
 
 def test_store_loads_cases_for_version() -> None:
@@ -179,7 +179,7 @@ def test_store_writes_nested_run_artifact() -> None:
         assert json.loads(path.read_text(encoding="utf-8")) == {"ok": True}
 
 
-def test_store_prefers_experiments_root_over_examples_root() -> None:
+def test_store_resolves_only_experiments_root() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
         example = root / "examples" / "demo"
@@ -207,7 +207,7 @@ def test_store_prefers_experiments_root_over_examples_root() -> None:
 
 def main() -> int:
     tests = [
-        test_store_lists_example_experiments,
+        test_store_does_not_list_examples_directly,
         test_store_loads_cases_for_version,
         test_store_rejects_read_path_escape,
         test_store_rejects_write_path_escape,
@@ -215,7 +215,7 @@ def main() -> int:
         test_store_rejects_version_path_escape_for_read,
         test_store_rejects_version_path_escape_for_write,
         test_store_writes_nested_run_artifact,
-        test_store_prefers_experiments_root_over_examples_root,
+        test_store_resolves_only_experiments_root,
     ]
     for test in tests:
         test()

@@ -47,26 +47,24 @@ class PromptLabStore:
         self.examples_root = examples_root
 
     def list_experiments(self) -> list[ExperimentArtifact]:
-        """Return experiments from `experiments/` and `examples/`, sorted by id."""
+        """Return runtime experiments from `experiments/`, sorted by id."""
+        if not self.experiments_root.exists():
+            return []
         manifests: dict[str, ExperimentArtifact] = {}
-        for root in [self.examples_root, self.experiments_root]:
-            if not root.exists():
-                continue
-            for manifest_path in sorted(root.glob("*/experiment.json")):
-                artifact = ExperimentArtifact.model_validate(_read_json(manifest_path))
-                manifests[artifact.id] = artifact
+        for manifest_path in sorted(self.experiments_root.glob("*/experiment.json")):
+            artifact = ExperimentArtifact.model_validate(_read_json(manifest_path))
+            manifests[artifact.id] = artifact
         return [manifests[key] for key in sorted(manifests)]
 
     def experiment_dir(self, experiment_id: str) -> Path:
-        """Resolve an experiment directory, preferring editable experiments over examples."""
+        """Resolve an experiment directory under the runtime experiments root."""
         _validate_storage_id(experiment_id, "Experiment")
-        for root in [self.experiments_root, self.examples_root]:
-            resolved_root = root.resolve()
-            candidate = (resolved_root / experiment_id).resolve()
-            if candidate != resolved_root and not candidate.is_relative_to(resolved_root):
-                raise NotFoundError("Experiment not found")
-            if (candidate / "experiment.json").is_file():
-                return candidate
+        resolved_root = self.experiments_root.resolve()
+        candidate = (resolved_root / experiment_id).resolve()
+        if candidate != resolved_root and not candidate.is_relative_to(resolved_root):
+            raise NotFoundError("Experiment not found")
+        if (candidate / "experiment.json").is_file():
+            return candidate
         raise NotFoundError("Experiment not found")
 
     def load_experiment(self, experiment_id: str) -> ExperimentArtifact:
