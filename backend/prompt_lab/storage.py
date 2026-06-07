@@ -71,6 +71,20 @@ class PromptLabStore:
         path = self.experiment_dir(experiment_id) / "experiment.json"
         return ExperimentArtifact.model_validate(_read_json(path))
 
+    def save_experiment(
+        self, experiment_id: str, artifact: ExperimentArtifact
+    ) -> Path:
+        """Persist an experiment manifest under the runtime experiments root."""
+        if artifact.id != experiment_id:
+            raise NotFoundError("Experiment not found")
+        experiment_dir = self.experiment_dir(experiment_id)
+        active_version_dir = experiment_dir / "versions" / artifact.active_version
+        if not active_version_dir.is_dir():
+            raise NotFoundError("Version not found")
+        path = experiment_dir / "experiment.json"
+        _write_json(path, artifact.model_dump(mode="json"))
+        return path.resolve()
+
     def version_dir(self, experiment_id: str, version: str) -> Path:
         _validate_storage_id(version, "Version")
         versions_root = (self.experiment_dir(experiment_id) / "versions").resolve()

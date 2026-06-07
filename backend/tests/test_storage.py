@@ -5,6 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from prompt_lab.errors import NotFoundError
+from prompt_lab.models.artifacts import ExperimentArtifact
 from prompt_lab.storage import PromptLabStore
 
 
@@ -205,6 +206,118 @@ def test_store_resolves_only_experiments_root() -> None:
         assert store.experiment_dir("demo") == experiment.resolve()
 
 
+def write_experiment_manifest(
+    path: Path, *, experiment_id: str = "demo", active_version: str = "v001"
+) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "prompt_lab.experiment/v1",
+                "id": experiment_id,
+                "title": "Demo",
+                "description": "",
+                "active_version": active_version,
+                "output": {"type": "text"},
+                "template": {"engine": "jinja2", "path": "prompt.md"},
+                "models": {
+                    "generator_model": "local/a",
+                    "judge_model": "openai/b",
+                },
+                "run_defaults": {
+                    "repeat_count": 3,
+                    "llm_cache": "disabled",
+                    "case_order": "case-major",
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_store_saves_experiment_manifest_under_experiments_root() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        experiment = root / "experiments" / "demo"
+        (experiment / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(experiment / "experiment.json")
+        example = root / "examples" / "demo"
+        (example / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(example / "experiment.json")
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+        payload = store.load_experiment("demo").model_dump(mode="json")
+        payload["title"] = "Updated Demo"
+        payload["description"] = "Edited from settings"
+        payload["models"] = {
+            "generator_model": "local/new",
+            "judge_model": "openai/new",
+        }
+        payload["run_defaults"] = {
+            "repeat_count": 5,
+            "llm_cache": "disabled",
+            "case_order": "case-major",
+        }
+        artifact = ExperimentArtifact.model_validate(payload)
+
+        path = store.save_experiment("demo", artifact)
+
+        assert path == (experiment / "experiment.json").resolve()
+        saved = json.loads(path.read_text(encoding="utf-8"))
+        assert saved["title"] == "Updated Demo"
+        assert saved["description"] == "Edited from settings"
+        assert saved["models"]["generator_model"] == "local/new"
+        assert saved["run_defaults"]["repeat_count"] == 5
+        example_saved = json.loads(
+            (example / "experiment.json").read_text(encoding="utf-8")
+        )
+        assert example_saved["title"] == "Demo"
+
+
+def test_store_rejects_save_experiment_id_mismatch() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        experiment = root / "experiments" / "demo"
+        (experiment / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(experiment / "experiment.json")
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+        artifact = store.load_experiment("demo").model_copy(update={"id": "other"})
+
+        try:
+            store.save_experiment("demo", artifact)
+        except NotFoundError as exc:
+            assert str(root) not in str(exc)
+        else:
+            raise AssertionError("Expected id mismatch to be rejected")
+
+
+def test_store_rejects_save_missing_active_version() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        experiment = root / "experiments" / "demo"
+        (experiment / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(experiment / "experiment.json")
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+        artifact = store.load_experiment("demo").model_copy(
+            update={"active_version": "v999"}
+        )
+
+        try:
+            store.save_experiment("demo", artifact)
+        except NotFoundError as exc:
+            assert str(root) not in str(exc)
+        else:
+            raise AssertionError("Expected missing active version to be rejected")
+
+
 def main() -> int:
     tests = [
         test_store_does_not_list_examples_directly,
@@ -216,6 +329,9 @@ def main() -> int:
         test_store_rejects_version_path_escape_for_write,
         test_store_writes_nested_run_artifact,
         test_store_resolves_only_experiments_root,
+        test_store_saves_experiment_manifest_under_experiments_root,
+        test_store_rejects_save_experiment_id_mismatch,
+        test_store_rejects_save_missing_active_version,
     ]
     for test in tests:
         test()
