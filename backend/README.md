@@ -77,5 +77,6 @@ PYTHONPATH=backend .venv/bin/python backend/tests/test_compare.py
 Live smoke with real models is intentionally separate:
 
 ```bash
+CHAT_ENV_MODELS=local/qwen3-14b,openai/gpt-5-mini \
 PYTHONPATH=backend .venv/bin/python backend/tests/test_chat_env.py
 ```

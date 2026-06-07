@@ -16,9 +16,21 @@ Copy and edit local configuration templates when running against real models:
 
 ```bash
 cp config/servers.example.jsonc .servers.jsonc
-cp config/models.example.jsonc .models.jsonc
 cp config/env.example .env
 ```
+
+Server prefixes are configured in `.servers.jsonc`. The tested model and judge
+model are selected per experiment in `experiment.json`:
+
+```json
+"models": {
+  "generator_model": "local/qwen3-14b",
+  "judge_model": "openai/gpt-5-mini"
+}
+```
+
+Model references use the `<server>/<model>` format, where `<server>` must match a
+key in `.servers.jsonc`.
 
 Install frontend dependencies:
 
@@ -89,5 +101,6 @@ pnpm build
 Live smoke requires configured model servers and may make real LLM calls:
 
 ```bash
+CHAT_ENV_MODELS=local/qwen3-14b,openai/gpt-5-mini \
 PYTHONPATH=backend .venv/bin/python backend/tests/test_chat_env.py
 ```

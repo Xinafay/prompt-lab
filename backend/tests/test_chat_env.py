@@ -17,8 +17,6 @@ from shared.llm import chat_facade as chat_utils
 from shared.llm.stream_callbacks import StreamCallbacks
 from shared.llm.chat_get_structured_lite import chat_get_structured_lite
 from shared.llm.chat_get_text import chat_get_text
-from shared.llm.models import load_models_config
-
 
 TEXT_PROMPT = "Reply with exactly: OK"
 STREAM_PROMPT = (
@@ -337,10 +335,25 @@ def run_model(model: str) -> None:
     _dump_raw_transport(model)
 
 
+def _load_probe_models() -> list[str]:
+    raw_models = os.getenv("CHAT_ENV_MODELS", "").strip()
+    if raw_models:
+        models = [item.strip() for item in raw_models.split(",") if item.strip()]
+    else:
+      fallback_model = os.getenv("LLM_MODEL", "").strip()
+      models = [fallback_model] if fallback_model else []
+    if not models:
+        raise RuntimeError(
+            "Set CHAT_ENV_MODELS as a comma-separated model list or set LLM_MODEL."
+        )
+    return models
+
+
 def main() -> int:
     """CLI entrypoint for the chat environment smoke and streaming probes."""
 
-    models = load_models_config()
+    _ensure_env_loaded()
+    models = _load_probe_models()
     for model in models:
         try:
             run_model(model)

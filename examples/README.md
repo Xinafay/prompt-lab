@@ -7,14 +7,18 @@ Examples:
 - `split-scenes`: Pydantic structured output using `model.SceneList`.
 - `summarize-chapter`: plain text output.
 
-The example model names are placeholders:
+Each experiment chooses its tested generator model and its judge model in
+`experiment.json`:
 
 ```json
 {
-  "generator_model": "local/example-small-model",
-  "judge_model": "openai/example-large-model"
+  "models": {
+    "generator_model": "local/qwen3-14b",
+    "judge_model": "openai/gpt-5-mini"
+  }
 }
 ```
 
-Replace them with real model references in the future Prompt Lab application.
-
+`generator_model` is the model being evaluated. `judge_model` is used for
+judgment, proposal generation, and comparison. Both values use the
+`<server>/<model>` format, where `<server>` must be configured in `.servers.jsonc`.
