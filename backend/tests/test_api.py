@@ -265,6 +265,23 @@ def test_api_dry_run_text_version_avoids_live_llm() -> None:
                 / "repeat-001.json"
             )
             artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+            assert (
+                root
+                / "experiments"
+                / "demo"
+                / "versions"
+                / "v001"
+                / "runs"
+                / body["job_id"]
+            ).is_dir()
+            assert not (
+                root
+                / "examples"
+                / "demo"
+                / "versions"
+                / "v001"
+                / "runs"
+            ).exists()
             assert artifact["status"] == "ok"
             assert artifact["rendered_prompt"] == "Say hello"
             assert artifact["output_text"] == "Dry run response for case a repeat 1."
