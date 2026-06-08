@@ -13,9 +13,47 @@ import type {
   VersionOverview
 } from "./types";
 
+function detailToMessage(detail: unknown): string | null {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (
+          item !== null &&
+          typeof item === "object" &&
+          "msg" in item &&
+          typeof item.msg === "string"
+        ) {
+          return item.msg;
+        }
+        return null;
+      })
+      .filter((item): item is string => item !== null);
+    return messages.length > 0 ? messages.join("; ") : null;
+  }
+  return null;
+}
+
+async function readErrorMessage(response: Response): Promise<string> {
+  const text = await response.text();
+  if (text.trim().length === 0) {
+    return `${response.status} ${response.statusText}`.trim();
+  }
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (parsed !== null && typeof parsed === "object" && "detail" in parsed) {
+      const message = detailToMessage(parsed.detail);
+      if (message !== null) return message;
+    }
+  } catch {
+    return text;
+  }
+  return text;
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
   const response = await fetch(path);
-  if (!response.ok) throw new Error(await response.text());
+  if (!response.ok) throw new Error(await readErrorMessage(response));
   return response.json() as Promise<T>;
 }
 
@@ -25,7 +63,7 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
     headers: body === undefined ? undefined : { "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
-  if (!response.ok) throw new Error(await response.text());
+  if (!response.ok) throw new Error(await readErrorMessage(response));
   return response.json() as Promise<T>;
 }
 
@@ -111,6 +149,20 @@ export function getReviewState(
   );
 }
 
+export async function getLatestReviewState(
+  experimentId: string,
+  version: string
+): Promise<ReviewState | null> {
+  const response = await fetch(
+    `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
+      version
+    )}/reviews/latest`
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(await readErrorMessage(response));
+  return response.json() as Promise<ReviewState>;
+}
+
 export function updateReviewDecisions(
   experimentId: string,
   version: string,
@@ -153,6 +205,21 @@ export function generateProposal(
   );
 }
 
+export async function getReviewProposal(
+  experimentId: string,
+  version: string,
+  reviewId: string
+): Promise<ProposalResponse | null> {
+  const response = await fetch(
+    `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
+      version
+    )}/reviews/${encodeURIComponent(reviewId)}/proposal`
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(await readErrorMessage(response));
+  return response.json() as Promise<ProposalResponse>;
+}
+
 export function createProposalVersion(
   experimentId: string,
   version: string,
@@ -187,6 +254,6 @@ async function apiPut<T>(path: string, body: unknown): Promise<T> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body)
   });
-  if (!response.ok) throw new Error(await response.text());
+  if (!response.ok) throw new Error(await readErrorMessage(response));
   return response.json() as Promise<T>;
 }

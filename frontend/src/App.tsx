@@ -6,6 +6,8 @@ import {
   createProposalVersion,
   generateProposal,
   getJob,
+  getLatestReviewState,
+  getReviewProposal,
   getReviewState,
   getVersionOverview,
   getVersionRuns,
@@ -173,12 +175,25 @@ function App() {
 
     async function loadDetails(experiment: Experiment) {
       try {
-        const [overview, runs] = await Promise.all([
+        const [overview, runs, latestReview] = await Promise.all([
           getVersionOverview(experiment.id, experiment.active_version),
-          getVersionRuns(experiment.id, experiment.active_version)
+          getVersionRuns(experiment.id, experiment.active_version),
+          getLatestReviewState(experiment.id, experiment.active_version)
         ]);
+        const latestProposal =
+          latestReview === null
+            ? null
+            : await getReviewProposal(
+                experiment.id,
+                experiment.active_version,
+                latestReview.review_id
+              );
         if (!cancelled) {
           setDetailState({ status: "loaded", overview, runs });
+          setReviewState(latestReview);
+          setProposalResponse(latestProposal);
+          setDecisionsDirty(false);
+          setHumanNotesDirty(false);
         }
       } catch (error) {
         if (!cancelled) {
@@ -238,6 +253,12 @@ function App() {
         return;
       }
       setJobStatus(job);
+      setReviewState(null);
+      setProposalResponse(null);
+      setCreatedVersion(null);
+      setComparison(null);
+      setDecisionsDirty(false);
+      setHumanNotesDirty(false);
 
       job = await followJobEvents(job.job_id, job, isCurrentRequest);
 
@@ -248,8 +269,8 @@ function App() {
       setDetailState({ status: "loaded", overview, runs });
       setWorkflowMessage(
         dryRun
-          ? `Dry-run generated ${runs.run_batch_id ?? "a run batch"}.`
-          : `Run completed: ${runs.run_batch_id ?? "latest batch"}.`
+          ? "Dry-run generated the active run."
+          : "Active run completed."
       );
       setActiveTab("runs");
     } catch (error) {
@@ -330,7 +351,7 @@ function App() {
     const dryRun = workflowMode === "dry-run";
     const requestId = beginWorkflow(
       selectionKey,
-      dryRun ? "Dry-run judging latest runs..." : "Judging latest runs..."
+      dryRun ? "Dry-run judging active run..." : "Judging active run..."
     );
     try {
       const response = await judgeVersion(experimentId, version, dryRun);
@@ -343,8 +364,8 @@ function App() {
       setHumanNotesDirty(false);
       setWorkflowMessage(
         dryRun
-          ? `Loaded dry-run review ${response.review_id}.`
-          : `Loaded ${response.review_id}`
+          ? "Dry-run review loaded as the active review."
+          : "Active review loaded."
       );
       setActiveTab("review");
     } catch (error) {
@@ -556,8 +577,8 @@ function App() {
       setComparison(response.comparison);
       setWorkflowMessage(
         dryRun
-          ? `Loaded dry-run comparison ${response.comparison_id}.`
-          : `Loaded ${response.comparison_id}.`
+          ? "Dry-run comparison loaded."
+          : "Comparison loaded."
       );
       setActiveTab("compare");
     } catch (error) {
@@ -699,7 +720,7 @@ function App() {
                           onClick={handleJudgeVersion}
                           type="button"
                         >
-                          {workflowBusy ? "Judging..." : "Judge latest runs"}
+                          {workflowBusy ? "Judging..." : "Judge active run"}
                         </button>
                       ) : activeTab === "proposal" && proposalResponse !== null ? (
                         <button

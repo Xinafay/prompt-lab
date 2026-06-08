@@ -320,6 +320,90 @@ def test_api_generates_proposal_artifacts_with_traceable_source() -> None:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
 
+def test_api_reads_existing_proposal_artifacts() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_review_fixture(root)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        review_dir = runtime_review_dir(root)
+        proposal_dir = runtime_review_dir(root) / "proposal"
+        proposal_dir.mkdir()
+        (proposal_dir / "prompt.md").write_text("Improved prompt", encoding="utf-8")
+        (proposal_dir / "model.py").write_text(
+            "from pydantic import BaseModel\n\nclass DemoOutput(BaseModel):\n    answer: str\n",
+            encoding="utf-8",
+        )
+        (proposal_dir / "rationale.md").write_text("Why", encoding="utf-8")
+        write_valid_proposal_source(review_dir)
+
+        response = TestClient(app).get(
+            "/api/experiments/demo/versions/v001/reviews/review-001/proposal"
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["proposal_dir"].endswith(
+            "versions/v001/reviews/review-001/proposal"
+        )
+        assert body["proposal"]["prompt_md"] == "Improved prompt"
+        assert body["proposal"]["model_py"].startswith("from pydantic")
+        assert body["proposal"]["rationale_md"] == "Why"
+        assert body["source"]["review_id"] == "review-001"
+
+
+def test_api_strips_wrapping_code_fences_from_proposal_files() -> None:
+    def fake_generate_structured(
+        model: str,
+        prompt: str,
+        response_model: Any,
+        validation_context: dict[str, Any] | None,
+    ) -> FakeGeneratedStructured:
+        return FakeGeneratedStructured(
+            response_model(
+                prompt_md="```text\nSay {{ value }} with summary\n```",
+                model_py=(
+                    "```python\n"
+                    "from pydantic import BaseModel\n\n"
+                    "class DemoOutput(BaseModel):\n"
+                    "    answer: str\n"
+                    "```"
+                ),
+                rationale_md="```markdown\nAccepted f-accepted.\n```",
+            )
+        )
+
+    original_generate_structured = llm_client.generate_structured
+    llm_client.generate_structured = fake_generate_structured  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_review_fixture(root)
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+
+            response = TestClient(app).post(
+                "/api/experiments/demo/versions/v001/reviews/review-001/proposal"
+            )
+
+            assert response.status_code == 200
+            proposal_dir = runtime_review_dir(root) / "proposal"
+            assert (proposal_dir / "prompt.md").read_text(encoding="utf-8") == (
+                "Say {{ value }} with summary"
+            )
+            assert (proposal_dir / "model.py").read_text(encoding="utf-8") == (
+                "from pydantic import BaseModel\n\n"
+                "class DemoOutput(BaseModel):\n"
+                "    answer: str"
+            )
+            assert (proposal_dir / "rationale.md").read_text(encoding="utf-8") == (
+                "Accepted f-accepted."
+            )
+            assert response.json()["proposal"]["prompt_md"] == (
+                "Say {{ value }} with summary"
+            )
+    finally:
+        llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
+
+
 def test_api_generates_dry_run_proposal_without_live_llm() -> None:
     def fake_generate_structured(
         model: str,
@@ -520,6 +604,8 @@ def main() -> int:
         test_build_proposal_prompt_sorts_decisions_and_includes_rules,
         test_proposal_prompt_template_file_is_used,
         test_api_generates_proposal_artifacts_with_traceable_source,
+        test_api_reads_existing_proposal_artifacts,
+        test_api_strips_wrapping_code_fences_from_proposal_files,
         test_api_generates_dry_run_proposal_without_live_llm,
         test_api_create_version_copies_clean_source_and_replaces_pydantic_files,
         test_api_create_version_rejects_mismatched_source_without_creating_version,

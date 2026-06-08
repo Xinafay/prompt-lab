@@ -10,6 +10,8 @@ def build_judge_prompt(
     *,
     experiment_id: str,
     version: str,
+    run_batch_id: str,
+    judge_model: str,
     output_declaration: str,
     rubric: str,
     prompt_template: str,
@@ -54,6 +56,17 @@ def build_judge_prompt(
         {
             "experiment_id": experiment_id,
             "version": version,
+            "judgment_metadata_section": fenced_section(
+                "JUDGMENT_METADATA_JSON",
+                json_block(
+                    {
+                        "version": version,
+                        "run_batch_ids": [run_batch_id],
+                        "judge_model": judge_model,
+                    }
+                ),
+                fence="json",
+            ),
             "output_declaration_section": fenced_section(
                 "OUTPUT_DECLARATION", output_declaration
             ),

@@ -157,13 +157,17 @@ export function RunsView({ cases, runBatchId, runs }: RunsViewProps) {
   return (
     <section className="runs-panel" aria-label="Run results">
       <div className="section-heading">
-        <h3>Runs</h3>
-        <span>{runBatchId ?? "No run batch"}</span>
+        <h3>Active run</h3>
+        <span>
+          {runs.length === 0
+            ? "No active run"
+            : `${runs.length} artifact${runs.length === 1 ? "" : "s"}`}
+        </span>
       </div>
 
       {runs.length === 0 ? (
         <div className="empty-inline">
-          No run artifacts yet. Run this version to create run artifacts.
+          No active run yet. Run this version to create one active run.
         </div>
       ) : (
         <div className="runs-workspace">
@@ -258,6 +262,12 @@ export function RunsView({ cases, runBatchId, runs }: RunsViewProps) {
                     <dt>Output type</dt>
                     <dd>{selectedRun.output_type}</dd>
                   </div>
+                  {runBatchId !== null ? (
+                    <div>
+                      <dt>Artifact id</dt>
+                      <dd>{runBatchId}</dd>
+                    </div>
+                  ) : null}
                   <div>
                     <dt>Run id</dt>
                     <dd>{selectedRun.run_id}</dd>

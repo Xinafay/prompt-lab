@@ -61,13 +61,13 @@ export function ReviewView({
       <div className="section-heading">
         <h3>Review</h3>
         <button className="secondary-action" disabled={isBusy} onClick={onJudge} type="button">
-          {isBusy ? "Judging..." : "Judge latest runs"}
+          {isBusy ? "Judging..." : "Judge active run"}
         </button>
       </div>
 
       {reviewState === null ? (
         <div className="empty-inline">
-          No judgment loaded. Run and judge the latest run batch.
+          No judgment loaded. Run this version, then judge the active run.
         </div>
       ) : (
         <div className="review-content">

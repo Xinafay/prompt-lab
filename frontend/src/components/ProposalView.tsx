@@ -58,7 +58,7 @@ export function ProposalView({
       {proposalResponse === null ? (
         <div className="empty-inline">
           {reviewState === null
-            ? "Judge latest runs before generating a proposal."
+            ? "Judge the active run before generating a proposal."
             : "No proposal generated."}
         </div>
       ) : (

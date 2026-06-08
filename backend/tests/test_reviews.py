@@ -14,7 +14,7 @@ from test_judge import valid_judgment_payload, write_json
 
 def write_demo_review(root: Path, *, finding_ids: list[str] | None = None) -> Path:
     finding_ids = finding_ids or ["f001"]
-    example = root / "examples" / "demo"
+    example = root / "experiments" / "demo"
     version_dir = example / "versions" / "v001"
     review_dir = version_dir / "reviews" / "review-001"
     write_json(
@@ -203,6 +203,34 @@ def test_api_reads_review_state() -> None:
         assert body["rubric_snapshot"] == "Prefer complete answers."
 
 
+def test_api_reads_latest_review_state() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        first_review_dir = write_demo_review(root)
+        second_review_dir = first_review_dir.parent / "review-002"
+        second_review_dir.mkdir()
+        for name in [
+            "judgment.json",
+            "judgment.md",
+            "rubric_snapshot.md",
+            "decisions.json",
+        ]:
+            (second_review_dir / name).write_text(
+                (first_review_dir / name).read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).get(
+            "/api/experiments/demo/versions/v001/reviews/latest"
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["review_id"] == "review-002"
+        assert body["judgment"]["judgment_id"] == "j001"
+
+
 def test_api_rejects_unsafe_review_id_without_reading_parent_paths() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -253,6 +281,7 @@ def main() -> int:
         test_api_saves_human_notes_markdown,
         test_api_rejects_missing_human_notes_without_changing_existing_notes,
         test_api_reads_review_state,
+        test_api_reads_latest_review_state,
         test_api_rejects_unsafe_review_id_without_reading_parent_paths,
         test_api_returns_404_for_missing_review_without_creating_it,
     ]

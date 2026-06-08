@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from prompt_lab.models.judgments import FindingDecisionSet, JudgmentArtifact
 from prompt_lab.prompt_sections import fenced_section, json_block
@@ -17,6 +17,20 @@ class ProposalDraft(BaseModel):
     prompt_md: str = Field(min_length=1)
     model_py: str | None = Field(default=None, min_length=1)
     rationale_md: str = Field(min_length=1)
+
+    @field_validator("prompt_md", "model_py", "rationale_md", mode="before")
+    @classmethod
+    def strip_wrapping_code_fence(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        lines = value.strip().splitlines()
+        if len(lines) < 2:
+            return value
+        first_line = lines[0].strip()
+        last_line = lines[-1].strip()
+        if first_line.startswith("```") and last_line == "```":
+            return "\n".join(lines[1:-1]).strip()
+        return value
 
 
 class ProposalSource(BaseModel):

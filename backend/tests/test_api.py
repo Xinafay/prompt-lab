@@ -326,6 +326,58 @@ def test_api_starts_run_job() -> None:
         llm_client.generate_text = original_generate_text  # type: ignore[assignment]
 
 
+def test_api_starting_run_clears_existing_runtime_chain() -> None:
+    class FakeGeneratedText:
+        output = "ok"
+        usage: dict[str, Any] = {}
+
+    original_generate_text = llm_client.generate_text
+    llm_client.generate_text = lambda model, prompt: FakeGeneratedText()  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            example = root / "examples" / "demo"
+            version_dir = example / "versions" / "v001"
+            (version_dir / "cases").mkdir(parents=True)
+            (example / "experiment.json").write_text(
+                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
+                encoding="utf-8",
+            )
+            (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
+            (version_dir / "cases" / "a.json").write_text(
+                '{"schema_version":"prompt_lab.case/v1","id":"a","title":"A","variables":{"value":"hello"}}',
+                encoding="utf-8",
+            )
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+            runtime_version_dir = root / "experiments" / "demo" / "versions" / "v001"
+            for relative_path in [
+                "runs/old-batch/a/repeat-001.json",
+                "reviews/review-001/judgment.json",
+                "comparisons/comparison-001/comparison.json",
+            ]:
+                path = runtime_version_dir / relative_path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("{}", encoding="utf-8")
+
+            response = TestClient(app).post(
+                "/api/experiments/demo/versions/v001/runs"
+            )
+
+            assert response.status_code == 200
+            assert not (runtime_version_dir / "runs" / "old-batch").exists()
+            assert not (runtime_version_dir / "reviews").exists()
+            assert not (runtime_version_dir / "comparisons").exists()
+            assert (
+                runtime_version_dir
+                / "runs"
+                / response.json()["job_id"]
+                / "a"
+                / "repeat-001.json"
+            ).is_file()
+    finally:
+        llm_client.generate_text = original_generate_text  # type: ignore[assignment]
+
+
 def test_api_dry_run_text_version_avoids_live_llm() -> None:
     def fail_live_generate_text(model: str, prompt: str) -> object:
         raise AssertionError("dry_run must not call live text generator")
@@ -603,6 +655,7 @@ def main() -> int:
         test_api_lists_empty_runs_when_version_has_no_batches,
         test_api_missing_experiment_returns_404,
         test_api_starts_run_job,
+        test_api_starting_run_clears_existing_runtime_chain,
         test_api_dry_run_text_version_avoids_live_llm,
         test_api_runs_pydantic_version,
         test_api_dry_run_pydantic_version_avoids_live_llm,

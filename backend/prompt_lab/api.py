@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import shutil
 import time
@@ -36,6 +37,9 @@ from prompt_lab.pydantic_loader import load_model_entrypoint
 from prompt_lab.runner import iter_case_major, run_structured_case, run_text_case
 from prompt_lab.storage import PromptLabStore
 from prompt_lab.errors import NotFoundError
+
+
+logger = logging.getLogger(__name__)
 
 
 class HumanNotesRequest(BaseModel):
@@ -112,6 +116,43 @@ def _read_json(path: Path) -> dict[str, object]:
 
 def _read_optional_text(path: Path) -> str:
     return path.read_text(encoding="utf-8") if path.is_file() else ""
+
+
+def _error_detail_text(detail: object) -> str:
+    return detail if isinstance(detail, str) else json.dumps(detail, ensure_ascii=False)
+
+
+def _validation_error_summary(error: ValidationError) -> str:
+    messages = []
+    for item in error.errors()[:5]:
+        location = ".".join(str(part) for part in item.get("loc", ()))
+        message = str(item.get("msg", "validation error"))
+        messages.append(f"{location}: {message}" if location else message)
+    remaining_count = len(error.errors()) - len(messages)
+    if remaining_count > 0:
+        messages.append(f"... and {remaining_count} more")
+    return "; ".join(messages)
+
+
+def _log_judge_rejection(
+    *,
+    experiment_id: str,
+    version: str,
+    selected_run_batch_id: str | None,
+    run_batch_dir: Path | None,
+    detail: object,
+    exc_info: bool = False,
+) -> None:
+    logger.warning(
+        "Judge request failed: experiment=%s version=%s run_batch=%s "
+        "run_batch_dir=%s detail=%s",
+        experiment_id,
+        version,
+        selected_run_batch_id or "<none>",
+        str(run_batch_dir) if run_batch_dir is not None else "<none>",
+        _error_detail_text(detail),
+        exc_info=exc_info,
+    )
 
 
 def _write_json(path: Path, value: dict[str, object]) -> None:
@@ -397,6 +438,13 @@ def _cleanup_reserved_comparison_dir(comparison_dir: Path) -> None:
         pass
 
 
+def _remove_runtime_children(version_dir: Path, names: list[str]) -> None:
+    for name in names:
+        child = version_dir / name
+        if child.is_dir():
+            shutil.rmtree(child)
+
+
 def _resolve_existing_review_dir(version_dir: Path, review_id: str) -> Path:
     _validate_review_id_path_segment(review_id)
     reviews_dir = (version_dir / "reviews").resolve()
@@ -410,6 +458,51 @@ def _resolve_existing_review_dir(version_dir: Path, review_id: str) -> Path:
     if not (review_dir / "judgment.json").is_file():
         raise HTTPException(status_code=404, detail="Review not found")
     return review_dir
+
+
+def _select_latest_review_dir(version_dir: Path) -> Path | None:
+    reviews_dir = version_dir / "reviews"
+    if not reviews_dir.is_dir():
+        return None
+    review_dirs = [
+        path
+        for path in reviews_dir.iterdir()
+        if path.is_dir() and (path / "judgment.json").is_file()
+    ]
+    if not review_dirs:
+        return None
+    return max(review_dirs, key=lambda path: path.name)
+
+
+def _read_review_state(review_dir: Path, review_id: str) -> dict[str, object]:
+    judgment = JudgmentArtifact.model_validate(_read_json(review_dir / "judgment.json"))
+    decisions_path = review_dir / "decisions.json"
+    if not decisions_path.is_file():
+        raise HTTPException(status_code=404, detail="Review not found")
+    decisions = FindingDecisionSet.model_validate(_read_json(decisions_path))
+    human_notes_path = review_dir / "human_notes.md"
+    judgment_markdown_path = review_dir / "judgment.md"
+    rubric_snapshot_path = review_dir / "rubric_snapshot.md"
+    return {
+        "review_id": review_id,
+        "judgment": judgment.model_dump(mode="json"),
+        "decisions": decisions.model_dump(mode="json"),
+        "human_notes": (
+            human_notes_path.read_text(encoding="utf-8")
+            if human_notes_path.is_file()
+            else ""
+        ),
+        "judgment_markdown": (
+            judgment_markdown_path.read_text(encoding="utf-8")
+            if judgment_markdown_path.is_file()
+            else ""
+        ),
+        "rubric_snapshot": (
+            rubric_snapshot_path.read_text(encoding="utf-8")
+            if rubric_snapshot_path.is_file()
+            else ""
+        ),
+    }
 
 
 def _validate_decision_keys_match_judgment(
@@ -506,6 +599,33 @@ def _load_validated_proposal_source(
             detail=f"Proposal source mismatch: {', '.join(mismatches)}",
         )
     return source
+
+
+def _read_proposal_response(proposal_dir: Path) -> dict[str, object]:
+    prompt_path = proposal_dir / "prompt.md"
+    rationale_path = proposal_dir / "rationale.md"
+    if not prompt_path.is_file() or not rationale_path.is_file():
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    model_path = proposal_dir / "model.py"
+    proposal = ProposalDraft.model_validate(
+        {
+            "prompt_md": prompt_path.read_text(encoding="utf-8"),
+            "model_py": (
+                model_path.read_text(encoding="utf-8")
+                if model_path.is_file()
+                else None
+            ),
+            "rationale_md": rationale_path.read_text(encoding="utf-8"),
+        }
+    )
+    source_path = proposal_dir / "source.json"
+    if not source_path.is_file():
+        raise HTTPException(status_code=404, detail="Proposal source not found")
+    return {
+        "proposal_dir": str(proposal_dir),
+        "proposal": proposal.model_dump(mode="json"),
+        "source": _read_json(source_path),
+    }
 
 
 def _load_latest_validated_run_batch(
@@ -663,6 +783,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     ) -> dict[str, object]:
         dry_run = request.dry_run if request is not None else False
         experiment = store.load_experiment(experiment_id)
+        version_dir = store.version_dir(experiment_id, version)
         cases = store.load_cases(experiment_id, version)
         if not cases:
             raise HTTPException(status_code=400, detail="Version has no cases")
@@ -676,10 +797,10 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             model_entrypoint = experiment.output.model_entrypoint
             assert model_file is not None
             assert model_entrypoint is not None
-            version_dir = store.version_dir(experiment_id, version)
             response_model = load_model_entrypoint(
                 version_dir, model_file, model_entrypoint
             )
+        _remove_runtime_children(version_dir, ["runs", "reviews", "comparisons"])
         job = job_manager.start_job(
             kind="run_version",
             experiment_id=experiment_id,
@@ -782,117 +903,159 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         request: DryRunRequest | None = None,
         run_batch_id: str | None = None,
     ) -> dict[str, object]:
-        dry_run = request.dry_run if request is not None else False
-        experiment = store.load_experiment(experiment_id)
-        version_dir = store.version_dir(experiment_id, version)
-        runs_dir = version_dir / "runs"
-        if run_batch_id is None:
-            run_batch_dir = _select_latest_run_batch_dir(runs_dir)
-            if run_batch_dir is None:
-                raise HTTPException(status_code=400, detail="Version has no run batches")
-            selected_run_batch_id = run_batch_dir.name
-        else:
-            _validate_run_batch_id_path_segment(run_batch_id)
-            selected_run_batch_id = run_batch_id
-            run_batch_dir = (runs_dir / run_batch_id).resolve()
-            resolved_runs_dir = runs_dir.resolve()
-            if (
-                run_batch_dir == resolved_runs_dir
-                or not run_batch_dir.is_relative_to(resolved_runs_dir)
-                or not run_batch_dir.is_dir()
-            ):
-                raise HTTPException(status_code=404, detail="Run batch not found")
+        selected_run_batch_id: str | None = None
+        run_batch_dir: Path | None = None
+        try:
+            dry_run = request.dry_run if request is not None else False
+            experiment = store.load_experiment(experiment_id)
+            version_dir = store.version_dir(experiment_id, version)
+            runs_dir = version_dir / "runs"
+            if run_batch_id is None:
+                run_batch_dir = _select_latest_run_batch_dir(runs_dir)
+                if run_batch_dir is None:
+                    raise HTTPException(
+                        status_code=400, detail="Version has no run batches"
+                    )
+                selected_run_batch_id = run_batch_dir.name
+            else:
+                _validate_run_batch_id_path_segment(run_batch_id)
+                selected_run_batch_id = run_batch_id
+                run_batch_dir = (runs_dir / run_batch_id).resolve()
+                resolved_runs_dir = runs_dir.resolve()
+                if (
+                    run_batch_dir == resolved_runs_dir
+                    or not run_batch_dir.is_relative_to(resolved_runs_dir)
+                    or not run_batch_dir.is_dir()
+                ):
+                    raise HTTPException(status_code=404, detail="Run batch not found")
+            assert selected_run_batch_id is not None
+            assert run_batch_dir is not None
 
-        experiment_dir = store.experiment_dir(experiment_id)
-        rubric_path = experiment_dir / "rubric.md"
-        rubric = _read_optional_text(rubric_path)
-        prompt_template = store.read_text(
-            experiment_id, version, experiment.template.path
-        )
-        cases = store.load_cases(experiment_id, version)
-        run_artifacts = [
-            RunArtifact.model_validate(json.loads(path.read_text(encoding="utf-8")))
-            for path in sorted(run_batch_dir.glob("*/*.json"))
-        ]
-        if not run_artifacts:
-            raise HTTPException(status_code=400, detail="Run batch has no artifacts")
-        _validate_run_artifacts(
-            run_artifacts=run_artifacts,
-            selected_run_batch_id=selected_run_batch_id,
-            version=version,
-            case_ids={case.id for case in cases},
-            repeat_count=experiment.run_defaults.repeat_count,
-        )
-
-        if experiment.output.type == "pydantic":
-            model_file = experiment.output.model_file
-            model_entrypoint = experiment.output.model_entrypoint
-            assert model_file is not None
-            assert model_entrypoint is not None
-            model_source = store.read_text(experiment_id, version, model_file)
-            output_declaration = (
-                f"pydantic model: {model_entrypoint}\n"
-                f"model file: {model_file}\n\n{model_source}"
+            experiment_dir = store.experiment_dir(experiment_id)
+            rubric_path = experiment_dir / "rubric.md"
+            rubric = _read_optional_text(rubric_path)
+            prompt_template = store.read_text(
+                experiment_id, version, experiment.template.path
             )
-        else:
-            output_declaration = "text output"
+            cases = store.load_cases(experiment_id, version)
+            run_artifacts = [
+                RunArtifact.model_validate(json.loads(path.read_text(encoding="utf-8")))
+                for path in sorted(run_batch_dir.glob("*/*.json"))
+            ]
+            if not run_artifacts:
+                raise HTTPException(status_code=400, detail="Run batch has no artifacts")
+            _validate_run_artifacts(
+                run_artifacts=run_artifacts,
+                selected_run_batch_id=selected_run_batch_id,
+                version=version,
+                case_ids={case.id for case in cases},
+                repeat_count=experiment.run_defaults.repeat_count,
+            )
 
-        judge_prompt = build_judge_prompt(
-            experiment_id=experiment_id,
-            version=version,
-            output_declaration=output_declaration,
-            rubric=rubric,
-            prompt_template=prompt_template,
-            cases=cases,
-            run_artifacts=run_artifacts,
-        )
-        if dry_run:
-            generated = llm_client.generate_structured_from_fake_response(
-                experiment.models.judge_model,
-                judge_prompt,
-                JudgmentArtifact,
-                None,
-                dry_judgment_response_json(
+            if experiment.output.type == "pydantic":
+                model_file = experiment.output.model_file
+                model_entrypoint = experiment.output.model_entrypoint
+                assert model_file is not None
+                assert model_entrypoint is not None
+                model_source = store.read_text(experiment_id, version, model_file)
+                output_declaration = (
+                    f"pydantic model: {model_entrypoint}\n"
+                    f"model file: {model_file}\n\n{model_source}"
+                )
+            else:
+                output_declaration = "text output"
+
+            judge_prompt = build_judge_prompt(
+                experiment_id=experiment_id,
+                version=version,
+                run_batch_id=selected_run_batch_id,
+                judge_model=experiment.models.judge_model,
+                output_declaration=output_declaration,
+                rubric=rubric,
+                prompt_template=prompt_template,
+                cases=cases,
+                run_artifacts=run_artifacts,
+            )
+            if dry_run:
+                generated = llm_client.generate_structured_from_fake_response(
+                    experiment.models.judge_model,
+                    judge_prompt,
+                    JudgmentArtifact,
+                    None,
+                    dry_judgment_response_json(
+                        version=version,
+                        run_batch_id=selected_run_batch_id,
+                        judge_model=experiment.models.judge_model,
+                    ),
+                )
+            else:
+                generated = llm_client.generate_structured(
+                    experiment.models.judge_model,
+                    judge_prompt,
+                    JudgmentArtifact,
+                    None,
+                )
+            output = generated.output
+            judgment = (
+                output
+                if isinstance(output, JudgmentArtifact)
+                else JudgmentArtifact.model_validate(output)
+            )
+            _validate_judgment_metadata(
+                judgment=judgment,
+                version=version,
+                selected_run_batch_id=selected_run_batch_id,
+                judge_model=experiment.models.judge_model,
+            )
+            decisions = FindingDecisionSet.from_finding_ids(
+                [finding.finding_id for finding in judgment.findings]
+            )
+
+            _remove_runtime_children(version_dir, ["reviews"])
+            review_id, review_dir = _next_review_location(version_dir)
+            _write_json(review_dir / "judgment.json", judgment.model_dump(mode="json"))
+            (review_dir / "judgment.md").write_text(
+                _render_judgment_markdown(judgment), encoding="utf-8"
+            )
+            (review_dir / "rubric_snapshot.md").write_text(rubric, encoding="utf-8")
+            _write_json(review_dir / "decisions.json", decisions.model_dump(mode="json"))
+            return {
+                "review_id": review_id,
+                "run_batch_id": selected_run_batch_id,
+                "judgment": judgment.model_dump(mode="json"),
+            }
+        except ValidationError as exc:
+            detail = f"Judge response failed validation: {_validation_error_summary(exc)}"
+            _log_judge_rejection(
+                experiment_id=experiment_id,
+                version=version,
+                selected_run_batch_id=selected_run_batch_id,
+                run_batch_dir=run_batch_dir,
+                detail=detail,
+                exc_info=True,
+            )
+            raise HTTPException(status_code=400, detail=detail) from exc
+        except HTTPException as exc:
+            if exc.status_code == 400:
+                _log_judge_rejection(
+                    experiment_id=experiment_id,
                     version=version,
-                    run_batch_id=selected_run_batch_id,
-                    judge_model=experiment.models.judge_model,
-                ),
+                    selected_run_batch_id=selected_run_batch_id,
+                    run_batch_dir=run_batch_dir,
+                    detail=exc.detail,
+                )
+            raise
+        except Exception as exc:
+            detail = f"Judge request failed: {type(exc).__name__}: {exc}"
+            _log_judge_rejection(
+                experiment_id=experiment_id,
+                version=version,
+                selected_run_batch_id=selected_run_batch_id,
+                run_batch_dir=run_batch_dir,
+                detail=detail,
+                exc_info=True,
             )
-        else:
-            generated = llm_client.generate_structured(
-                experiment.models.judge_model,
-                judge_prompt,
-                JudgmentArtifact,
-                None,
-            )
-        output = generated.output
-        judgment = (
-            output
-            if isinstance(output, JudgmentArtifact)
-            else JudgmentArtifact.model_validate(output)
-        )
-        _validate_judgment_metadata(
-            judgment=judgment,
-            version=version,
-            selected_run_batch_id=selected_run_batch_id,
-            judge_model=experiment.models.judge_model,
-        )
-        decisions = FindingDecisionSet.from_finding_ids(
-            [finding.finding_id for finding in judgment.findings]
-        )
-
-        review_id, review_dir = _next_review_location(version_dir)
-        _write_json(review_dir / "judgment.json", judgment.model_dump(mode="json"))
-        (review_dir / "judgment.md").write_text(
-            _render_judgment_markdown(judgment), encoding="utf-8"
-        )
-        (review_dir / "rubric_snapshot.md").write_text(rubric, encoding="utf-8")
-        _write_json(review_dir / "decisions.json", decisions.model_dump(mode="json"))
-        return {
-            "review_id": review_id,
-            "run_batch_id": selected_run_batch_id,
-            "judgment": judgment.model_dump(mode="json"),
-        }
+            raise HTTPException(status_code=500, detail=detail) from exc
 
     @app.post("/api/experiments/{experiment_id}/comparisons")
     def compare_experiment_versions(
@@ -1061,6 +1224,18 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         review_dir = _resolve_existing_review_dir(version_dir, review_id)
         (review_dir / "human_notes.md").write_text(request.notes, encoding="utf-8")
         return {"human_notes": request.notes}
+
+    @app.get(
+        "/api/experiments/{experiment_id}/versions/{version}/reviews/{review_id}/proposal"
+    )
+    def get_review_proposal(
+        experiment_id: str,
+        version: str,
+        review_id: str,
+    ) -> dict[str, object]:
+        version_dir = store.version_dir(experiment_id, version)
+        review_dir = _resolve_existing_review_dir(version_dir, review_id)
+        return _read_proposal_response(review_dir / "proposal")
 
     @app.post(
         "/api/experiments/{experiment_id}/versions/{version}/reviews/{review_id}/proposal"
@@ -1246,39 +1421,20 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             "version_dir": str(new_version_dir),
         }
 
+    @app.get("/api/experiments/{experiment_id}/versions/{version}/reviews/latest")
+    def get_latest_review_state(experiment_id: str, version: str) -> dict[str, object]:
+        version_dir = store.version_dir(experiment_id, version)
+        review_dir = _select_latest_review_dir(version_dir)
+        if review_dir is None:
+            raise HTTPException(status_code=404, detail="Review not found")
+        return _read_review_state(review_dir, review_dir.name)
+
     @app.get("/api/experiments/{experiment_id}/versions/{version}/reviews/{review_id}")
     def get_review_state(
         experiment_id: str, version: str, review_id: str
     ) -> dict[str, object]:
         version_dir = store.version_dir(experiment_id, version)
         review_dir = _resolve_existing_review_dir(version_dir, review_id)
-        judgment = JudgmentArtifact.model_validate(_read_json(review_dir / "judgment.json"))
-        decisions_path = review_dir / "decisions.json"
-        if not decisions_path.is_file():
-            raise HTTPException(status_code=404, detail="Review not found")
-        decisions = FindingDecisionSet.model_validate(_read_json(decisions_path))
-        human_notes_path = review_dir / "human_notes.md"
-        judgment_markdown_path = review_dir / "judgment.md"
-        rubric_snapshot_path = review_dir / "rubric_snapshot.md"
-        return {
-            "review_id": review_id,
-            "judgment": judgment.model_dump(mode="json"),
-            "decisions": decisions.model_dump(mode="json"),
-            "human_notes": (
-                human_notes_path.read_text(encoding="utf-8")
-                if human_notes_path.is_file()
-                else ""
-            ),
-            "judgment_markdown": (
-                judgment_markdown_path.read_text(encoding="utf-8")
-                if judgment_markdown_path.is_file()
-                else ""
-            ),
-            "rubric_snapshot": (
-                rubric_snapshot_path.read_text(encoding="utf-8")
-                if rubric_snapshot_path.is_file()
-                else ""
-            ),
-        }
+        return _read_review_state(review_dir, review_id)
 
     return app

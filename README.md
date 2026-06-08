@@ -38,6 +38,20 @@ Lab copies examples into `experiments/`. Runtime reads, generated artifacts, and
 future GUI edits use `experiments/` only. The `experiments/` directory is ignored
 by git.
 
+Each experiment version keeps one active workflow chain:
+
+- Running a version replaces the previous active run artifacts for that version
+  and clears downstream reviews, proposals, and comparisons.
+- Judging the active run replaces the previous active review and clears its
+  proposal.
+- Generating a proposal writes it under the active review, so refreshes reload
+  the current review and proposal instead of exposing a list of historical
+  review IDs.
+
+Technical artifact IDs such as run batch IDs and review IDs may still appear in
+API responses and filesystem paths for debugging, but the UI treats them as the
+current active artifacts.
+
 Install frontend dependencies:
 
 ```bash
@@ -97,8 +111,8 @@ pnpm build
 3. Open `summarize-chapter` or use `?experiment=summarize-chapter`.
 4. Optionally enable `Dry-run` in the workflow toolbar to generate deterministic artifacts without calling model providers.
 5. Run the active version.
-6. Confirm progress shows the current case/repeat and run artifacts appear in the `Runs` tab.
-7. Judge the latest runs.
+6. Confirm progress shows the current case/repeat and the active run appears in the `Runs` tab.
+7. Judge the active run.
 8. Reject or defer at least one finding and add human notes.
 9. Generate a proposal.
 10. Create the next version.

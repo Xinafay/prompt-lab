@@ -25,6 +25,8 @@ Rules:
 
 - If the experiment output is pydantic, prefer prompt changes unless the output contract clearly needs a model.py change.
 
+- `prompt_md`, `model_py`, and `rationale_md` values must be raw file contents, not fenced Markdown code blocks. Do not wrap them in ```text, ```markdown, ```python, or closing ``` fences.
+
 Experiment id: {{ experiment_id }}
 
 Source version: {{ version }}

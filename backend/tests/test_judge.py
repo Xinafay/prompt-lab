@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
+from io import StringIO
 from tempfile import TemporaryDirectory
 from typing import Any
 
@@ -332,6 +334,8 @@ def test_build_judge_prompt_includes_validation_errors_and_repeats() -> None:
     prompt = build_judge_prompt(
         experiment_id="demo",
         version="v001",
+        run_batch_id="batch-001",
+        judge_model="openai/judge",
         output_declaration="pydantic model: model.DemoOutput",
         rubric="Prefer complete answers and valid JSON.",
         prompt_template="Say {{ value }}",
@@ -384,6 +388,10 @@ def test_build_judge_prompt_includes_validation_errors_and_repeats() -> None:
     assert "case-a repeat 2" in prompt
     assert '{"answer":"hello"}' in prompt
     assert "answer must be a string" in prompt
+    assert '"version": "v001"' in prompt
+    assert '"run_batch_ids": [' in prompt
+    assert '"batch-001"' in prompt
+    assert '"judge_model": "openai/judge"' in prompt
 
 
 def test_judge_prompt_template_file_is_used() -> None:
@@ -510,7 +518,7 @@ def test_api_creates_dry_run_judgment_without_live_llm() -> None:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
 
-def test_api_allocates_next_review_without_overwriting_decisions() -> None:
+def test_api_judgment_replaces_existing_reviews_and_proposals() -> None:
     def fake_generate_structured(
         model: str,
         prompt: str,
@@ -546,13 +554,17 @@ def test_api_allocates_next_review_without_overwriting_decisions() -> None:
                 '{"schema_version":"prompt_lab.decisions/v1","finding_decisions":{"sentinel":{"decision":"accepted","reason":"keep me"}}}\n',
                 encoding="utf-8",
             )
+            proposal_dir = runtime_dir / "reviews" / "review-001" / "proposal"
+            proposal_dir.mkdir()
+            (proposal_dir / "prompt.md").write_text("old proposal", encoding="utf-8")
 
             second = client.post("/api/experiments/demo/versions/v001/judgments")
 
             assert second.status_code == 200
-            assert second.json()["review_id"] == "review-002"
-            assert (runtime_dir / "reviews" / "review-002" / "decisions.json").is_file()
-            assert "keep me" in first_decisions_path.read_text(encoding="utf-8")
+            assert second.json()["review_id"] == "review-001"
+            assert not (runtime_dir / "reviews" / "review-002").exists()
+            assert not proposal_dir.exists()
+            assert "keep me" not in first_decisions_path.read_text(encoding="utf-8")
     finally:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
@@ -722,6 +734,97 @@ def test_api_rejects_judgment_metadata_mismatch_without_writing_review() -> None
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
 
+def test_api_logs_invalid_judgment_response_context() -> None:
+    def fake_generate_structured(
+        model: str,
+        prompt: str,
+        response_model: Any,
+        validation_context: dict[str, Any] | None,
+    ) -> FakeGeneratedStructured:
+        return FakeGeneratedStructured({"summary": "missing required metadata"})
+
+    original_generate_structured = llm_client.generate_structured
+    llm_client.generate_structured = fake_generate_structured  # type: ignore[assignment]
+    stream = StringIO()
+    handler = logging.StreamHandler(stream)
+    logger = logging.getLogger("prompt_lab.api")
+    original_level = logger.level
+    logger.setLevel(logging.WARNING)
+    logger.addHandler(handler)
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            version_dir = write_demo_experiment(root)
+            write_run_batch(version_dir, "batch-001")
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+
+            response = TestClient(app, raise_server_exceptions=False).post(
+                "/api/experiments/demo/versions/v001/judgments"
+            )
+
+            assert response.status_code == 400
+            assert response.json()["detail"].startswith(
+                "Judge response failed validation:"
+            )
+            log_text = stream.getvalue()
+            assert "Judge request failed" in log_text
+            assert "experiment=demo" in log_text
+            assert "version=v001" in log_text
+            assert "run_batch=batch-001" in log_text
+            assert "Judge response failed validation" in log_text
+            assert not (runtime_version_dir(root) / "reviews").exists()
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(original_level)
+        llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
+
+
+def test_api_logs_unexpected_judgment_failure_context() -> None:
+    def fake_generate_structured(
+        model: str,
+        prompt: str,
+        response_model: Any,
+        validation_context: dict[str, Any] | None,
+    ) -> FakeGeneratedStructured:
+        raise ValueError("missing judge configuration")
+
+    original_generate_structured = llm_client.generate_structured
+    llm_client.generate_structured = fake_generate_structured  # type: ignore[assignment]
+    stream = StringIO()
+    handler = logging.StreamHandler(stream)
+    logger = logging.getLogger("prompt_lab.api")
+    original_level = logger.level
+    logger.setLevel(logging.WARNING)
+    logger.addHandler(handler)
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            version_dir = write_demo_experiment(root)
+            write_run_batch(version_dir, "batch-001")
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+
+            response = TestClient(app, raise_server_exceptions=False).post(
+                "/api/experiments/demo/versions/v001/judgments"
+            )
+
+            assert response.status_code == 500
+            assert (
+                response.json()["detail"]
+                == "Judge request failed: ValueError: missing judge configuration"
+            )
+            log_text = stream.getvalue()
+            assert "Judge request failed" in log_text
+            assert "experiment=demo" in log_text
+            assert "version=v001" in log_text
+            assert "run_batch=batch-001" in log_text
+            assert "missing judge configuration" in log_text
+            assert not (runtime_version_dir(root) / "reviews").exists()
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(original_level)
+        llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
+
+
 def test_decisions_reject_invalid_decision() -> None:
     assert_validation_error(
         FindingDecisionSet,
@@ -768,11 +871,13 @@ def main() -> int:
         test_judge_prompt_template_file_is_used,
         test_api_creates_judgment_and_default_accepted_decisions,
         test_api_creates_dry_run_judgment_without_live_llm,
-        test_api_allocates_next_review_without_overwriting_decisions,
+        test_api_judgment_replaces_existing_reviews_and_proposals,
         test_api_selects_latest_run_batch_by_mtime_not_name,
         test_api_rejects_run_artifact_version_mismatch_without_judging,
         test_api_rejects_missing_run_coverage_without_judging,
         test_api_rejects_judgment_metadata_mismatch_without_writing_review,
+        test_api_logs_invalid_judgment_response_context,
+        test_api_logs_unexpected_judgment_failure_context,
         test_decisions_reject_invalid_decision,
         test_decisions_reject_empty_finding_ids,
         test_decisions_reject_duplicate_finding_ids,
