@@ -71,6 +71,12 @@ class PromptLabStore:
         path = self.experiment_dir(experiment_id) / "experiment.json"
         return ExperimentArtifact.model_validate(_read_json(path))
 
+    def list_versions(self, experiment_id: str) -> list[str]:
+        versions_root = self.experiment_dir(experiment_id) / "versions"
+        if not versions_root.is_dir():
+            return []
+        return sorted(path.name for path in versions_root.iterdir() if path.is_dir())
+
     def save_experiment(
         self, experiment_id: str, artifact: ExperimentArtifact
     ) -> Path:

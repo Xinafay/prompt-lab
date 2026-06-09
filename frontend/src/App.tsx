@@ -5,6 +5,7 @@ import {
   compareVersions,
   createProposalVersion,
   generateProposal,
+  getExperimentVersions,
   getJob,
   getLatestReviewState,
   getReviewProposal,
@@ -38,6 +39,7 @@ import type {
   ReviewState,
   RunsResponse,
   VersionOverview,
+  VersionSummary,
   WorkflowMode
 } from "./types";
 import { parseExperimentId, writeSelectedExperimentId } from "./urlState";
@@ -65,6 +67,7 @@ function App() {
   const [createdVersion, setCreatedVersion] =
     useState<CreatedVersionResponse | null>(null);
   const [comparison, setComparison] = useState<ComparisonArtifact | null>(null);
+  const [versionSummaries, setVersionSummaries] = useState<VersionSummary[]>([]);
   const [activeTab, setActiveTab] = useState<WorkbenchTab>("overview");
   const [workflowMode, setWorkflowMode] = useState<WorkflowMode>("live");
   const [baselineVersion, setBaselineVersion] = useState("v001");
@@ -91,6 +94,7 @@ function App() {
     setProposalResponse(null);
     setCreatedVersion(null);
     setComparison(null);
+    setVersionSummaries([]);
     setWorkflowMessage(null);
     setSettingsMessage(null);
     setWorkflowBusy(false);
@@ -206,6 +210,36 @@ function App() {
     }
 
     void loadDetails(selectedExperiment);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedExperiment]);
+
+  useEffect(() => {
+    if (selectedExperiment === null) {
+      setVersionSummaries([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadVersions(experiment: Experiment) {
+      try {
+        const response = await getExperimentVersions(experiment.id);
+        if (!cancelled) {
+          setVersionSummaries(response.versions);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setWorkflowMessage(
+            error instanceof Error ? error.message : "Could not load versions."
+          );
+        }
+      }
+    }
+
+    void loadVersions(selectedExperiment);
 
     return () => {
       cancelled = true;
@@ -529,6 +563,14 @@ function App() {
       );
       if (!isWorkflowCurrent(requestId, selectionKey)) return;
       setCreatedVersion(response);
+      setVersionSummaries((current) => {
+        if (current.some((summary) => summary.version === response.version)) {
+          return current;
+        }
+        return [...current, { version: response.version, is_active: false }].sort(
+          (left, right) => left.version.localeCompare(right.version)
+        );
+      });
       candidateVersionRef.current = response.version;
       setCandidateVersion(response.version);
       setComparison(null);
@@ -607,15 +649,17 @@ function App() {
   }
 
   async function refreshExperimentsAfterSettingsSave(savedExperiment: Experiment) {
-    const [experiments, overview, runs] = await Promise.all([
+    const [experiments, overview, runs, versions] = await Promise.all([
       apiGet<Experiment[]>("/api/experiments"),
       getVersionOverview(savedExperiment.id, savedExperiment.active_version),
-      getVersionRuns(savedExperiment.id, savedExperiment.active_version)
+      getVersionRuns(savedExperiment.id, savedExperiment.active_version),
+      getExperimentVersions(savedExperiment.id)
     ]);
     setState({ status: "loaded", experiments });
     setSelectedExperiment(savedExperiment);
     selectedKeyRef.current = `${savedExperiment.id}:${savedExperiment.active_version}`;
     setDetailState({ status: "loaded", overview, runs });
+    setVersionSummaries(versions.versions);
     setCandidateVersion(savedExperiment.active_version);
     candidateVersionRef.current = savedExperiment.active_version;
     if (!experiments.some((experiment) => experiment.id === savedExperiment.id)) {
@@ -644,15 +688,59 @@ function App() {
     setSettingsMessage(null);
   }
 
+  async function handleActiveVersionChange(version: string) {
+    if (selectedExperiment === null || version === selectedExperiment.active_version) {
+      return;
+    }
+    setWorkflowBusy(true);
+    setWorkflowMessage(`Switching to ${version}...`);
+    setReviewState(null);
+    setProposalResponse(null);
+    setCreatedVersion(null);
+    setComparison(null);
+    setDecisionsDirty(false);
+    setHumanNotesDirty(false);
+    try {
+      const savedExperiment = await updateExperiment(selectedExperiment.id, {
+        ...selectedExperiment,
+        active_version: version
+      });
+      await refreshExperimentsAfterSettingsSave(savedExperiment);
+      setWorkflowMessage(`Switched to ${version}.`);
+      setActiveTab("overview");
+    } catch (error) {
+      setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
+
   const knownVersions = useMemo(() => {
-    const versions = new Set<string>();
+    const versions = new Set(versionSummaries.map((summary) => summary.version));
     if (selectedExperiment !== null) versions.add(selectedExperiment.active_version);
     versions.add("v001");
     if (createdVersion !== null) versions.add(createdVersion.version);
     versions.add(baselineVersion);
     versions.add(candidateVersion);
     return [...versions].sort();
-  }, [baselineVersion, candidateVersion, createdVersion, selectedExperiment]);
+  }, [
+    baselineVersion,
+    candidateVersion,
+    createdVersion,
+    selectedExperiment,
+    versionSummaries
+  ]);
+
+  const activeVersionOptions = useMemo(() => {
+    const versions = new Set(versionSummaries.map((summary) => summary.version));
+    if (selectedExperiment !== null) {
+      versions.add(selectedExperiment.active_version);
+    }
+    if (createdVersion !== null) {
+      versions.add(createdVersion.version);
+    }
+    return [...versions].sort();
+  }, [createdVersion, selectedExperiment, versionSummaries]);
 
   return (
     <main className="app-shell">
@@ -707,8 +795,11 @@ function App() {
                 <>
                   <WorkflowToolbar
                     activeVersion={detailState.overview.version}
+                    availableVersions={activeVersionOptions}
                     experiment={detailState.overview.experiment}
+                    isVersionSwitching={workflowBusy}
                     jobStatus={jobStatus}
+                    onActiveVersionChange={handleActiveVersionChange}
                     onWorkflowModeChange={setWorkflowMode}
                     workflowMessage={workflowMessage}
                     workflowMode={workflowMode}
@@ -757,7 +848,7 @@ function App() {
                       ) : (
                         <button
                           className="primary-action"
-                          disabled={jobStatus?.status === "running"}
+                          disabled={workflowBusy || jobStatus?.status === "running"}
                           onClick={handleRunVersion}
                           type="button"
                         >

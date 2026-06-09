@@ -191,6 +191,33 @@ def test_api_gets_version_overview() -> None:
         assert body["cases"][0]["id"] == "a"
 
 
+def test_api_lists_experiment_versions() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        example = root / "examples" / "demo"
+        (example / "versions" / "v002").mkdir(parents=True)
+        (example / "versions" / "v001").mkdir()
+        (example / "experiment.json").write_text(
+            json.dumps(
+                demo_experiment_payload(active_version="v002"),
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).get("/api/experiments/demo/versions")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "active_version": "v002",
+            "versions": [
+                {"version": "v001", "is_active": False},
+                {"version": "v002", "is_active": True},
+            ],
+        }
+
+
 def test_api_lists_latest_run_artifacts() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -651,6 +678,7 @@ def main() -> int:
         test_api_rejects_experiment_update_missing_active_version,
         test_api_seeds_examples_into_experiments_on_startup,
         test_api_gets_version_overview,
+        test_api_lists_experiment_versions,
         test_api_lists_latest_run_artifacts,
         test_api_lists_empty_runs_when_version_has_no_batches,
         test_api_missing_experiment_returns_404,

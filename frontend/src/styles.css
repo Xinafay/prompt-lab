@@ -126,6 +126,7 @@ select {
 .primary-action:focus-visible,
 .secondary-action:focus-visible,
 .dry-run-toggle:focus-within,
+.version-switcher select:focus-visible,
 .case-browser-header input:focus-visible,
 .case-browser-item:focus-visible,
 .comparison-controls select:focus-visible,
@@ -190,6 +191,28 @@ select {
 
 .workflow-context span {
   overflow-wrap: anywhere;
+}
+
+.version-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.version-switcher select {
+  min-width: 82px;
+  max-width: 150px;
+  padding: 5px 24px 5px 8px;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .workflow-status {

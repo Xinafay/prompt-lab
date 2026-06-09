@@ -694,6 +694,21 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             raise
         return experiment.model_dump(mode="json")
 
+    @app.get("/api/experiments/{experiment_id}/versions")
+    def list_experiment_versions(experiment_id: str) -> dict[str, object]:
+        experiment = store.load_experiment(experiment_id)
+        versions = store.list_versions(experiment_id)
+        return {
+            "active_version": experiment.active_version,
+            "versions": [
+                {
+                    "version": version,
+                    "is_active": version == experiment.active_version,
+                }
+                for version in versions
+            ],
+        }
+
     @app.get("/api/experiments/{experiment_id}/versions/{version}")
     def get_experiment_version(
         experiment_id: str, version: str

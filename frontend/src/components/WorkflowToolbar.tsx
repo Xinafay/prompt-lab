@@ -5,9 +5,12 @@ import type { Experiment, JobStatus, WorkflowMode } from "../types";
 interface WorkflowToolbarProps {
   experiment: Experiment;
   activeVersion: string;
+  availableVersions: string[];
   jobStatus: JobStatus | null;
   workflowMessage: string | null;
   workflowMode: WorkflowMode;
+  isVersionSwitching: boolean;
+  onActiveVersionChange: (version: string) => void;
   onWorkflowModeChange: (mode: WorkflowMode) => void;
   primaryAction: ReactNode;
 }
@@ -15,9 +18,12 @@ interface WorkflowToolbarProps {
 export function WorkflowToolbar({
   experiment,
   activeVersion,
+  availableVersions = [activeVersion],
   jobStatus,
   workflowMessage,
   workflowMode,
+  isVersionSwitching = false,
+  onActiveVersionChange = () => undefined,
   onWorkflowModeChange,
   primaryAction
 }: WorkflowToolbarProps) {
@@ -30,7 +36,20 @@ export function WorkflowToolbar({
     <div className="workflow-toolbar" aria-label="Workflow context">
       <div className="workflow-context">
         <strong>{experiment.title}</strong>
-        <span>{activeVersion}</span>
+        <label className="version-switcher">
+          <span>Version</span>
+          <select
+            disabled={isVersionSwitching || jobStatus?.status === "running"}
+            onChange={(event) => onActiveVersionChange(event.currentTarget.value)}
+            value={activeVersion}
+          >
+            {availableVersions.map((version) => (
+              <option key={version} value={version}>
+                {version}
+              </option>
+            ))}
+          </select>
+        </label>
         <span className={`workflow-mode-badge mode-${workflowMode}`}>
           {workflowMode === "dry-run" ? "Dry-run" : "Live"}
         </span>

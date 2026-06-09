@@ -10,7 +10,8 @@ import type {
   ReviewState,
   RunVersionRequest,
   RunsResponse,
-  VersionOverview
+  VersionOverview,
+  VersionsResponse
 } from "./types";
 
 function detailToMessage(detail: unknown): string | null {
@@ -85,6 +86,14 @@ export function updateExperiment(
   return apiPut<Experiment>(
     `/api/experiments/${encodeURIComponent(experimentId)}`,
     experiment
+  );
+}
+
+export function getExperimentVersions(
+  experimentId: string
+): Promise<VersionsResponse> {
+  return apiGet<VersionsResponse>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/versions`
   );
 }
 

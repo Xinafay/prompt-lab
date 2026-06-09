@@ -83,6 +83,10 @@ http://127.0.0.1:5173/?experiment=split-scenes
 ```
 
 The UI keeps the selected experiment in this parameter so refreshes preserve the current workspace.
+Use the `Version` selector in the workflow toolbar to switch the experiment's
+active version. Switching versions updates `experiment.json`, reloads the
+version overview, and keeps the existing per-version run/review/proposal
+artifacts on disk.
 
 ## Local Checks
 
@@ -116,7 +120,8 @@ pnpm build
 8. Reject or defer at least one finding and add human notes.
 9. Generate a proposal.
 10. Create the next version.
-11. Compare the new version with `v001`.
+11. Switch to the new version with the toolbar `Version` selector.
+12. Compare the new version with `v001`.
 
 Live smoke requires configured model servers and may make real LLM calls:
 

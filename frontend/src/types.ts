@@ -86,6 +86,16 @@ export interface VersionOverview {
   cases: Case[];
 }
 
+export interface VersionSummary {
+  version: string;
+  is_active: boolean;
+}
+
+export interface VersionsResponse {
+  active_version: string;
+  versions: VersionSummary[];
+}
+
 export interface RunsResponse {
   run_batch_id: string | null;
   runs: RunArtifact[];
