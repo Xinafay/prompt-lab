@@ -4,6 +4,11 @@ Prompt Lab is a standalone local app for improving prompts through repeated mode
 
 Prompt Lab stores experiments as filesystem artifacts. Carmilla or another external tool may export neutral experiment bundles into this repository, but Prompt Lab does not import Carmilla workflow runtime, workflow state, or workflow classes.
 
+The current case format is `prompt_lab.case/v2`. Cases contain serialized
+`stores` and prompt-visible `bindings`; Prompt Lab materializes them into one
+plain context dictionary for both jinjax prompt rendering and Pydantic
+validation. See `FORMAT.md` for the artifact contract.
+
 ## Setup
 
 Create or activate the Python environment, then install backend dependencies:
@@ -37,6 +42,10 @@ key in `.servers.jsonc`.
 Lab copies examples into `experiments/`. Runtime reads, generated artifacts, and
 future GUI edits use `experiments/` only. The `experiments/` directory is ignored
 by git.
+
+The artifact format is intentionally not backward-compatible during this early
+stage. If existing runtime experiments were created with an older format, move or
+delete `experiments/` and restart the backend so it can seed fresh examples.
 
 Each experiment version keeps one active workflow chain:
 

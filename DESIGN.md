@@ -102,7 +102,7 @@ Data:
 
 An experiment is a prompt-testing workspace. It contains metadata, one manually edited rubric, and one or more versions.
 
-An experiment does not know which project created it. It only knows prompt templates, input variables, optional Pydantic models, model configuration, runs, judgments, user decisions, notes, proposals, and comparisons.
+An experiment does not know which project created it. It only knows prompt templates, prompt invocation cases, optional Pydantic models, model configuration, runs, judgments, user decisions, notes, proposals, and comparisons.
 
 ### Version
 
@@ -119,7 +119,7 @@ Creating a proposal does not mutate the current version. Accepting a proposal cr
 
 ### Case
 
-A case is a JSON file with template variables and optional structured-output validation context. The case format is universal and simple. It is not a workflow fixture.
+A case is a JSON file describing one concrete prompt invocation. It contains serialized source stores and bindings that materialize into the prompt/validation context. The case format is universal and simple. It is not a workflow fixture.
 
 ### Rubric
 
@@ -212,11 +212,10 @@ Example for Pydantic output:
   "output": {
     "type": "pydantic",
     "model_file": "model.py",
-    "model_entrypoint": "model.SceneList",
-    "validation_context_from_case": "structured_validation_context"
+    "model_entrypoint": "model.SceneList"
   },
   "template": {
-    "engine": "jinja2",
+    "engine": "jinjax",
     "path": "prompt.md"
   },
   "models": {
@@ -244,7 +243,7 @@ Example for text output:
     "type": "text"
   },
   "template": {
-    "engine": "jinja2",
+    "engine": "jinjax",
     "path": "prompt.md"
   },
   "models": {
@@ -263,19 +262,50 @@ Example for text output:
 
 ```json
 {
-  "schema_version": "prompt_lab.case/v1",
+  "schema_version": "prompt_lab.case/v2",
   "id": "after-hours-at-meridian-mall-6",
   "title": "After Hours at Meridian Mall 6",
-  "variables": {
-    "chapter_text_with_paragraphs": "..."
+  "source": {
+    "type": "carmilla.workflow_step_eval"
   },
-  "structured_validation_context": {
-    "parts": []
+  "stores": {
+    "case": {
+      "kind": "flat_file_tree",
+      "values": {
+        "chapter_text_with_paragraphs": {
+          "__carmilla_flat_file_node__": "file",
+          "value": "..."
+        },
+        "parts": {
+          "__carmilla_flat_file_node__": "file",
+          "value": []
+        }
+      }
+    }
+  },
+  "bindings": {
+    "chapter_text_with_paragraphs": {
+      "kind": "store_scope",
+      "store": "case",
+      "path": "chapter_text_with_paragraphs"
+    },
+    "parts": {
+      "kind": "store_scope",
+      "store": "case",
+      "path": "parts"
+    }
   }
 }
 ```
 
-For text experiments, `structured_validation_context` is omitted.
+`stores` hold serialized source data. `bindings` define the top-level names
+visible to prompt templates and Pydantic validation. A `store_scope` binding
+selects a path inside a store. A `value` binding stores a computed JSON value for
+the invocation.
+
+Prompt Lab materializes `stores + bindings` into one plain context dictionary.
+Old `variables`, `structured_validation_context`, and
+`validation_context_from_case` fields are not supported.
 
 ### Run Batch
 
@@ -437,7 +467,9 @@ Comparisons should evaluate semantic quality, not literal equality. For extracti
 
 ### Template Rendering
 
-Use Jinja2 for prompt templates. A version's `prompt.md` is rendered with a case's `variables` object.
+Use the copied `shared.jinjax` package for prompt templates. A version's
+`prompt.md` is rendered with the materialized context produced from a case's
+`stores + bindings`.
 
 The structured-output schema placeholder should remain `<<MODEL>>` inside prompts. Before calling the generator model, Prompt Lab replaces `<<MODEL>>` with a schema/instruction derived from the Pydantic model using the selected LLM backend's structured-output path. The exact mechanism may follow Carmilla's `chat_get_structured_lite` behavior.
 
@@ -448,7 +480,7 @@ For `output.type = "pydantic"`:
 1. Load the version's `model.py`.
 2. Resolve `model_entrypoint`, for example `model.SceneList`.
 3. Pass the model to the structured-output LLM call.
-4. Validate returned data with optional `structured_validation_context` from the case.
+4. Validate returned data with the materialized case context.
 5. Save `output_json` on success or `validation_error` on failure.
 
 MVP assumes trusted local Pydantic code. Import errors and validation errors are saved as run artifacts.
@@ -617,7 +649,8 @@ Show a table:
 
 Run detail:
 
-- input variables;
+- prompt context bindings;
+- serialized source stores;
 - rendered prompt;
 - raw output;
 - validated JSON or output text;
@@ -669,7 +702,9 @@ Carmilla should keep the existing GUI fixture capture:
 3. User clicks `Save test state`.
 4. User repeats this for several stories using the same eval name.
 
-Then a Carmilla-side exporter converts the whole eval suite into a neutral Prompt Lab bundle:
+Then a Carmilla-side exporter replays each saved workflow-step fixture with
+prompt/chat capture enabled and converts the captured prompt invocation into a
+neutral Prompt Lab bundle:
 
 ```bash
 PYTHONPATH=python ./.venv/bin/python -m workflow_runtime.export_prompt_lab \
@@ -704,13 +739,13 @@ The exporter is allowed to understand Carmilla workflow steps. Prompt Lab is not
 Initial Carmilla exporters needed:
 
 - `SPLIT_SCENES[...]` to Pydantic experiment:
-  - prompt from Story Parser `prompts/divide_chapter.md`, converted to neutral variables;
+  - prompt from Story Parser `prompts/divide_chapter.md`, preserved as jinjax;
   - model from Story Parser `models/scenes.py`;
-  - case variables: `previous_summaries`, `chapter_text_with_paragraphs`;
-  - structured validation context: parsed chapter data.
+  - case bindings include `previous_summaries`, `chapter_text_with_paragraphs`,
+    and validation-relevant chapter data from the same materialized context.
 - `SUMMARIZE_CHAPTER[...]` to text experiment:
-  - prompt from Story Parser `prompts/chapter_summary.md`, converted to neutral variables;
-  - case variables: `chapter_text_with_scenes`.
+  - prompt from Story Parser `prompts/chapter_summary.md`, preserved as jinjax;
+  - case bindings include `chapter_text_with_scenes`.
 
 ## Initial Example Experiments
 
@@ -730,7 +765,7 @@ Each example should include the three cases currently saved in Carmilla:
 Backend tests:
 
 - load experiment metadata;
-- render prompt with case variables;
+- render prompt with materialized case context;
 - load Pydantic model by entrypoint;
 - validate a successful structured output;
 - store validation errors as run artifacts;
@@ -788,4 +823,3 @@ Recommended order:
 11. Implement proposal generation and create-next-version.
 12. Implement comparison judgment.
 13. Add Carmilla exporter script after Prompt Lab import format is stable.
-

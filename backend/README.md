@@ -32,6 +32,11 @@ Proposal generation accepts the same body at the review proposal endpoint. Compa
 
 ## Prompt Templates
 
+Experiment prompts are rendered with the copied `shared.jinjax` package. Each
+case uses `prompt_lab.case/v2`; the backend materializes its `stores + bindings`
+into the plain context dictionary passed to prompt rendering and Pydantic
+validation.
+
 Judge, proposal, and comparison system prompts live in editable Markdown/Jinja files:
 
 - `backend/prompt_lab/system_prompts/judge.md.jinja`

@@ -2,6 +2,11 @@
 
 These examples are generated from Carmilla Story Parser eval fixtures and converted to a neutral Prompt Lab format.
 
+Case files use `prompt_lab.case/v2`: serialized `stores` plus top-level
+`bindings` that become the prompt/validation context. The committed prompts use
+the `jinjax` template engine copied from Carmilla's portable `shared.jinjax`
+package.
+
 Examples:
 
 - `split-scenes`: Pydantic structured output using `model.SceneList`.
