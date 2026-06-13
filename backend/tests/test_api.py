@@ -23,7 +23,7 @@ def demo_experiment_payload(
         "description": "",
         "active_version": active_version,
         "output": {"type": "text"},
-        "template": {"engine": "jinja2", "path": "prompt.md"},
+        "template": {"engine": "jinjax", "path": "prompt.md"},
         "models": {
             "generator_model": "local/a",
             "judge_model": "openai/b",
@@ -74,40 +74,6 @@ def write_demo_experiment_manifest(root: Path) -> None:
         json.dumps(demo_experiment_payload(), ensure_ascii=False),
         encoding="utf-8",
     )
-
-
-def upgrade_split_scenes_fixture_to_v2(root: Path) -> None:
-    example = root / "examples" / "split-scenes"
-    experiment_path = example / "experiment.json"
-    experiment = json.loads(experiment_path.read_text(encoding="utf-8"))
-    experiment["output"].pop("validation_context_from_case", None)
-    experiment_path.write_text(
-        json.dumps(experiment, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-
-    cases_dir = example / "versions" / "v001" / "cases"
-    for case_path in cases_dir.glob("*.json"):
-        old_case = json.loads(case_path.read_text(encoding="utf-8"))
-        context = {
-            **old_case.pop("variables"),
-            **old_case.pop("structured_validation_context"),
-        }
-        upgraded = {
-            "schema_version": "prompt_lab.case/v2",
-            "id": old_case["id"],
-            "title": old_case["title"],
-            "source": old_case.get("source"),
-            "stores": {},
-            "bindings": {
-                name: {"kind": "value", "value": value}
-                for name, value in context.items()
-            },
-        }
-        case_path.write_text(
-            json.dumps(upgraded, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
 
 
 def test_api_lists_experiments() -> None:
@@ -585,7 +551,6 @@ def test_api_runs_pydantic_version() -> None:
                 Path("examples") / "split-scenes",
                 examples_root / "split-scenes",
             )
-            upgrade_split_scenes_fixture_to_v2(root)
             app = create_app(PromptLabConfig.from_env(project_root=root))
 
             response = TestClient(app, raise_server_exceptions=False).post(
@@ -634,7 +599,6 @@ def test_api_dry_run_pydantic_version_avoids_live_llm() -> None:
                 Path("examples") / "split-scenes",
                 examples_root / "split-scenes",
             )
-            upgrade_split_scenes_fixture_to_v2(root)
             app = create_app(PromptLabConfig.from_env(project_root=root))
 
             response = TestClient(app, raise_server_exceptions=False).post(

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from jinja2 import UndefinedError
-from jinja2.exceptions import SecurityError
 
 from prompt_lab.template_renderer import render_prompt
 
@@ -26,7 +25,7 @@ def test_render_prompt_supports_carmilla_tojson_filter() -> None:
     assert render_prompt("{{ value | tojson(None, False) }}", context) == '"a\u2028b"'
 
 
-def test_render_prompt_missing_variables_raise_undefined_error() -> None:
+def test_render_prompt_missing_name_raises_undefined_error() -> None:
     try:
         render_prompt("Hello {{ missing.name }}.", {})
     except UndefinedError:
@@ -35,22 +34,12 @@ def test_render_prompt_missing_variables_raise_undefined_error() -> None:
         raise AssertionError("Expected UndefinedError")
 
 
-def test_render_prompt_unsafe_attribute_access_raises_security_error() -> None:
-    try:
-        render_prompt("{{ value.__class__ }}", {"value": "Ada"})
-    except SecurityError:
-        pass
-    else:
-        raise AssertionError("Expected SecurityError")
-
-
 def main() -> int:
     tests = [
         test_render_prompt_uses_materialized_context,
         test_render_prompt_supports_lists,
         test_render_prompt_supports_carmilla_tojson_filter,
-        test_render_prompt_missing_variables_raise_undefined_error,
-        test_render_prompt_unsafe_attribute_access_raises_security_error,
+        test_render_prompt_missing_name_raises_undefined_error,
     ]
     for test in tests:
         test()

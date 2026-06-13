@@ -11,7 +11,7 @@ from prompt_lab import llm_client
 from prompt_lab.api import create_app
 from prompt_lab.config import PromptLabConfig
 from prompt_lab.proposal import ProposalDraft, build_proposal_prompt
-from test_judge import valid_judgment_payload, write_json
+from test_judge import valid_case_payload, valid_judgment_payload, write_json
 
 
 class FakeGeneratedStructured:
@@ -42,7 +42,7 @@ def write_review_fixture(root: Path, *, output_type: str = "pydantic") -> Path:
             "description": "Demo experiment",
             "active_version": "v001",
             "output": output,
-            "template": {"engine": "jinja2", "path": "prompt.md"},
+            "template": {"engine": "jinjax", "path": "prompt.md"},
             "models": {"generator_model": "local/a", "judge_model": "openai/judge"},
             "run_defaults": {
                 "repeat_count": 1,
@@ -63,12 +63,7 @@ def write_review_fixture(root: Path, *, output_type: str = "pydantic") -> Path:
         )
     write_json(
         version_dir / "cases" / "case-a.json",
-        {
-            "schema_version": "prompt_lab.case/v1",
-            "id": "case-a",
-            "title": "Case A",
-            "variables": {"value": "hello"},
-        },
+        valid_case_payload(),
     )
     write_json(
         review_dir / "judgment.json",

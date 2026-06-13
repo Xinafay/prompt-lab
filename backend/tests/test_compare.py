@@ -85,6 +85,32 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     )
 
 
+def file_node(value: Any) -> dict[str, Any]:
+    return {"__carmilla_flat_file_node__": "file", "value": value}
+
+
+def valid_case_payload(
+    *,
+    case_id: str = "case-a",
+    title: str = "Case A",
+    value: Any = "hello",
+) -> dict[str, Any]:
+    return {
+        "schema_version": "prompt_lab.case/v2",
+        "id": case_id,
+        "title": title,
+        "stores": {
+            "case": {
+                "kind": "flat_file_tree",
+                "values": {"value": file_node(value)},
+            }
+        },
+        "bindings": {
+            "value": {"kind": "store_scope", "store": "case", "path": "value"}
+        },
+    }
+
+
 def write_demo_experiment(root: Path, *, repeat_count: int = 2) -> tuple[Path, Path]:
     example = root / "examples" / "demo"
     baseline_dir = example / "versions" / "v001"
@@ -93,12 +119,7 @@ def write_demo_experiment(root: Path, *, repeat_count: int = 2) -> tuple[Path, P
         (version_dir / "cases").mkdir(parents=True)
         write_json(
             version_dir / "cases" / "case-a.json",
-            {
-                "schema_version": "prompt_lab.case/v1",
-                "id": "case-a",
-                "title": "Case A",
-                "variables": {"value": "hello"},
-            },
+            valid_case_payload(),
         )
         (version_dir / "model.py").write_text(
             "from pydantic import BaseModel\n\nclass DemoOutput(BaseModel):\n    answer: str\n",
@@ -117,7 +138,7 @@ def write_demo_experiment(root: Path, *, repeat_count: int = 2) -> tuple[Path, P
                 "model_file": "model.py",
                 "model_entrypoint": "model.DemoOutput",
             },
-            "template": {"engine": "jinja2", "path": "prompt.md"},
+            "template": {"engine": "jinjax", "path": "prompt.md"},
             "models": {"generator_model": "local/a", "judge_model": "openai/judge"},
             "run_defaults": {
                 "repeat_count": repeat_count,
@@ -211,22 +232,12 @@ def test_comparison_artifact_rejects_invalid_recommendation_and_empty_items() ->
 def test_build_comparison_prompt_includes_versions_runs_rubric_and_id_guidance() -> None:
     baseline_cases = [
         CaseArtifact.model_validate(
-            {
-                "schema_version": "prompt_lab.case/v1",
-                "id": "case-a",
-                "title": "Baseline Case A",
-                "variables": {"value": "baseline hello"},
-            }
+            valid_case_payload(title="Baseline Case A", value="baseline hello")
         )
     ]
     candidate_cases = [
         CaseArtifact.model_validate(
-            {
-                "schema_version": "prompt_lab.case/v1",
-                "id": "case-a",
-                "title": "Candidate Case A",
-                "variables": {"value": "candidate hello"},
-            }
+            valid_case_payload(title="Candidate Case A", value="candidate hello")
         )
     ]
     baseline_runs = [
@@ -511,12 +522,11 @@ def test_api_rejects_mismatched_case_ids_without_comparing() -> None:
             baseline_dir, candidate_dir = write_demo_experiment(root)
             write_json(
                 candidate_dir / "cases" / "case-extra.json",
-                {
-                    "schema_version": "prompt_lab.case/v1",
-                    "id": "case-extra",
-                    "title": "Extra Candidate Case",
-                    "variables": {"value": "extra"},
-                },
+                valid_case_payload(
+                    case_id="case-extra",
+                    title="Extra Candidate Case",
+                    value="extra",
+                ),
             )
             write_run_batch(
                 baseline_dir,

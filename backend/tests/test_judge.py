@@ -67,10 +67,23 @@ def valid_judgment_payload(**overrides: Any) -> dict[str, Any]:
 
 def valid_case_payload(**overrides: Any) -> dict[str, Any]:
     payload: dict[str, Any] = {
-        "schema_version": "prompt_lab.case/v1",
+        "schema_version": "prompt_lab.case/v2",
         "id": "case-a",
         "title": "Case A",
-        "variables": {"value": "hello"},
+        "stores": {
+            "case": {
+                "kind": "flat_file_tree",
+                "values": {
+                    "value": {
+                        "__carmilla_flat_file_node__": "file",
+                        "value": "hello",
+                    }
+                },
+            }
+        },
+        "bindings": {
+            "value": {"kind": "store_scope", "store": "case", "path": "value"}
+        },
     }
     payload.update(overrides)
     return payload
@@ -124,7 +137,7 @@ def write_demo_experiment(
                 "model_file": "model.py",
                 "model_entrypoint": "model.DemoOutput",
             },
-            "template": {"engine": "jinja2", "path": "prompt.md"},
+            "template": {"engine": "jinjax", "path": "prompt.md"},
             "models": {"generator_model": "local/a", "judge_model": "openai/judge"},
             "run_defaults": {
                 "repeat_count": repeat_count,

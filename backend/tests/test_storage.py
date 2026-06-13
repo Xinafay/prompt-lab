@@ -36,7 +36,7 @@ def test_store_loads_cases_for_version() -> None:
             encoding="utf-8",
         )
         (cases / "case-a.json").write_text(
-            '{"schema_version":"prompt_lab.case/v1","id":"case-a","title":"Case A","variables":{"text":"hello"}}',
+            '{"schema_version":"prompt_lab.case/v2","id":"case-a","title":"Case A","stores":{"case":{"kind":"flat_file_tree","values":{"text":{"__carmilla_flat_file_node__":"file","value":"hello"}}}},"bindings":{"text":{"kind":"store_scope","store":"case","path":"text"}}}',
             encoding="utf-8",
         )
 

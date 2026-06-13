@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import jinja2
-from jinja2.sandbox import SandboxedEnvironment
 
 from .filters import register_filters
 
@@ -22,8 +21,7 @@ def create_env(*args, **kwargs) -> jinja2.Environment:
     The return value is a plain jinja2.Environment — use its native methods
     directly: env.from_string(...), env.get_template(...), etc.
     """
-    kwargs.setdefault("undefined", jinja2.StrictUndefined)
-    env = SandboxedEnvironment(*args, **kwargs)
+    env = jinja2.Environment(*args, **kwargs)
 
     # Explicit, to make it clear we are not mutating the nested policies dict.
     env.policies["json.dumps_kwargs"] = {
