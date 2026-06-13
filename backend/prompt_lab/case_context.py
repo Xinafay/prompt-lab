@@ -38,12 +38,17 @@ def _resolve_scope_path(root: dict[str, Any], path: str) -> Any:
     if normalized_path == "":
         return current
 
+    traversed: list[str] = []
     for segment in normalized_path.split("/"):
+        current_path = "/".join(traversed) if traversed else "."
         if not isinstance(current, dict) or _is_file_node(current):
             raise ValueError(f"missing scope path {path!r}")
+        if _is_malformed_exact_file_node(current):
+            raise ValueError(f"malformed file node at {current_path!r}")
         if segment not in current:
             raise ValueError(f"missing scope path {path!r}")
         current = current[segment]
+        traversed.append(segment)
     return current
 
 

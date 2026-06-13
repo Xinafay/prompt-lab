@@ -165,6 +165,33 @@ def test_materialize_case_context_rejects_malformed_file_node() -> None:
     assert_value_error(case, "malformed file node")
 
 
+def test_materialize_case_context_rejects_traversal_through_malformed_file_node() -> None:
+    case = CaseArtifact.model_validate(
+        valid_case_payload(
+            stores={
+                "case": {
+                    "kind": "flat_file_tree",
+                    "values": {
+                        "bad.md": {
+                            "__carmilla_flat_file_node__": "folder",
+                            "value": "should not materialize",
+                        }
+                    },
+                }
+            },
+            bindings={
+                "bad": {
+                    "kind": "store_scope",
+                    "store": "case",
+                    "path": "bad.md/value",
+                }
+            },
+        )
+    )
+
+    assert_value_error(case, "malformed file node at 'bad.md'")
+
+
 def test_materialize_case_context_rejects_non_object_directory_entry() -> None:
     case = CaseArtifact.model_validate(
         valid_case_payload(
@@ -204,6 +231,7 @@ def main() -> int:
         test_materialize_case_context_allows_marker_named_directory_entries,
         test_materialize_case_context_rejects_missing_store_and_scope_path,
         test_materialize_case_context_rejects_malformed_file_node,
+        test_materialize_case_context_rejects_traversal_through_malformed_file_node,
         test_materialize_case_context_rejects_non_object_directory_entry,
         test_case_artifact_rejects_old_v1_variables_shape,
     ]
