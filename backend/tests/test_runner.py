@@ -12,23 +12,37 @@ class DemoOutput(BaseModel):
     name: str
 
 
+def file_node(value: object) -> dict[str, object]:
+    return {"__carmilla_flat_file_node__": "file", "value": value}
+
+
+def demo_case_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "schema_version": "prompt_lab.case/v2",
+        "id": "a",
+        "title": "A",
+        "stores": {
+            "case": {
+                "kind": "flat_file_tree",
+                "values": {"chapter": {"name": file_node("Ada")}},
+            }
+        },
+        "bindings": {
+            "chapter": {"kind": "store_scope", "store": "case", "path": "chapter"},
+            "allowed": {"kind": "value", "value": ["Ada"]},
+        },
+    }
+    payload.update(overrides)
+    return payload
+
+
 def test_iter_case_major_groups_repeats_per_case() -> None:
     cases = [
         CaseArtifact.model_validate(
-            {
-                "schema_version": "prompt_lab.case/v1",
-                "id": "a",
-                "title": "A",
-                "variables": {},
-            }
+            demo_case_payload(id="a", title="A", stores={}, bindings={})
         ),
         CaseArtifact.model_validate(
-            {
-                "schema_version": "prompt_lab.case/v1",
-                "id": "b",
-                "title": "B",
-                "variables": {},
-            }
+            demo_case_payload(id="b", title="B", stores={}, bindings={})
         ),
     ]
 
@@ -38,14 +52,7 @@ def test_iter_case_major_groups_repeats_per_case() -> None:
 
 
 def test_run_text_case_saves_text_output() -> None:
-    case = CaseArtifact.model_validate(
-        {
-            "schema_version": "prompt_lab.case/v1",
-            "id": "a",
-            "title": "A",
-            "variables": {"name": "Ada"},
-        }
-    )
+    case = CaseArtifact.model_validate(demo_case_payload())
 
     def generate(model: str, prompt: str) -> object:
         class Result:
@@ -60,7 +67,7 @@ def test_run_text_case_saves_text_output() -> None:
         case=case,
         repeat_index=1,
         generator_model="local/model",
-        template_text="Hello {{ name }}",
+        template_text="Hello {{ chapter.name }}",
         generate_text=generate,
     )
 
@@ -70,14 +77,7 @@ def test_run_text_case_saves_text_output() -> None:
 
 
 def test_run_text_case_stores_execution_errors() -> None:
-    case = CaseArtifact.model_validate(
-        {
-            "schema_version": "prompt_lab.case/v1",
-            "id": "a",
-            "title": "A",
-            "variables": {"name": "Ada"},
-        }
-    )
+    case = CaseArtifact.model_validate(demo_case_payload())
 
     def generate(model: str, prompt: str) -> object:
         raise RuntimeError("transport failed")
@@ -88,7 +88,7 @@ def test_run_text_case_stores_execution_errors() -> None:
         case=case,
         repeat_index=1,
         generator_model="local/model",
-        template_text="Hello {{ name }}",
+        template_text="Hello {{ chapter.name }}",
         generate_text=generate,
     )
 
@@ -98,15 +98,7 @@ def test_run_text_case_stores_execution_errors() -> None:
 
 
 def test_run_structured_case_saves_json_output() -> None:
-    case = CaseArtifact.model_validate(
-        {
-            "schema_version": "prompt_lab.case/v1",
-            "id": "a",
-            "title": "A",
-            "variables": {"name": "Ada"},
-            "structured_validation_context": {"allowed": ["Ada"]},
-        }
-    )
+    case = CaseArtifact.model_validate(demo_case_payload())
 
     def generate(
         model: str,
@@ -117,7 +109,7 @@ def test_run_structured_case_saves_json_output() -> None:
         assert model == "local/model"
         assert prompt == "Hello Ada"
         assert response_model is DemoOutput
-        assert validation_context == {"allowed": ["Ada"]}
+        assert validation_context == {"chapter": {"name": "Ada"}, "allowed": ["Ada"]}
 
         class Result:
             output = DemoOutput(name="Ada")
@@ -131,7 +123,7 @@ def test_run_structured_case_saves_json_output() -> None:
         case=case,
         repeat_index=1,
         generator_model="local/model",
-        template_text="Hello {{ name }}",
+        template_text="Hello {{ chapter.name }}",
         response_model=DemoOutput,
         generate_structured=generate,
     )
@@ -142,14 +134,7 @@ def test_run_structured_case_saves_json_output() -> None:
 
 
 def test_run_structured_case_stores_validation_errors() -> None:
-    case = CaseArtifact.model_validate(
-        {
-            "schema_version": "prompt_lab.case/v1",
-            "id": "a",
-            "title": "A",
-            "variables": {"name": "Ada"},
-        }
-    )
+    case = CaseArtifact.model_validate(demo_case_payload())
 
     def generate(
         model: str,
@@ -165,7 +150,7 @@ def test_run_structured_case_stores_validation_errors() -> None:
         case=case,
         repeat_index=1,
         generator_model="local/model",
-        template_text="Hello {{ name }}",
+        template_text="Hello {{ chapter.name }}",
         response_model=DemoOutput,
         generate_structured=generate,
     )
@@ -176,14 +161,7 @@ def test_run_structured_case_stores_validation_errors() -> None:
 
 
 def test_run_structured_case_stores_execution_errors() -> None:
-    case = CaseArtifact.model_validate(
-        {
-            "schema_version": "prompt_lab.case/v1",
-            "id": "a",
-            "title": "A",
-            "variables": {"name": "Ada"},
-        }
-    )
+    case = CaseArtifact.model_validate(demo_case_payload())
 
     def generate(
         model: str,
@@ -199,7 +177,7 @@ def test_run_structured_case_stores_execution_errors() -> None:
         case=case,
         repeat_index=1,
         generator_model="local/model",
-        template_text="Hello {{ name }}",
+        template_text="Hello {{ chapter.name }}",
         response_model=DemoOutput,
         generate_structured=generate,
     )

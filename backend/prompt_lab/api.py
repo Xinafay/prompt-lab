@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from prompt_lab import llm_client
+from prompt_lab.case_context import materialize_case_context
 from prompt_lab.compare import build_comparison_prompt
 from prompt_lab.config import PromptLabConfig
 from prompt_lab.dry_run import (
@@ -839,9 +840,10 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                         assert response_model is not None
                         generate_structured = llm_client.generate_structured
                         if dry_run:
+                            validation_context = materialize_case_context(case)
                             response_text = dry_structured_response_json(
                                 response_model,
-                                validation_context=case.structured_validation_context,
+                                validation_context=validation_context,
                             )
 
                             def generate_structured(

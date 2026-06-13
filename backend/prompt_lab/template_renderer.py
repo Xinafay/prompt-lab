@@ -1,16 +1,10 @@
 from __future__ import annotations
 
-from jinja2 import StrictUndefined
-from jinja2.sandbox import SandboxedEnvironment
+from typing import Any
 
-from prompt_lab.models.artifacts import CaseArtifact
-
-
-_ENV = SandboxedEnvironment(undefined=StrictUndefined, autoescape=False)
-_ENV.globals.clear()
+from shared.jinjax import Template
 
 
-def render_prompt(template_text: str, case: CaseArtifact) -> str:
-    """Render a prompt template with case variables."""
-    template = _ENV.from_string(template_text)
-    return template.render(case.variables)
+def render_prompt(template_text: str, context: dict[str, Any]) -> str:
+    """Render a prompt template with a materialized case context."""
+    return Template(template_text).render(context)

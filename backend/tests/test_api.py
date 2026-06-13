@@ -36,6 +36,37 @@ def demo_experiment_payload(
     }
 
 
+def file_node(value: object) -> dict[str, object]:
+    return {"__carmilla_flat_file_node__": "file", "value": value}
+
+
+def demo_case_payload(
+    *,
+    case_id: str = "a",
+    title: str = "A",
+    binding_name: str = "value",
+    value: object = "hello",
+) -> dict[str, object]:
+    return {
+        "schema_version": "prompt_lab.case/v2",
+        "id": case_id,
+        "title": title,
+        "stores": {
+            "case": {
+                "kind": "flat_file_tree",
+                "values": {binding_name: file_node(value)},
+            }
+        },
+        "bindings": {
+            binding_name: {
+                "kind": "store_scope",
+                "store": "case",
+                "path": binding_name,
+            }
+        },
+    }
+
+
 def write_demo_experiment_manifest(root: Path) -> None:
     example = root / "examples" / "demo"
     (example / "versions" / "v001").mkdir(parents=True)
@@ -43,6 +74,40 @@ def write_demo_experiment_manifest(root: Path) -> None:
         json.dumps(demo_experiment_payload(), ensure_ascii=False),
         encoding="utf-8",
     )
+
+
+def upgrade_split_scenes_fixture_to_v2(root: Path) -> None:
+    example = root / "examples" / "split-scenes"
+    experiment_path = example / "experiment.json"
+    experiment = json.loads(experiment_path.read_text(encoding="utf-8"))
+    experiment["output"].pop("validation_context_from_case", None)
+    experiment_path.write_text(
+        json.dumps(experiment, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    cases_dir = example / "versions" / "v001" / "cases"
+    for case_path in cases_dir.glob("*.json"):
+        old_case = json.loads(case_path.read_text(encoding="utf-8"))
+        context = {
+            **old_case.pop("variables"),
+            **old_case.pop("structured_validation_context"),
+        }
+        upgraded = {
+            "schema_version": "prompt_lab.case/v2",
+            "id": old_case["id"],
+            "title": old_case["title"],
+            "source": old_case.get("source"),
+            "stores": {},
+            "bindings": {
+                name: {"kind": "value", "value": value}
+                for name, value in context.items()
+            },
+        }
+        case_path.write_text(
+            json.dumps(upgraded, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
 
 
 def test_api_lists_experiments() -> None:
@@ -147,7 +212,15 @@ def test_api_seeds_examples_into_experiments_on_startup() -> None:
         cases = version / "cases"
         cases.mkdir()
         (cases / "case-a.json").write_text(
-            '{"schema_version":"prompt_lab.case/v1","id":"case-a","title":"Case A","variables":{"name":"Ada"}}',
+            json.dumps(
+                demo_case_payload(
+                    case_id="case-a",
+                    title="Case A",
+                    binding_name="name",
+                    value="Ada",
+                ),
+                ensure_ascii=False,
+            ),
             encoding="utf-8",
         )
 
@@ -175,7 +248,7 @@ def test_api_gets_version_overview() -> None:
         (example / "rubric.md").write_text("Prefer concise answers.", encoding="utf-8")
         (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
         (version_dir / "cases" / "a.json").write_text(
-            '{"schema_version":"prompt_lab.case/v1","id":"a","title":"A","variables":{"value":"hello"}}',
+            json.dumps(demo_case_payload(), ensure_ascii=False),
             encoding="utf-8",
         )
         app = create_app(PromptLabConfig.from_env(project_root=root))
@@ -232,7 +305,7 @@ def test_api_lists_latest_run_artifacts() -> None:
         (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
         (version_dir / "cases").mkdir()
         (version_dir / "cases" / "a.json").write_text(
-            '{"schema_version":"prompt_lab.case/v1","id":"a","title":"A","variables":{"value":"hello"}}',
+            json.dumps(demo_case_payload(), ensure_ascii=False),
             encoding="utf-8",
         )
         (run_dir / "repeat-001.json").write_text(
@@ -300,7 +373,7 @@ def test_api_starts_run_job() -> None:
             )
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
             (version_dir / "cases" / "a.json").write_text(
-                '{"schema_version":"prompt_lab.case/v1","id":"a","title":"A","variables":{"value":"hello"}}',
+                json.dumps(demo_case_payload(), ensure_ascii=False),
                 encoding="utf-8",
             )
             app = create_app(PromptLabConfig.from_env(project_root=root))
@@ -372,7 +445,7 @@ def test_api_starting_run_clears_existing_runtime_chain() -> None:
             )
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
             (version_dir / "cases" / "a.json").write_text(
-                '{"schema_version":"prompt_lab.case/v1","id":"a","title":"A","variables":{"value":"hello"}}',
+                json.dumps(demo_case_payload(), ensure_ascii=False),
                 encoding="utf-8",
             )
             app = create_app(PromptLabConfig.from_env(project_root=root))
@@ -423,7 +496,7 @@ def test_api_dry_run_text_version_avoids_live_llm() -> None:
             )
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
             (version_dir / "cases" / "a.json").write_text(
-                '{"schema_version":"prompt_lab.case/v1","id":"a","title":"A","variables":{"value":"hello"}}',
+                json.dumps(demo_case_payload(), ensure_ascii=False),
                 encoding="utf-8",
             )
             app = create_app(PromptLabConfig.from_env(project_root=root))
@@ -512,6 +585,7 @@ def test_api_runs_pydantic_version() -> None:
                 Path("examples") / "split-scenes",
                 examples_root / "split-scenes",
             )
+            upgrade_split_scenes_fixture_to_v2(root)
             app = create_app(PromptLabConfig.from_env(project_root=root))
 
             response = TestClient(app, raise_server_exceptions=False).post(
@@ -560,6 +634,7 @@ def test_api_dry_run_pydantic_version_avoids_live_llm() -> None:
                 Path("examples") / "split-scenes",
                 examples_root / "split-scenes",
             )
+            upgrade_split_scenes_fixture_to_v2(root)
             app = create_app(PromptLabConfig.from_env(project_root=root))
 
             response = TestClient(app, raise_server_exceptions=False).post(
@@ -654,7 +729,10 @@ def test_api_rejects_unsafe_case_id_without_calling_llm() -> None:
             )
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
             (version_dir / "cases" / "a.json").write_text(
-                '{"schema_version":"prompt_lab.case/v1","id":"../escape","title":"A","variables":{"value":"hello"}}',
+                json.dumps(
+                    demo_case_payload(case_id="../escape"),
+                    ensure_ascii=False,
+                ),
                 encoding="utf-8",
             )
             app = create_app(PromptLabConfig.from_env(project_root=root))

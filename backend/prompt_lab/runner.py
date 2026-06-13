@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from prompt_lab.case_context import materialize_case_context
 from prompt_lab.llm_client import PromptLabStructuredValidationError
 from prompt_lab.models.artifacts import CaseArtifact, RunArtifact
 from prompt_lab.template_renderer import render_prompt
@@ -30,7 +31,8 @@ def run_text_case(
     template_text: str,
     generate_text: Callable[[str, str], Any],
 ) -> RunArtifact:
-    rendered_prompt = render_prompt(template_text, case)
+    context = materialize_case_context(case)
+    rendered_prompt = render_prompt(template_text, context)
     run_id = f"{run_batch_id}-{case.id}-repeat-{repeat_index:03d}"
     try:
         result = generate_text(generator_model, rendered_prompt)
@@ -79,14 +81,15 @@ def run_structured_case(
         [str, str, type[BaseModel], dict[str, Any] | None], Any
     ],
 ) -> RunArtifact:
-    rendered_prompt = render_prompt(template_text, case)
+    context = materialize_case_context(case)
+    rendered_prompt = render_prompt(template_text, context)
     run_id = f"{run_batch_id}-{case.id}-repeat-{repeat_index:03d}"
     try:
         result = generate_structured(
             generator_model,
             rendered_prompt,
             response_model,
-            case.structured_validation_context,
+            context,
         )
         output = getattr(result, "output")
     except PromptLabStructuredValidationError:
