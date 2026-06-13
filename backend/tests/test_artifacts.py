@@ -7,10 +7,13 @@ from pydantic import ValidationError
 from prompt_lab.models.artifacts import (
     CaseArtifact,
     ExperimentArtifact,
+    FlatFileTreeStore,
     OutputConfig,
     RunArtifact,
     RunBatchArtifact,
     RunDefaults,
+    StoreScopeBinding,
+    ValueBinding,
 )
 
 
@@ -74,9 +77,8 @@ def test_pydantic_experiment_artifact_validates() -> None:
                 "type": "pydantic",
                 "model_file": "model.py",
                 "model_entrypoint": "model.SceneList",
-                "validation_context_from_case": "structured_validation_context",
             },
-            "template": {"engine": "jinja2", "path": "prompt.md"},
+            "template": {"engine": "jinjax", "path": "prompt.md"},
             "models": {
                 "generator_model": "local/example-small-model",
                 "judge_model": "openai/example-large-model",
@@ -91,6 +93,7 @@ def test_pydantic_experiment_artifact_validates() -> None:
 
     assert artifact.id == "split-scenes"
     assert artifact.output.type == "pydantic"
+    assert artifact.template.engine == "jinjax"
     assert artifact.run_defaults.repeat_count == 3
 
 
@@ -118,7 +121,17 @@ def test_output_config_rejects_invalid_mode_fields() -> None:
     assert_validation_error(
         OutputConfig,
         {"type": "text", "validation_context_from_case": "context"},
-        "text output cannot include pydantic-only fields",
+        "Extra inputs are not permitted",
+    )
+    assert_validation_error(
+        OutputConfig,
+        {
+            "type": "pydantic",
+            "model_file": "model.py",
+            "model_entrypoint": "model.SceneList",
+            "validation_context_from_case": "structured_validation_context",
+        },
+        "Extra inputs are not permitted",
     )
     assert_validation_error(
         OutputConfig,
@@ -134,16 +147,6 @@ def test_output_config_rejects_invalid_mode_fields() -> None:
         {"type": "pydantic", "model_file": "model.py", "model_entrypoint": ""},
         "String should have at least 1 character",
     )
-    assert_validation_error(
-        OutputConfig,
-        {
-            "type": "pydantic",
-            "model_file": "model.py",
-            "model_entrypoint": "model.SceneList",
-            "validation_context_from_case": "",
-        },
-        "String should have at least 1 character",
-    )
 
 
 def test_run_defaults_rejects_invalid_values_and_extras() -> None:
@@ -152,19 +155,51 @@ def test_run_defaults_rejects_invalid_values_and_extras() -> None:
     assert_validation_error(RunDefaults, {"unknown": True}, "Extra inputs are not permitted")
 
 
-def test_case_artifact_validates_variables() -> None:
+def test_case_artifact_validates_v2_stores_and_bindings() -> None:
     case = CaseArtifact.model_validate(
+        {
+            "schema_version": "prompt_lab.case/v2",
+            "id": "case-a",
+            "title": "Case A",
+            "stores": {
+                "case": {
+                    "kind": "flat_file_tree",
+                    "values": {
+                        "chapter.md": {
+                            "__carmilla_flat_file_node__": "file",
+                            "value": "Hello",
+                        }
+                    },
+                }
+            },
+            "bindings": {
+                "chapter": {
+                    "kind": "store_scope",
+                    "store": "case",
+                    "path": "chapter.md",
+                },
+                "metadata": {"kind": "value", "value": {"tone": "quiet"}},
+            },
+        }
+    )
+
+    assert isinstance(case.stores["case"], FlatFileTreeStore)
+    assert isinstance(case.bindings["chapter"], StoreScopeBinding)
+    assert isinstance(case.bindings["metadata"], ValueBinding)
+    assert case.bindings["chapter"].path == "chapter.md"
+
+
+def test_case_artifact_rejects_v1_variables_shape() -> None:
+    assert_validation_error(
+        CaseArtifact,
         {
             "schema_version": "prompt_lab.case/v1",
             "id": "case-a",
             "title": "Case A",
             "variables": {"chapter_text": "Hello"},
-            "structured_validation_context": {"parts": []},
-        }
+        },
+        "Input should be 'prompt_lab.case/v2'",
     )
-
-    assert case.variables["chapter_text"] == "Hello"
-    assert case.structured_validation_context == {"parts": []}
 
 
 def test_run_artifact_accepts_valid_text_and_pydantic_outputs() -> None:
@@ -295,7 +330,8 @@ def main() -> int:
         test_text_experiment_artifact_validates,
         test_output_config_rejects_invalid_mode_fields,
         test_run_defaults_rejects_invalid_values_and_extras,
-        test_case_artifact_validates_variables,
+        test_case_artifact_validates_v2_stores_and_bindings,
+        test_case_artifact_rejects_v1_variables_shape,
         test_run_artifact_accepts_valid_text_and_pydantic_outputs,
         test_run_artifact_enforces_status_error_fields,
         test_run_artifact_enforces_output_type_fields,

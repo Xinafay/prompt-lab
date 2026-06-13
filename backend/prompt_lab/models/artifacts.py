@@ -13,7 +13,7 @@ class TemplateConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    engine: Literal["jinja2"] = "jinja2"
+    engine: Literal["jinja2", "jinjax"] = "jinjax"
     path: str = "prompt.md"
 
 
@@ -25,7 +25,6 @@ class OutputConfig(BaseModel):
     type: Literal["text", "pydantic"]
     model_file: str | None = Field(default=None, min_length=1)
     model_entrypoint: str | None = Field(default=None, min_length=1)
-    validation_context_from_case: str | None = Field(default=None, min_length=1)
 
     @model_validator(mode="after")
     def validate_mode_fields(self) -> Self:
@@ -34,11 +33,7 @@ class OutputConfig(BaseModel):
                 raise ValueError(
                     "pydantic output requires model_file and model_entrypoint"
                 )
-        elif (
-            self.model_file is not None
-            or self.model_entrypoint is not None
-            or self.validation_context_from_case is not None
-        ):
+        elif self.model_file is not None or self.model_entrypoint is not None:
             raise ValueError("text output cannot include pydantic-only fields")
         return self
 
@@ -86,17 +81,48 @@ class CaseSource(BaseModel):
     type: str | None = None
 
 
+class FlatFileTreeStore(BaseModel):
+    """A neutral serialized flat-file tree store produced by an external system."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["flat_file_tree"]
+    values: JsonObject
+
+
+class StoreScopeBinding(BaseModel):
+    """Bind a prompt variable to a scope inside a named store."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["store_scope"]
+    store: str = Field(min_length=1)
+    path: str = ""
+
+
+class ValueBinding(BaseModel):
+    """Bind a prompt variable directly to a JSON-like value."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["value"]
+    value: Any
+
+
+PromptBinding = StoreScopeBinding | ValueBinding
+
+
 class CaseArtifact(BaseModel):
     """One prompt input case."""
 
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["prompt_lab.case/v1"]
+    schema_version: Literal["prompt_lab.case/v2"]
     id: str = Field(min_length=1)
     title: str = Field(min_length=1)
     source: CaseSource | None = None
-    variables: JsonObject
-    structured_validation_context: JsonObject | None = None
+    stores: dict[str, FlatFileTreeStore]
+    bindings: dict[str, PromptBinding]
 
 
 class RunBatchArtifact(BaseModel):
