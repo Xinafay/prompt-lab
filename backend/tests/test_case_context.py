@@ -88,6 +88,40 @@ def test_materialize_case_context_resolves_empty_path_to_root() -> None:
     }
 
 
+def test_materialize_case_context_allows_marker_named_directory_entries() -> None:
+    case = CaseArtifact.model_validate(
+        valid_case_payload(
+            stores={
+                "case": {
+                    "kind": "flat_file_tree",
+                    "values": {
+                        "a": {
+                            "__carmilla_flat_file_node__": {
+                                "__carmilla_flat_file_node__": "file",
+                                "value": "marker child",
+                            },
+                            "value": {
+                                "__carmilla_flat_file_node__": "file",
+                                "value": "value child",
+                            },
+                        }
+                    },
+                }
+            },
+            bindings={"root": {"kind": "store_scope", "store": "case"}},
+        )
+    )
+
+    assert materialize_case_context(case) == {
+        "root": {
+            "a": {
+                "__carmilla_flat_file_node__": "marker child",
+                "value": "value child",
+            }
+        }
+    }
+
+
 def test_materialize_case_context_rejects_missing_store_and_scope_path() -> None:
     missing_store = CaseArtifact.model_validate(
         valid_case_payload(
@@ -167,6 +201,7 @@ def main() -> int:
     tests = [
         test_materialize_case_context_resolves_bindings,
         test_materialize_case_context_resolves_empty_path_to_root,
+        test_materialize_case_context_allows_marker_named_directory_entries,
         test_materialize_case_context_rejects_missing_store_and_scope_path,
         test_materialize_case_context_rejects_malformed_file_node,
         test_materialize_case_context_rejects_non_object_directory_entry,
