@@ -43,10 +43,6 @@ Lab copies examples into `experiments/`. Runtime reads, generated artifacts, and
 future GUI edits use `experiments/` only. The `experiments/` directory is ignored
 by git.
 
-The artifact format is intentionally not backward-compatible during this early
-stage. If existing runtime experiments were created with an older format, move or
-delete `experiments/` and restart the backend so it can seed fresh examples.
-
 Each experiment version keeps one active workflow chain:
 
 - Running a version replaces the previous active run artifacts for that version

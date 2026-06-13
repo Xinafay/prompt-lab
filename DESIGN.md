@@ -304,8 +304,6 @@ selects a path inside a store. A `value` binding stores a computed JSON value fo
 the invocation.
 
 Prompt Lab materializes `stores + bindings` into one plain context dictionary.
-Old `variables`, `structured_validation_context`, and
-`validation_context_from_case` fields are not supported.
 
 ### Run Batch
 

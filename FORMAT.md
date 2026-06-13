@@ -45,8 +45,8 @@ Text-output experiments use:
 }
 ```
 
-`validation_context_from_case` is not supported. Pydantic validation receives the
-same materialized case context that prompt rendering uses.
+Pydantic validation receives the same materialized case context that prompt
+rendering uses.
 
 ## Case
 
@@ -139,12 +139,6 @@ in the flat-file tree:
 Prompt Lab materializes `stores + bindings` into one plain dictionary before
 rendering and validation. For the case above, templates can reference
 `{{ chapter.title }}` and `{{ current_entities }}`.
-
-Old `prompt_lab.case/v1` fields are not supported:
-
-- `variables`
-- `structured_validation_context`
-- `validation_context_from_case`
 
 ## Version
 
