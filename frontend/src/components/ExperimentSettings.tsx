@@ -21,7 +21,14 @@ function prepareForSave(draft: Experiment): Experiment {
       output: { type: "text" }
     };
   }
-  return draft;
+  return {
+    ...draft,
+    output: {
+      type: "pydantic",
+      model_file: draft.output.model_file,
+      model_entrypoint: draft.output.model_entrypoint
+    }
+  };
 }
 
 export function ExperimentSettings({
@@ -69,14 +76,18 @@ export function ExperimentSettings({
       if (type === "text") {
         return { ...current, output: { type: "text" } };
       }
+      const modelFile =
+        current.output.type === "pydantic" ? current.output.model_file : undefined;
+      const modelEntrypoint =
+        current.output.type === "pydantic"
+          ? current.output.model_entrypoint
+          : undefined;
       return {
         ...current,
         output: {
           type: "pydantic",
-          model_file: current.output.model_file ?? "model.py",
-          model_entrypoint: current.output.model_entrypoint ?? "",
-          validation_context_from_case:
-            current.output.validation_context_from_case ?? null
+          model_file: modelFile ?? "model.py",
+          model_entrypoint: modelEntrypoint ?? ""
         }
       };
     });
@@ -233,24 +244,6 @@ export function ExperimentSettings({
                     output: {
                       ...current.output,
                       model_entrypoint: event.target.value
-                    }
-                  }))
-                }
-              />
-            </label>
-            <label className="settings-field">
-              <span>Validation context field</span>
-              <input
-                value={draft.output.validation_context_from_case ?? ""}
-                onChange={(event) =>
-                  updateDraft((current) => ({
-                    ...current,
-                    output: {
-                      ...current.output,
-                      validation_context_from_case:
-                        event.target.value.trim() === ""
-                          ? null
-                          : event.target.value
                     }
                   }))
                 }

@@ -1,4 +1,35 @@
 export type OutputType = "text" | "pydantic";
+export type TemplateEngine = "jinja2" | "jinjax";
+
+export interface TextOutputConfig {
+  type: "text";
+}
+
+export interface PydanticOutputConfig {
+  type: "pydantic";
+  model_file?: string | null;
+  model_entrypoint?: string | null;
+}
+
+export type OutputConfig = TextOutputConfig | PydanticOutputConfig;
+
+export interface FlatFileTreeStore {
+  kind: "flat_file_tree";
+  values: Record<string, unknown>;
+}
+
+export interface StoreScopeBinding {
+  kind: "store_scope";
+  store: string;
+  path: string;
+}
+
+export interface ValueBinding {
+  kind: "value";
+  value: unknown;
+}
+
+export type PromptBinding = StoreScopeBinding | ValueBinding;
 
 export interface Experiment {
   schema_version: "prompt_lab.experiment/v1";
@@ -6,14 +37,9 @@ export interface Experiment {
   title: string;
   description: string;
   active_version: string;
-  output: {
-    type: OutputType;
-    model_file?: string | null;
-    model_entrypoint?: string | null;
-    validation_context_from_case?: string | null;
-  };
+  output: OutputConfig;
   template: {
-    engine: "jinja2";
+    engine: TemplateEngine;
     path: string;
   };
   models: {
@@ -28,12 +54,12 @@ export interface Experiment {
 }
 
 export interface Case {
-  schema_version: "prompt_lab.case/v1";
+  schema_version: "prompt_lab.case/v2";
   id: string;
   title: string;
   source?: Record<string, unknown> | null;
-  variables: Record<string, unknown>;
-  structured_validation_context?: Record<string, unknown> | null;
+  stores: Record<string, FlatFileTreeStore>;
+  bindings: Record<string, PromptBinding>;
 }
 
 export interface RunArtifact {

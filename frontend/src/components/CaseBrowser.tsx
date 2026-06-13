@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import type { Case, VersionOverview } from "../types";
+import type { Case, PromptBinding, StoreScopeBinding, VersionOverview } from "../types";
 import { describeValue, ValuePreview } from "./ValuePreview";
 
 interface CaseBrowserProps {
@@ -25,34 +25,97 @@ function caseMatchesQuery(artifactCase: Case, caseQuery: string): boolean {
   );
 }
 
-function caseMatchesVariableQuery(
+function caseMatchesBindingQuery(
   artifactCase: Case,
-  variableQuery: string
+  bindingQuery: string
 ): boolean {
-  if (variableQuery === "") {
+  if (bindingQuery === "") {
     return true;
   }
-  return Object.keys(artifactCase.variables).some((key) =>
-    key.toLocaleLowerCase().includes(variableQuery)
+  return Object.keys(artifactCase.bindings).some((key) =>
+    key.toLocaleLowerCase().includes(bindingQuery)
   );
+}
+
+function displayPath(path: string): string {
+  const normalized = path.trim().replace(/^\/+|\/+$/g, "");
+  return normalized === "" ? "." : normalized;
+}
+
+function resolveStoreScopePreview(
+  artifactCase: Case,
+  binding: StoreScopeBinding
+): unknown {
+  const store = artifactCase.stores[binding.store];
+  if (store === undefined) {
+    return `Missing store: ${binding.store}`;
+  }
+
+  const normalizedPath = binding.path.trim().replace(/^\/+|\/+$/g, "");
+  if (normalizedPath === "") {
+    return store.values;
+  }
+
+  let current: unknown = store.values;
+  for (const segment of normalizedPath.split("/")) {
+    if (
+      current === null ||
+      typeof current !== "object" ||
+      !(segment in current)
+    ) {
+      return `Missing store path: ${binding.path}`;
+    }
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return unwrapFlatFileNodePreview(current);
+}
+
+function unwrapFlatFileNodePreview(value: unknown): unknown {
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 2 &&
+    (value as Record<string, unknown>).__carmilla_flat_file_node__ === "file" &&
+    "value" in value
+  ) {
+    return (value as Record<string, unknown>).value;
+  }
+  return value;
+}
+
+function describeBinding(binding: PromptBinding): string {
+  if (binding.kind === "value") {
+    return `value | ${describeValue(binding.value)}`;
+  }
+  return `store_scope | store: ${binding.store} | path: ${displayPath(
+    binding.path
+  )}`;
+}
+
+function bindingPreview(artifactCase: Case, binding: PromptBinding): unknown {
+  if (binding.kind === "value") {
+    return binding.value;
+  }
+  return resolveStoreScopePreview(artifactCase, binding);
 }
 
 export function CaseBrowser({ cases }: CaseBrowserProps) {
   const [caseQuery, setCaseQuery] = useState("");
-  const [variableQuery, setVariableQuery] = useState("");
+  const [bindingQuery, setBindingQuery] = useState("");
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(
     cases[0]?.id ?? null
   );
 
   const filteredCases = useMemo(() => {
     const normalizedCaseQuery = normalizeQuery(caseQuery);
-    const normalizedVariableQuery = normalizeQuery(variableQuery);
+    const normalizedBindingQuery = normalizeQuery(bindingQuery);
     return cases.filter(
       (artifactCase) =>
         caseMatchesQuery(artifactCase, normalizedCaseQuery) &&
-        caseMatchesVariableQuery(artifactCase, normalizedVariableQuery)
+        caseMatchesBindingQuery(artifactCase, normalizedBindingQuery)
     );
-  }, [caseQuery, cases, variableQuery]);
+  }, [bindingQuery, caseQuery, cases]);
 
   useEffect(() => {
     if (filteredCases.length === 0) {
@@ -69,17 +132,17 @@ export function CaseBrowser({ cases }: CaseBrowserProps) {
   const selectedCase =
     filteredCases.find((artifactCase) => artifactCase.id === selectedCaseId) ??
     null;
-  const normalizedVariableQuery = normalizeQuery(variableQuery);
-  const selectedVariableEntries =
+  const normalizedBindingQuery = normalizeQuery(bindingQuery);
+  const selectedBindingEntries =
     selectedCase === null
       ? []
-      : Object.entries(selectedCase.variables).filter(
+      : Object.entries(selectedCase.bindings).filter(
           ([key]) =>
-            normalizedVariableQuery === "" ||
-            key.toLocaleLowerCase().includes(normalizedVariableQuery)
+            normalizedBindingQuery === "" ||
+            key.toLocaleLowerCase().includes(normalizedBindingQuery)
         );
-  const selectedVariableCount =
-    selectedCase === null ? 0 : Object.keys(selectedCase.variables).length;
+  const selectedBindingCount =
+    selectedCase === null ? 0 : Object.keys(selectedCase.bindings).length;
 
   return (
     <section className="case-browser" aria-label="Cases">
@@ -101,12 +164,12 @@ export function CaseBrowser({ cases }: CaseBrowserProps) {
             />
           </label>
           <label>
-            <span>Find variable key</span>
+            <span>Find binding key</span>
             <input
-              onChange={(event) => setVariableQuery(event.target.value)}
-              placeholder="Variable key"
+              onChange={(event) => setBindingQuery(event.target.value)}
+              placeholder="Binding key"
               type="search"
-              value={variableQuery}
+              value={bindingQuery}
             />
           </label>
         </div>
@@ -151,41 +214,50 @@ export function CaseBrowser({ cases }: CaseBrowserProps) {
                 <p>{selectedCase.id}</p>
               </div>
               <span>
-                {selectedVariableEntries.length} of {selectedVariableCount} variable
-                {selectedVariableCount === 1 ? "" : "s"}
+                {selectedBindingEntries.length} of {selectedBindingCount} binding
+                {selectedBindingCount === 1 ? "" : "s"}
               </span>
             </div>
 
-            <div className="variables-table" role="table" aria-label="Variables">
-              <div className="variables-row variables-row-head" role="row">
+            <div className="bindings-table" role="table" aria-label="Bindings">
+              <div className="bindings-row bindings-row-head" role="row">
                 <span role="columnheader">Key</span>
                 <span role="columnheader">Type/metadata</span>
                 <span role="columnheader">Preview</span>
               </div>
-              {selectedVariableEntries.length === 0 ? (
-                <div className="variables-empty">
-                  {selectedVariableCount === 0
-                    ? "No variables in this case."
-                    : "No variables match the current key filter."}
+              {selectedBindingEntries.length === 0 ? (
+                <div className="bindings-empty">
+                  {selectedBindingCount === 0
+                    ? "No bindings in this case."
+                    : "No bindings match the current key filter."}
                 </div>
               ) : (
-                selectedVariableEntries.map(([key, value]) => (
-                  <div className="variables-row" key={key} role="row">
+                selectedBindingEntries.map(([key, binding]) => (
+                  <div className="bindings-row" key={key} role="row">
                     <strong role="cell">{key}</strong>
-                    <span className="variable-meta" role="cell">
-                      {describeValue(value)}
+                    <span className="binding-meta" role="cell">
+                      {describeBinding(binding)}
                     </span>
                     <div role="cell">
-                      <ValuePreview value={value} />
+                      <ValuePreview value={bindingPreview(selectedCase, binding)} />
+                      <details className="binding-json">
+                        <summary>Binding JSON</summary>
+                        <pre>{formatJson(binding)}</pre>
+                      </details>
                     </div>
                   </div>
                 ))
               )}
             </div>
 
-            <details className="case-variables-json">
-              <summary>Full variables JSON</summary>
-              <pre>{formatJson(selectedCase.variables)}</pre>
+            <details className="case-bindings-json">
+              <summary>Full bindings JSON</summary>
+              <pre>{formatJson(selectedCase.bindings)}</pre>
+            </details>
+
+            <details className="case-bindings-json">
+              <summary>Full stores JSON</summary>
+              <pre>{formatJson(selectedCase.stores)}</pre>
             </details>
           </>
         )}

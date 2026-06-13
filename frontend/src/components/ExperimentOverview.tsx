@@ -6,8 +6,23 @@ interface ExperimentOverviewProps {
   onRunVersion: () => void;
 }
 
-function formatVariables(artifactCase: Case): string {
-  return JSON.stringify(artifactCase.variables, null, 2);
+function formatCaseContract(artifactCase: Case): string {
+  return JSON.stringify(
+    {
+      bindings: artifactCase.bindings,
+      stores: artifactCase.stores
+    },
+    null,
+    2
+  );
+}
+
+function summarizeCaseContract(artifactCase: Case): string {
+  const bindingCount = Object.keys(artifactCase.bindings).length;
+  const storeCount = Object.keys(artifactCase.stores).length;
+  return `${bindingCount} binding${bindingCount === 1 ? "" : "s"} · ${storeCount} store${
+    storeCount === 1 ? "" : "s"
+  }`;
 }
 
 export function ExperimentOverview({
@@ -60,8 +75,9 @@ export function ExperimentOverview({
               <div>
                 <h4>{artifactCase.title}</h4>
                 <p>{artifactCase.id}</p>
+                <p>{summarizeCaseContract(artifactCase)}</p>
               </div>
-              <pre>{formatVariables(artifactCase)}</pre>
+              <pre>{formatCaseContract(artifactCase)}</pre>
             </article>
           ))}
         </div>

@@ -620,9 +620,10 @@ select {
 .case-browser-header span,
 .case-detail-heading p,
 .case-detail-heading span,
-.variable-meta,
+.binding-meta,
 .value-preview details,
-.case-variables-json summary {
+.binding-json summary,
+.case-bindings-json summary {
   overflow-wrap: anywhere;
   color: #667085;
   font-size: 12px;
@@ -715,34 +716,34 @@ select {
   font-weight: 750;
 }
 
-.variables-table {
+.bindings-table {
   display: grid;
   border: 1px solid #e4e7ec;
   border-radius: 8px;
   overflow: hidden;
 }
 
-.variables-row {
+.bindings-row {
   display: grid;
   grid-template-columns: minmax(140px, 220px) minmax(140px, 190px) minmax(0, 1fr);
   border-bottom: 1px solid #eef1f5;
 }
 
-.variables-row:last-child {
+.bindings-row:last-child {
   border-bottom: 0;
 }
 
-.variables-row > * {
+.bindings-row > * {
   min-width: 0;
   padding: 11px 12px;
   border-right: 1px solid #eef1f5;
 }
 
-.variables-row > *:last-child {
+.bindings-row > *:last-child {
   border-right: 0;
 }
 
-.variables-row-head {
+.bindings-row-head {
   background: #f9fafb;
   color: #667085;
   font-size: 11px;
@@ -751,14 +752,14 @@ select {
   text-transform: uppercase;
 }
 
-.variables-row strong {
+.bindings-row strong {
   overflow-wrap: anywhere;
   color: #111827;
   font-size: 13px;
   line-height: 1.4;
 }
 
-.variables-empty,
+.bindings-empty,
 .case-browser-empty {
   padding: 18px 16px;
   color: #667085;
@@ -780,13 +781,15 @@ select {
 }
 
 .value-preview summary,
-.case-variables-json summary {
+.binding-json summary,
+.case-bindings-json summary {
   cursor: pointer;
   font-weight: 750;
 }
 
 .value-preview pre,
-.case-variables-json pre {
+.binding-json pre,
+.case-bindings-json pre {
   max-height: 220px;
   margin: 8px 0 0;
   overflow: auto;
@@ -801,7 +804,11 @@ select {
   background: #f8fafc;
 }
 
-.case-variables-json {
+.binding-json {
+  margin-top: 8px;
+}
+
+.case-bindings-json {
   margin-top: 14px;
 }
 
@@ -1545,7 +1552,7 @@ select {
   }
 
   .case-browser,
-  .variables-row,
+  .bindings-row,
   .runs-drilldown,
   .run-detail-meta {
     grid-template-columns: 1fr;
@@ -1556,12 +1563,12 @@ select {
     border-bottom: 1px solid #e4e7ec;
   }
 
-  .variables-row > * {
+  .bindings-row > * {
     border-right: 0;
     border-bottom: 1px solid #eef1f5;
   }
 
-  .variables-row > *:last-child {
+  .bindings-row > *:last-child {
     border-bottom: 0;
   }
 
