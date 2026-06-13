@@ -1,7 +1,477 @@
 {
-  "schema_version": "prompt_lab.case/v1",
+  "schema_version": "prompt_lab.case/v2",
   "id": "the-portrait-at-harrowick-house-5",
   "title": "The Portrait at Harrowick House 5",
+  "stores": {
+    "case": {
+      "kind": "flat_file_tree",
+      "values": {
+        "previous_summaries": {
+          "__carmilla_flat_file_node__": "file",
+          "value": []
+        },
+        "chapter_text_with_paragraphs": {
+          "__carmilla_flat_file_node__": "file",
+          "value": "# The Portrait at Harrowick House\n\n## Prologue\n\n#### Paragraph 1\nIn the autumn of 1894, Harrowick House kept its lights burning later than usual. Rain worried at the windows, and the servants moved through the corridors with lowered voices, carrying coal, lamps, and trays they hoped would not be sent back untouched. Something in the household had shifted during the previous month. No one named it. The house did not encourage that kind of honesty.\n\n#### Paragraph 2\nThe portrait was begun on a Thursday in the west corridor, where the light held longest and the walls kept a little warmth after sunset. The painter, a narrow man with tobacco-stained fingers, had been summoned in haste and told only that the work was to be done quickly, accurately, and without questions. He agreed to two of those terms. By the second sitting he had already decided that accuracy was the dangerous part.\n\n#### Paragraph 3\nThe young woman who posed for him wore black lace at her throat and dark velvet at her wrists. Her posture never faltered. Her expression changed only in degrees too small to measure, yet the room altered whenever she lifted her eyes from her folded hands. On the first day, the painter blamed fatigue for the strange pull of her face. On the second, he blamed the weather. On the third, while mixing shadow into the curve beneath one painted eye, he felt a certainty settle over him with the quiet weight of a hand on the shoulder: he was not painting a likeness for the present, but for someone who had not yet arrived.\n\n#### Paragraph 4\nWhen the portrait was finished, the mistress of the house stood before it for a long time without speaking. Then she ordered it hung in the west corridor and instructed the staff that it was never to be removed, never to be covered, and never to be discussed with guests. Years later, after names had faded from ledgers and whole branches of the family had thinned into rumor, the house remained faithful to that instruction. Some promises, once made inside Harrowick House, did not weaken with time. They waited.\n\n## Chapter One: Byline After Midnight\n\n#### Paragraph 5\nAnna Karstane told herself she’d agreed to this for the story. That was the clean version she could say out loud: a first-person overnight in a “haunted” estate, written with enough skepticism to annoy the campus occult club and enough atmosphere to make the arts editor smile. The messier truth sat underneath it—her curiosity had teeth, and she’d always had the habit of touching things that warned her away.\n\n#### Paragraph 6\nThe taxi’s heater worked in short bursts, like it was negotiating with the cold. Outside, rain stitched the night into something dense and private. The driver didn’t talk much, which Anna appreciated; she was already drafting the opening paragraph in her head and deleting it at the same time.\n\n#### Paragraph 7\nShe looked like she belonged to the edge of a concert poster rather than a journalism department: black jeans, combat boots, a fitted leather jacket that smelled faintly of smoke and old perfume. A silver choker caught the occasional dashboard glow. Her eyeliner, applied with the confidence of practice, had started to soften at one corner where rain had found its way in—an imperfect smear that made her look tired and defiant at once.\n\n#### Paragraph 8\nIn her bag were the tools of a student reporter from the late eighties: a notepad with dog-eared pages, a cheap film camera she’d borrowed from the media lab, and a small cassette recorder she used to dictate quotes so she wouldn’t lose them to adrenaline. She didn’t call it ghost-hunting. She called it documentation.\n\n#### Paragraph 9\nHer editor at the student paper had made a show of being responsible. *Don’t sensationalize,* he’d said, pushing his glasses up. *And don’t sue us.* Then he’d leaned closer and added, *If you come back with something good, I’ll put it above the sports column for once.*\n\n#### Paragraph 10\nHarrowick House sat on the edge of a town that pretended it didn’t have a history. The older locals didn’t talk about the manor so much as they talked around it, the way people skirted potholes they’d hit before. A cracked sign leaned in ivy: HARROWICK HOUSE. The taxi turned onto the gravel lane, and the tires made a sound like someone quietly grinding their teeth.\n\n#### Paragraph 11\nThe estate appeared through the rain in pieces—gables, dark windows, a tower that held on to the sky. One upper window glowed with a dull warmth, a single square that looked almost domestic until you noticed how still it was. Anna took that in and filed it away. Lights had explanations. If she couldn’t find one, she’d write that down too.\n\n#### Paragraph 12\nA man waited under the portico, coat collar up, posture tight. Mr. Harrowick matched the voice from the phone: careful, controlled, the kind of person who measured his own words as if they cost money. He didn’t offer a dramatic greeting. He offered a keyring and a look that asked her to be competent.\n\n#### Paragraph 13\n“You’re Anna Karstane,” he said. He pronounced her name correctly, which surprised her.\n\n#### Paragraph 14\n“That’s me.” She tried a smile that came out more like a baring of teeth. “Student journalist. I’ll do my best to disappoint everyone who wants this to be a séance.”\n\n#### Paragraph 15\nHarrowick’s mouth twitched, a quick movement he didn’t let become a smile. “I don’t want theatrics,” he said. “I want someone who observes.” His gaze went to the recorder in her hand. “You’re recording?”\n\n#### Paragraph 16\n“Notes,” Anna said. “Quotes. Details. It keeps me honest.”\n\n#### Paragraph 17\nHe nodded once. “Good. Then here are the terms. You stay inside until dawn. You don’t bring anyone in, and you don’t wander the grounds at night. If you decide to leave, you leave a note on the hall table. Clear and obvious. No riddles.”\n\n#### Paragraph 18\n“And in the morning?” Anna asked.\n\n#### Paragraph 19\n“The taxi returns at seven,” Harrowick said. “One knock at the door. If you answer, you leave. If you don’t, the driver waits ten minutes, then goes back to town and calls me. I return with a spare key.” His jaw tightened on the next part. “If I still can’t reach you by nine, I call emergency services. I don’t want attention,” he added, voice flattening, “and I want you alive more.”\n\n#### Paragraph 20\nAnna raised her brows. “That’s almost reassuring.”\n\n#### Paragraph 21\n“It’s practical,” Harrowick said. He hesitated, then looked past her shoulder as if the house were standing behind her like a person. “There’s one more thing. If you find… items. Letters, photographs, anything you think is related. Leave them where they are.”\n\n#### Paragraph 22\n“Because the house doesn’t like it?” Anna asked, aiming for lightness.\n\n#### Paragraph 23\nHarrowick’s eyes stayed dry. “Because I don’t trust what changes when things are moved,” he said. “And because I’m tired of being wrong about this place.”\n\n#### Paragraph 24\nThe driver cleared his throat. Anna glanced back at the taxi, then at Harrowick. Alone meant alone; her editor had hated that part, but it made the feature cleaner. A witness who could be quoted, a setting that could do its work without an audience.\n\n#### Paragraph 25\nHarrowick stepped into the taxi’s back seat. The driver pulled away. Headlights swept across the front steps, made the wet stone shine, and then the lane swallowed the light. The engine noise thinned into rain and finally disappeared.\n\n#### Paragraph 26\nSilence took its place with unsettling speed. Anna stood under the portico and listened. Her pulse felt loud in her ears, and she resented it on principle. She dug out a cigarette, lit it with her back to the wind, and drew smoke into her lungs like it was punctuation.\n\n#### Paragraph 27\nShe exhaled slowly. “It’s just a building,” she told herself, because saying it anchored her. The cigarette burned down faster than she expected. She crushed it under her boot and pocketed the pack again.\n\n#### Paragraph 28\nThe front door opened with a weighty sigh of hinges. Inside, the air smelled of dry wood and something faintly floral, like old sachets. Anna stepped over the threshold and felt the temperature change against her skin, a coolness that didn’t belong to the season.\n\n#### Paragraph 29\nFor a heartbeat, her perception did something odd. The hall seemed to tilt. She had the distinct sensation of hovering an inch behind herself, watching her own shoulders rise and fall under the leather jacket, watching her hand tighten around the keyring. The feeling snapped back so quickly it left a thin nausea behind.\n\n#### Paragraph 30\nAnna blinked, swallowed, and blamed adrenaline. She’d pulled all-nighters in the newsroom; her body did strange things when it wanted sleep and didn’t get it. That explanation tasted sensible, so she kept it.\n\n#### Paragraph 31\nThe entrance hall rose high enough to swallow sound. A staircase climbed at the far end. Lamps cast weak pools of light through yellowed shades, and portraits covered the walls: severe men, pale women, children dressed like small adults. Their painted eyes didn’t follow her. They didn’t need to.\n\n#### Paragraph 32\nAnna picked a narrow table in the center of the hall and set up with the kind of deliberate neatness she pretended she didn’t possess. Notebook. Camera. Recorder. Flashlight. She liked order; it made the night feel like a series of tasks rather than a dare.\n\n#### Paragraph 33\nShe pressed the recorder’s button and spoke softly, the way she did when she wanted her future self to trust her past self. “Entry one. Harrowick House. Friday night. Rain. Arrived twenty-two forty-seven.” She paused, listened to the room, then added, almost amused, “And yes, I’m alone. If you’re hearing this and I sound braver than I feel, that’s editing.”\n\n#### Paragraph 34\nShe walked, keeping her dictation going in short bursts—drawing room, covered furniture, a faint smell of dust and fabric; library, rows of books that made her feel like an intruder in someone else’s private mind. She noted the mundane possibilities automatically: drafts, settling beams, animals in walls, old pipes expanding and contracting.\n\n#### Paragraph 35\nThe house offered small interruptions. A cooler patch of air that moved against her wrist when there were no open windows. A subtle shift in pressure near the west corridor that made her ears feel full. Anna caught herself slowing, her body responding before her skepticism could organize a sentence.\n\n#### Paragraph 36\nShe reached the corridor and felt something tighten behind her ribs. The portraits here were closer together, more intimate, less formal. Some of the faces looked unfinished around the edges, as if the painter had been interrupted and never returned.\n\n#### Paragraph 37\nHalfway down, one painting hung slightly lower than the others, the frame’s angle off by a few degrees. Anna stopped because her eyes stopped. The corridor seemed to narrow toward that frame, the house’s quiet arranging itself into a point.\n\n#### Paragraph 38\nShe had the sense that her next breath mattered. She let it out anyway and stepped closer.\n\n#### Paragraph 39\nThe portrait showed a young woman in nineteenth-century dress—dark lace at the throat, hair pinned in heavy curls. The painter had given her an expression that held both patience and amusement, as if she were waiting for someone to catch up.\n\n#### Paragraph 40\nAnna’s mouth dried.\n\n#### Paragraph 41\nThe face was hers.\n\n#### Paragraph 42\nNot in the loose, flattering way people claimed strangers resembled each other. The same cheekbones. The same small asymmetry in the mouth. The same faint shadow beneath the left eye that makeup never fully erased. Even the tiny scar near her hairline, earned in childhood and usually hidden by her bangs, sat there on the painted skin like a signature.\n\n#### Paragraph 43\nShe leaned in until her breath fogged the varnish. A date sat in the corner: **1894**.\n\n#### Paragraph 44\nAnna stepped back, recorder still running in her pocket, and tried to manufacture an explanation. Prank. Coincidence. Some creepy art student with too much time. Her mind offered options like flashcards, all of them flimsy.\n\n#### Paragraph 45\nA floorboard creaked upstairs.\n\n#### Paragraph 46\nAnna froze, then forced herself to move. She walked back to the hall table with the stiff carefulness of someone pretending she isn’t listening. She stopped the recorder, ejected the cassette, and rewound it, the mechanism’s whirr giving her something solid to hold on to.\n\n#### Paragraph 47\nShe pressed play.\n\n#### Paragraph 48\nAt first, the tape gave her rain, her own footsteps, the calmness she’d performed into the microphone. Then came a quiet exhale, so close it raised gooseflesh along her arms.\n\n#### Paragraph 49\nAnna held the recorder tighter.\n\n#### Paragraph 50\nA whisper surfaced under the breath, thin and structured, as if the sound had been threaded through static on purpose.\n\n#### Paragraph 51\n“An…na.”\n\n#### Paragraph 52\nHer name, pulled apart and put back together by something that didn’t use it often.\n\n#### Paragraph 53\nThe tape clicked. Silence returned.\n\n#### Paragraph 54\nFrom the bottom of the staircase, something shifted into the edge of the lamplight—slow, deliberate—claiming the space where her skepticism had been standing a moment before.\n\n"
+        },
+        "dir": {
+          "__carmilla_flat_file_node__": "file",
+          "value": "01_chapter_one_byline_after_midnight"
+        },
+        "previous_dirs": {
+          "__carmilla_flat_file_node__": "file",
+          "value": []
+        },
+        "next_dirs": {
+          "__carmilla_flat_file_node__": "file",
+          "value": [
+            "02_chapter_two_the_house_takes_dictation"
+          ]
+        },
+        "title": {
+          "__carmilla_flat_file_node__": "file",
+          "value": "Chapter One: Byline After Midnight"
+        },
+        "story_title": {
+          "__carmilla_flat_file_node__": "file",
+          "value": "The Portrait at Harrowick House"
+        },
+        "first_paragraph_number": {
+          "__carmilla_flat_file_node__": "file",
+          "value": 1
+        },
+        "last_paragraph_number": {
+          "__carmilla_flat_file_node__": "file",
+          "value": 54
+        },
+        "paragraphs": {
+          "__carmilla_flat_file_node__": "file",
+          "value": [
+            "In the autumn of 1894, Harrowick House kept its lights burning later than usual. Rain worried at the windows, and the servants moved through the corridors with lowered voices, carrying coal, lamps, and trays they hoped would not be sent back untouched. Something in the household had shifted during the previous month. No one named it. The house did not encourage that kind of honesty.",
+            "The portrait was begun on a Thursday in the west corridor, where the light held longest and the walls kept a little warmth after sunset. The painter, a narrow man with tobacco-stained fingers, had been summoned in haste and told only that the work was to be done quickly, accurately, and without questions. He agreed to two of those terms. By the second sitting he had already decided that accuracy was the dangerous part.",
+            "The young woman who posed for him wore black lace at her throat and dark velvet at her wrists. Her posture never faltered. Her expression changed only in degrees too small to measure, yet the room altered whenever she lifted her eyes from her folded hands. On the first day, the painter blamed fatigue for the strange pull of her face. On the second, he blamed the weather. On the third, while mixing shadow into the curve beneath one painted eye, he felt a certainty settle over him with the quiet weight of a hand on the shoulder: he was not painting a likeness for the present, but for someone who had not yet arrived.",
+            "When the portrait was finished, the mistress of the house stood before it for a long time without speaking. Then she ordered it hung in the west corridor and instructed the staff that it was never to be removed, never to be covered, and never to be discussed with guests. Years later, after names had faded from ledgers and whole branches of the family had thinned into rumor, the house remained faithful to that instruction. Some promises, once made inside Harrowick House, did not weaken with time. They waited.",
+            "Anna Karstane told herself she’d agreed to this for the story. That was the clean version she could say out loud: a first-person overnight in a “haunted” estate, written with enough skepticism to annoy the campus occult club and enough atmosphere to make the arts editor smile. The messier truth sat underneath it—her curiosity had teeth, and she’d always had the habit of touching things that warned her away.",
+            "The taxi’s heater worked in short bursts, like it was negotiating with the cold. Outside, rain stitched the night into something dense and private. The driver didn’t talk much, which Anna appreciated; she was already drafting the opening paragraph in her head and deleting it at the same time.",
+            "She looked like she belonged to the edge of a concert poster rather than a journalism department: black jeans, combat boots, a fitted leather jacket that smelled faintly of smoke and old perfume. A silver choker caught the occasional dashboard glow. Her eyeliner, applied with the confidence of practice, had started to soften at one corner where rain had found its way in—an imperfect smear that made her look tired and defiant at once.",
+            "In her bag were the tools of a student reporter from the late eighties: a notepad with dog-eared pages, a cheap film camera she’d borrowed from the media lab, and a small cassette recorder she used to dictate quotes so she wouldn’t lose them to adrenaline. She didn’t call it ghost-hunting. She called it documentation.",
+            "Her editor at the student paper had made a show of being responsible. *Don’t sensationalize,* he’d said, pushing his glasses up. *And don’t sue us.* Then he’d leaned closer and added, *If you come back with something good, I’ll put it above the sports column for once.*",
+            "Harrowick House sat on the edge of a town that pretended it didn’t have a history. The older locals didn’t talk about the manor so much as they talked around it, the way people skirted potholes they’d hit before. A cracked sign leaned in ivy: HARROWICK HOUSE. The taxi turned onto the gravel lane, and the tires made a sound like someone quietly grinding their teeth.",
+            "The estate appeared through the rain in pieces—gables, dark windows, a tower that held on to the sky. One upper window glowed with a dull warmth, a single square that looked almost domestic until you noticed how still it was. Anna took that in and filed it away. Lights had explanations. If she couldn’t find one, she’d write that down too.",
+            "A man waited under the portico, coat collar up, posture tight. Mr. Harrowick matched the voice from the phone: careful, controlled, the kind of person who measured his own words as if they cost money. He didn’t offer a dramatic greeting. He offered a keyring and a look that asked her to be competent.",
+            "“You’re Anna Karstane,” he said. He pronounced her name correctly, which surprised her.",
+            "“That’s me.” She tried a smile that came out more like a baring of teeth. “Student journalist. I’ll do my best to disappoint everyone who wants this to be a séance.”",
+            "Harrowick’s mouth twitched, a quick movement he didn’t let become a smile. “I don’t want theatrics,” he said. “I want someone who observes.” His gaze went to the recorder in her hand. “You’re recording?”",
+            "“Notes,” Anna said. “Quotes. Details. It keeps me honest.”",
+            "He nodded once. “Good. Then here are the terms. You stay inside until dawn. You don’t bring anyone in, and you don’t wander the grounds at night. If you decide to leave, you leave a note on the hall table. Clear and obvious. No riddles.”",
+            "“And in the morning?” Anna asked.",
+            "“The taxi returns at seven,” Harrowick said. “One knock at the door. If you answer, you leave. If you don’t, the driver waits ten minutes, then goes back to town and calls me. I return with a spare key.” His jaw tightened on the next part. “If I still can’t reach you by nine, I call emergency services. I don’t want attention,” he added, voice flattening, “and I want you alive more.”",
+            "Anna raised her brows. “That’s almost reassuring.”",
+            "“It’s practical,” Harrowick said. He hesitated, then looked past her shoulder as if the house were standing behind her like a person. “There’s one more thing. If you find… items. Letters, photographs, anything you think is related. Leave them where they are.”",
+            "“Because the house doesn’t like it?” Anna asked, aiming for lightness.",
+            "Harrowick’s eyes stayed dry. “Because I don’t trust what changes when things are moved,” he said. “And because I’m tired of being wrong about this place.”",
+            "The driver cleared his throat. Anna glanced back at the taxi, then at Harrowick. Alone meant alone; her editor had hated that part, but it made the feature cleaner. A witness who could be quoted, a setting that could do its work without an audience.",
+            "Harrowick stepped into the taxi’s back seat. The driver pulled away. Headlights swept across the front steps, made the wet stone shine, and then the lane swallowed the light. The engine noise thinned into rain and finally disappeared.",
+            "Silence took its place with unsettling speed. Anna stood under the portico and listened. Her pulse felt loud in her ears, and she resented it on principle. She dug out a cigarette, lit it with her back to the wind, and drew smoke into her lungs like it was punctuation.",
+            "She exhaled slowly. “It’s just a building,” she told herself, because saying it anchored her. The cigarette burned down faster than she expected. She crushed it under her boot and pocketed the pack again.",
+            "The front door opened with a weighty sigh of hinges. Inside, the air smelled of dry wood and something faintly floral, like old sachets. Anna stepped over the threshold and felt the temperature change against her skin, a coolness that didn’t belong to the season.",
+            "For a heartbeat, her perception did something odd. The hall seemed to tilt. She had the distinct sensation of hovering an inch behind herself, watching her own shoulders rise and fall under the leather jacket, watching her hand tighten around the keyring. The feeling snapped back so quickly it left a thin nausea behind.",
+            "Anna blinked, swallowed, and blamed adrenaline. She’d pulled all-nighters in the newsroom; her body did strange things when it wanted sleep and didn’t get it. That explanation tasted sensible, so she kept it.",
+            "The entrance hall rose high enough to swallow sound. A staircase climbed at the far end. Lamps cast weak pools of light through yellowed shades, and portraits covered the walls: severe men, pale women, children dressed like small adults. Their painted eyes didn’t follow her. They didn’t need to.",
+            "Anna picked a narrow table in the center of the hall and set up with the kind of deliberate neatness she pretended she didn’t possess. Notebook. Camera. Recorder. Flashlight. She liked order; it made the night feel like a series of tasks rather than a dare.",
+            "She pressed the recorder’s button and spoke softly, the way she did when she wanted her future self to trust her past self. “Entry one. Harrowick House. Friday night. Rain. Arrived twenty-two forty-seven.” She paused, listened to the room, then added, almost amused, “And yes, I’m alone. If you’re hearing this and I sound braver than I feel, that’s editing.”",
+            "She walked, keeping her dictation going in short bursts—drawing room, covered furniture, a faint smell of dust and fabric; library, rows of books that made her feel like an intruder in someone else’s private mind. She noted the mundane possibilities automatically: drafts, settling beams, animals in walls, old pipes expanding and contracting.",
+            "The house offered small interruptions. A cooler patch of air that moved against her wrist when there were no open windows. A subtle shift in pressure near the west corridor that made her ears feel full. Anna caught herself slowing, her body responding before her skepticism could organize a sentence.",
+            "She reached the corridor and felt something tighten behind her ribs. The portraits here were closer together, more intimate, less formal. Some of the faces looked unfinished around the edges, as if the painter had been interrupted and never returned.",
+            "Halfway down, one painting hung slightly lower than the others, the frame’s angle off by a few degrees. Anna stopped because her eyes stopped. The corridor seemed to narrow toward that frame, the house’s quiet arranging itself into a point.",
+            "She had the sense that her next breath mattered. She let it out anyway and stepped closer.",
+            "The portrait showed a young woman in nineteenth-century dress—dark lace at the throat, hair pinned in heavy curls. The painter had given her an expression that held both patience and amusement, as if she were waiting for someone to catch up.",
+            "Anna’s mouth dried.",
+            "The face was hers.",
+            "Not in the loose, flattering way people claimed strangers resembled each other. The same cheekbones. The same small asymmetry in the mouth. The same faint shadow beneath the left eye that makeup never fully erased. Even the tiny scar near her hairline, earned in childhood and usually hidden by her bangs, sat there on the painted skin like a signature.",
+            "She leaned in until her breath fogged the varnish. A date sat in the corner: **1894**.",
+            "Anna stepped back, recorder still running in her pocket, and tried to manufacture an explanation. Prank. Coincidence. Some creepy art student with too much time. Her mind offered options like flashcards, all of them flimsy.",
+            "A floorboard creaked upstairs.",
+            "Anna froze, then forced herself to move. She walked back to the hall table with the stiff carefulness of someone pretending she isn’t listening. She stopped the recorder, ejected the cassette, and rewound it, the mechanism’s whirr giving her something solid to hold on to.",
+            "She pressed play.",
+            "At first, the tape gave her rain, her own footsteps, the calmness she’d performed into the microphone. Then came a quiet exhale, so close it raised gooseflesh along her arms.",
+            "Anna held the recorder tighter.",
+            "A whisper surfaced under the breath, thin and structured, as if the sound had been threaded through static on purpose.",
+            "“An…na.”",
+            "Her name, pulled apart and put back together by something that didn’t use it often.",
+            "The tape clicked. Silence returned.",
+            "From the bottom of the staircase, something shifted into the edge of the lamplight—slow, deliberate—claiming the space where her skepticism had been standing a moment before."
+          ]
+        },
+        "parts": {
+          "__carmilla_flat_file_node__": "file",
+          "value": [
+            {
+              "title": "Prologue",
+              "type": "prologue",
+              "first_paragraph_number": 1,
+              "paragraphs": [
+                "In the autumn of 1894, Harrowick House kept its lights burning later than usual. Rain worried at the windows, and the servants moved through the corridors with lowered voices, carrying coal, lamps, and trays they hoped would not be sent back untouched. Something in the household had shifted during the previous month. No one named it. The house did not encourage that kind of honesty.",
+                "The portrait was begun on a Thursday in the west corridor, where the light held longest and the walls kept a little warmth after sunset. The painter, a narrow man with tobacco-stained fingers, had been summoned in haste and told only that the work was to be done quickly, accurately, and without questions. He agreed to two of those terms. By the second sitting he had already decided that accuracy was the dangerous part.",
+                "The young woman who posed for him wore black lace at her throat and dark velvet at her wrists. Her posture never faltered. Her expression changed only in degrees too small to measure, yet the room altered whenever she lifted her eyes from her folded hands. On the first day, the painter blamed fatigue for the strange pull of her face. On the second, he blamed the weather. On the third, while mixing shadow into the curve beneath one painted eye, he felt a certainty settle over him with the quiet weight of a hand on the shoulder: he was not painting a likeness for the present, but for someone who had not yet arrived.",
+                "When the portrait was finished, the mistress of the house stood before it for a long time without speaking. Then she ordered it hung in the west corridor and instructed the staff that it was never to be removed, never to be covered, and never to be discussed with guests. Years later, after names had faded from ledgers and whole branches of the family had thinned into rumor, the house remained faithful to that instruction. Some promises, once made inside Harrowick House, did not weaken with time. They waited."
+              ],
+              "statistics": {
+                "letter_count": 1553,
+                "digit_count": 4,
+                "other_character_count": 387,
+                "word_count": 344,
+                "sentence_count": 20
+              },
+              "scenes": [
+                {
+                  "number": 1,
+                  "first_paragraph_number": 1,
+                  "title": "Rain‑lit corridors",
+                  "summary": "Rainy autumn night finds Harrowick House dimly lit as servants move quietly through its corridors.",
+                  "paragraphs": [
+                    "In the autumn of 1894, Harrowick House kept its lights burning later than usual. Rain worried at the windows, and the servants moved through the corridors with lowered voices, carrying coal, lamps, and trays they hoped would not be sent back untouched. Something in the household had shifted during the previous month. No one named it. The house did not encourage that kind of honesty."
+                  ],
+                  "extensions": {}
+                },
+                {
+                  "number": 2,
+                  "first_paragraph_number": 2,
+                  "title": "Commissioned portrait",
+                  "summary": "A painter is summoned to the west corridor to quickly begin a portrait under vague orders.",
+                  "paragraphs": [
+                    "The portrait was begun on a Thursday in the west corridor, where the light held longest and the walls kept a little warmth after sunset. The painter, a narrow man with tobacco-stained fingers, had been summoned in haste and told only that the work was to be done quickly, accurately, and without questions. He agreed to two of those terms. By the second sitting he had already decided that accuracy was the dangerous part."
+                  ],
+                  "extensions": {}
+                },
+                {
+                  "number": 3,
+                  "first_paragraph_number": 3,
+                  "title": "Painter's revelation",
+                  "summary": "The painter realizes he is capturing a future subject rather than a present likeness.",
+                  "paragraphs": [
+                    "The young woman who posed for him wore black lace at her throat and dark velvet at her wrists. Her posture never faltered. Her expression changed only in degrees too small to measure, yet the room altered whenever she lifted her eyes from her folded hands. On the first day, the painter blamed fatigue for the strange pull of her face. On the second, he blamed the weather. On the third, while mixing shadow into the curve beneath one painted eye, he felt a certainty settle over him with the quiet weight of a hand on the shoulder: he was not painting a likeness for the present, but for someone who had not yet arrived."
+                  ],
+                  "extensions": {}
+                },
+                {
+                  "number": 4,
+                  "first_paragraph_number": 4,
+                  "title": "Portrait hung",
+                  "summary": "The finished portrait is hung in the west corridor and the house vows never to move it.",
+                  "paragraphs": [
+                    "When the portrait was finished, the mistress of the house stood before it for a long time without speaking. Then she ordered it hung in the west corridor and instructed the staff that it was never to be removed, never to be covered, and never to be discussed with guests. Years later, after names had faded from ledgers and whole branches of the family had thinned into rumor, the house remained faithful to that instruction. Some promises, once made inside Harrowick House, did not weaken with time. They waited."
+                  ],
+                  "extensions": {}
+                }
+              ],
+              "extensions": {}
+            },
+            {
+              "title": "Chapter One: Byline After Midnight",
+              "type": "chapter",
+              "first_paragraph_number": 5,
+              "paragraphs": [
+                "Anna Karstane told herself she’d agreed to this for the story. That was the clean version she could say out loud: a first-person overnight in a “haunted” estate, written with enough skepticism to annoy the campus occult club and enough atmosphere to make the arts editor smile. The messier truth sat underneath it—her curiosity had teeth, and she’d always had the habit of touching things that warned her away.",
+                "The taxi’s heater worked in short bursts, like it was negotiating with the cold. Outside, rain stitched the night into something dense and private. The driver didn’t talk much, which Anna appreciated; she was already drafting the opening paragraph in her head and deleting it at the same time.",
+                "She looked like she belonged to the edge of a concert poster rather than a journalism department: black jeans, combat boots, a fitted leather jacket that smelled faintly of smoke and old perfume. A silver choker caught the occasional dashboard glow. Her eyeliner, applied with the confidence of practice, had started to soften at one corner where rain had found its way in—an imperfect smear that made her look tired and defiant at once.",
+                "In her bag were the tools of a student reporter from the late eighties: a notepad with dog-eared pages, a cheap film camera she’d borrowed from the media lab, and a small cassette recorder she used to dictate quotes so she wouldn’t lose them to adrenaline. She didn’t call it ghost-hunting. She called it documentation.",
+                "Her editor at the student paper had made a show of being responsible. *Don’t sensationalize,* he’d said, pushing his glasses up. *And don’t sue us.* Then he’d leaned closer and added, *If you come back with something good, I’ll put it above the sports column for once.*",
+                "Harrowick House sat on the edge of a town that pretended it didn’t have a history. The older locals didn’t talk about the manor so much as they talked around it, the way people skirted potholes they’d hit before. A cracked sign leaned in ivy: HARROWICK HOUSE. The taxi turned onto the gravel lane, and the tires made a sound like someone quietly grinding their teeth.",
+                "The estate appeared through the rain in pieces—gables, dark windows, a tower that held on to the sky. One upper window glowed with a dull warmth, a single square that looked almost domestic until you noticed how still it was. Anna took that in and filed it away. Lights had explanations. If she couldn’t find one, she’d write that down too.",
+                "A man waited under the portico, coat collar up, posture tight. Mr. Harrowick matched the voice from the phone: careful, controlled, the kind of person who measured his own words as if they cost money. He didn’t offer a dramatic greeting. He offered a keyring and a look that asked her to be competent.",
+                "“You’re Anna Karstane,” he said. He pronounced her name correctly, which surprised her.",
+                "“That’s me.” She tried a smile that came out more like a baring of teeth. “Student journalist. I’ll do my best to disappoint everyone who wants this to be a séance.”",
+                "Harrowick’s mouth twitched, a quick movement he didn’t let become a smile. “I don’t want theatrics,” he said. “I want someone who observes.” His gaze went to the recorder in her hand. “You’re recording?”",
+                "“Notes,” Anna said. “Quotes. Details. It keeps me honest.”",
+                "He nodded once. “Good. Then here are the terms. You stay inside until dawn. You don’t bring anyone in, and you don’t wander the grounds at night. If you decide to leave, you leave a note on the hall table. Clear and obvious. No riddles.”",
+                "“And in the morning?” Anna asked.",
+                "“The taxi returns at seven,” Harrowick said. “One knock at the door. If you answer, you leave. If you don’t, the driver waits ten minutes, then goes back to town and calls me. I return with a spare key.” His jaw tightened on the next part. “If I still can’t reach you by nine, I call emergency services. I don’t want attention,” he added, voice flattening, “and I want you alive more.”",
+                "Anna raised her brows. “That’s almost reassuring.”",
+                "“It’s practical,” Harrowick said. He hesitated, then looked past her shoulder as if the house were standing behind her like a person. “There’s one more thing. If you find… items. Letters, photographs, anything you think is related. Leave them where they are.”",
+                "“Because the house doesn’t like it?” Anna asked, aiming for lightness.",
+                "Harrowick’s eyes stayed dry. “Because I don’t trust what changes when things are moved,” he said. “And because I’m tired of being wrong about this place.”",
+                "The driver cleared his throat. Anna glanced back at the taxi, then at Harrowick. Alone meant alone; her editor had hated that part, but it made the feature cleaner. A witness who could be quoted, a setting that could do its work without an audience.",
+                "Harrowick stepped into the taxi’s back seat. The driver pulled away. Headlights swept across the front steps, made the wet stone shine, and then the lane swallowed the light. The engine noise thinned into rain and finally disappeared.",
+                "Silence took its place with unsettling speed. Anna stood under the portico and listened. Her pulse felt loud in her ears, and she resented it on principle. She dug out a cigarette, lit it with her back to the wind, and drew smoke into her lungs like it was punctuation.",
+                "She exhaled slowly. “It’s just a building,” she told herself, because saying it anchored her. The cigarette burned down faster than she expected. She crushed it under her boot and pocketed the pack again.",
+                "The front door opened with a weighty sigh of hinges. Inside, the air smelled of dry wood and something faintly floral, like old sachets. Anna stepped over the threshold and felt the temperature change against her skin, a coolness that didn’t belong to the season.",
+                "For a heartbeat, her perception did something odd. The hall seemed to tilt. She had the distinct sensation of hovering an inch behind herself, watching her own shoulders rise and fall under the leather jacket, watching her hand tighten around the keyring. The feeling snapped back so quickly it left a thin nausea behind.",
+                "Anna blinked, swallowed, and blamed adrenaline. She’d pulled all-nighters in the newsroom; her body did strange things when it wanted sleep and didn’t get it. That explanation tasted sensible, so she kept it.",
+                "The entrance hall rose high enough to swallow sound. A staircase climbed at the far end. Lamps cast weak pools of light through yellowed shades, and portraits covered the walls: severe men, pale women, children dressed like small adults. Their painted eyes didn’t follow her. They didn’t need to.",
+                "Anna picked a narrow table in the center of the hall and set up with the kind of deliberate neatness she pretended she didn’t possess. Notebook. Camera. Recorder. Flashlight. She liked order; it made the night feel like a series of tasks rather than a dare.",
+                "She pressed the recorder’s button and spoke softly, the way she did when she wanted her future self to trust her past self. “Entry one. Harrowick House. Friday night. Rain. Arrived twenty-two forty-seven.” She paused, listened to the room, then added, almost amused, “And yes, I’m alone. If you’re hearing this and I sound braver than I feel, that’s editing.”",
+                "She walked, keeping her dictation going in short bursts—drawing room, covered furniture, a faint smell of dust and fabric; library, rows of books that made her feel like an intruder in someone else’s private mind. She noted the mundane possibilities automatically: drafts, settling beams, animals in walls, old pipes expanding and contracting.",
+                "The house offered small interruptions. A cooler patch of air that moved against her wrist when there were no open windows. A subtle shift in pressure near the west corridor that made her ears feel full. Anna caught herself slowing, her body responding before her skepticism could organize a sentence.",
+                "She reached the corridor and felt something tighten behind her ribs. The portraits here were closer together, more intimate, less formal. Some of the faces looked unfinished around the edges, as if the painter had been interrupted and never returned.",
+                "Halfway down, one painting hung slightly lower than the others, the frame’s angle off by a few degrees. Anna stopped because her eyes stopped. The corridor seemed to narrow toward that frame, the house’s quiet arranging itself into a point.",
+                "She had the sense that her next breath mattered. She let it out anyway and stepped closer.",
+                "The portrait showed a young woman in nineteenth-century dress—dark lace at the throat, hair pinned in heavy curls. The painter had given her an expression that held both patience and amusement, as if she were waiting for someone to catch up.",
+                "Anna’s mouth dried.",
+                "The face was hers.",
+                "Not in the loose, flattering way people claimed strangers resembled each other. The same cheekbones. The same small asymmetry in the mouth. The same faint shadow beneath the left eye that makeup never fully erased. Even the tiny scar near her hairline, earned in childhood and usually hidden by her bangs, sat there on the painted skin like a signature.",
+                "She leaned in until her breath fogged the varnish. A date sat in the corner: **1894**.",
+                "Anna stepped back, recorder still running in her pocket, and tried to manufacture an explanation. Prank. Coincidence. Some creepy art student with too much time. Her mind offered options like flashcards, all of them flimsy.",
+                "A floorboard creaked upstairs.",
+                "Anna froze, then forced herself to move. She walked back to the hall table with the stiff carefulness of someone pretending she isn’t listening. She stopped the recorder, ejected the cassette, and rewound it, the mechanism’s whirr giving her something solid to hold on to.",
+                "She pressed play.",
+                "At first, the tape gave her rain, her own footsteps, the calmness she’d performed into the microphone. Then came a quiet exhale, so close it raised gooseflesh along her arms.",
+                "Anna held the recorder tighter.",
+                "A whisper surfaced under the breath, thin and structured, as if the sound had been threaded through static on purpose.",
+                "“An…na.”",
+                "Her name, pulled apart and put back together by something that didn’t use it often.",
+                "The tape clicked. Silence returned.",
+                "From the bottom of the staircase, something shifted into the edge of the lamplight—slow, deliberate—claiming the space where her skepticism had been standing a moment before."
+              ],
+              "statistics": {
+                "letter_count": 8090,
+                "digit_count": 4,
+                "other_character_count": 2157,
+                "word_count": 1809,
+                "sentence_count": 149
+              },
+              "scenes": [
+                {
+                  "number": 5,
+                  "first_paragraph_number": 5,
+                  "title": "Anna’s motivation",
+                  "summary": "Anna Karstane rationalizes her overnight assignment and reflects on her journalistic drive.",
+                  "paragraphs": [
+                    "Anna Karstane told herself she’d agreed to this for the story. That was the clean version she could say out loud: a first-person overnight in a “haunted” estate, written with enough skepticism to annoy the campus occult club and enough atmosphere to make the arts editor smile. The messier truth sat underneath it—her curiosity had teeth, and she’d always had the habit of touching things that warned her away.",
+                    "The taxi’s heater worked in short bursts, like it was negotiating with the cold. Outside, rain stitched the night into something dense and private. The driver didn’t talk much, which Anna appreciated; she was already drafting the opening paragraph in her head and deleting it at the same time.",
+                    "She looked like she belonged to the edge of a concert poster rather than a journalism department: black jeans, combat boots, a fitted leather jacket that smelled faintly of smoke and old perfume. A silver choker caught the occasional dashboard glow. Her eyeliner, applied with the confidence of practice, had started to soften at one corner where rain had found its way in—an imperfect smear that made her look tired and defiant at once.",
+                    "In her bag were the tools of a student reporter from the late eighties: a notepad with dog-eared pages, a cheap film camera she’d borrowed from the media lab, and a small cassette recorder she used to dictate quotes so she wouldn’t lose them to adrenaline. She didn’t call it ghost-hunting. She called it documentation.",
+                    "Her editor at the student paper had made a show of being responsible. *Don’t sensationalize,* he’d said, pushing his glasses up. *And don’t sue us.* Then he’d leaned closer and added, *If you come back with something good, I’ll put it above the sports column for once.*"
+                  ],
+                  "extensions": {}
+                },
+                {
+                  "number": 6,
+                  "first_paragraph_number": 10,
+                  "title": "Approach to the manor",
+                  "summary": "Anna’s taxi drives through rain toward Harrowick House, revealing the manor’s looming silhouette.",
+                  "paragraphs": [
+                    "Harrowick House sat on the edge of a town that pretended it didn’t have a history. The older locals didn’t talk about the manor so much as they talked around it, the way people skirted potholes they’d hit before. A cracked sign leaned in ivy: HARROWICK HOUSE. The taxi turned onto the gravel lane, and the tires made a sound like someone quietly grinding their teeth.",
+                    "The estate appeared through the rain in pieces—gables, dark windows, a tower that held on to the sky. One upper window glowed with a dull warmth, a single square that looked almost domestic until you noticed how still it was. Anna took that in and filed it away. Lights had explanations. If she couldn’t find one, she’d write that down too."
+                  ],
+                  "extensions": {}
+                },
+                {
+                  "number": 7,
+                  "first_paragraph_number": 12,
+                  "title": "First meeting",
+                  "summary": "Anna meets Mr. Harrowick at the portico, who greets her formally and hands over a keyring.",
+                  "paragraphs": [
+                    "A man waited under the portico, coat collar up, posture tight. Mr. Harrowick matched the voice from the phone: careful, controlled, the kind of person who measured his own words as if they cost money. He didn’t offer a dramatic greeting. He offered a keyring and a look that asked her to be competent.",
+                    "“You’re Anna Karstane,” he said. He pronounced her name correctly, which surprised her.",
+                    "“That’s me.” She tried a smile that came out more like a baring of teeth. “Student journalist. I’ll do my best to disappoint everyone who wants this to be a séance.”"
+                  ],
+                  "extensions": {}
+                },
+                {
+                  "number": 8,
+                  "first_paragraph_number": 15,
+                  "title": "Terms of stay",
+                  "summary": "Har‑rowick outlines the overnight terms, including staying until dawn and recording observations.",
+                  "paragraphs": [
+                    "Harrowick’s mouth twitched, a quick movement he didn’t let become a smile. “I don’t want theatrics,” he said. “I want someone who observes.” His gaze went to the recorder in her hand. “You’re recording?”",
+                    "“Notes,” Anna said. “Quotes. Details. It keeps me honest.”",
+                    "He nodded once. “Good. Then here are the terms. You stay inside until dawn. You don’t bring anyone in, and you don’t wander the grounds at night. If you decide to leave, you leave a note on the hall table. Clear and obvious. No riddles.”",
+                    "“And in the morning?” Anna asked.",
+                    "“The taxi returns at seven,” Harrowick said. “One knock at the door. If you answer, you leave. If you don’t, the driver waits ten minutes, then goes back to town and calls me. I return with a spare key.” His jaw tightened on the next part. “If I still can’t reach you by nine, I call emergency services. I don’t want attention,” he added, voice flattening, “and I want you alive more.”"
+                  ],
+                  "extensions": {}
+                },
+                {
+                  "number": 9,
+                  "first_paragraph_number": 20,
+                  "title": "Items and trust",
+                  "summary": "Anna asks about finding items; Harrowick explains his distrust of moving things in the house.",
+                  "paragraphs": [
+                    "Anna raised her brows. “That’s almost reassuring.”",
+                    "“It’s practical,” Harrowick said. He hesitated, then looked past her shoulder as if the house were standing behind her like a person. “There’s one more thing. If you find… items. Letters, photographs, anything you think is related. Leave them where they are.”",
+                    "“Because the house doesn’t like it?” Anna asked, aiming for lightness.",
+                    "Harrowick’s eyes stayed dry. “Because I don’t trust what changes when things are moved,” he said. “And because I’m tired of being wrong about this place.”",
+                    "The driver cleared his throat. Anna glanced back at the taxi, then at Harrowick. Alone meant alone; her editor had hated that part, but it made the feature cleaner. A witness who could be quoted, a setting that could do its work without an audience."
+                  ],
+                  "extensions": {}
+                },
+                {
+                  "number": 10,
+                  "first_paragraph_number": 25,
+                  "title": "Alone outside",
+                  "summary": "Har‑rowick departs in the taxi; Anna waits alone under the portico, lights flicker and she smokes.",
+                  "paragraphs": [
+                    "Harrowick stepped into the taxi’s back seat. The driver pulled away. Headlights swept across the front steps, made the wet stone shine, and then the lane swallowed the light. The engine noise thinned into rain and finally disappeared.",
+                    "Silence took its place with unsettling speed. Anna stood under the portico and listened. Her pulse felt loud in her ears, and she resented it on principle. She dug out a cigarette, lit it with her back to the wind, and drew smoke into her lungs like it was punctuation.",
+                    "She exhaled slowly. “It’s just a building,” she told herself, because saying it anchored her. The cigarette burned down faster than she expected. She crushed it under her boot and pocketed the pack again."
+                  ],
+                  "extensions": {}
+                },
+                {
+                  "number": 11,
+                  "first_paragraph_number": 28,
+                  "title": "Entering the foyer",
+                  "summary": "Anna enters the foyer, feeling a sudden tilt in perception before noting the hall’s size and portraits.",
+                  "paragraphs": [
+                    "The front door opened with a weighty sigh of hinges. Inside, the air smelled of dry wood and something faintly floral, like old sachets. Anna stepped over the threshold and felt the temperature change against her skin, a coolness that didn’t belong to the season.",
+                    "For a heartbeat, her perception did something odd. The hall seemed to tilt. She had the distinct sensation of hovering an inch behind herself, watching her own shoulders rise and fall under the leather jacket, watching her hand tighten around the keyring. The feeling snapped back so quickly it left a thin nausea behind.",
+                    "Anna blinked, swallowed, and blamed adrenaline. She’d pulled all-nighters in the newsroom; her body did strange things when it wanted sleep and didn’t get it. That explanation tasted sensible, so she kept it.",
+                    "The entrance hall rose high enough to swallow sound. A staircase climbed at the far end. Lamps cast weak pools of light through yellowed shades, and portraits covered the walls: severe men, pale women, children dressed like small adults. Their painted eyes didn’t follow her. They didn’t need to."
+                  ],
+                  "extensions": {}
+                },
+                {
+                  "number": 12,
+                  "first_paragraph_number": 32,
+                  "title": "Setting up",
+                  "summary": "She sets up her notebook, camera, and recorder on a table and begins dictating her first entry.",
+                  "paragraphs": [
+                    "Anna picked a narrow table in the center of the hall and set up with the kind of deliberate neatness she pretended she didn’t possess. Notebook. Camera. Recorder. Flashlight. She liked order; it made the night feel like a series of tasks rather than a dare.",
+                    "She pressed the recorder’s button and spoke softly, the way she did when she wanted her future self to trust her past self. “Entry one. Harrowick House. Friday night. Rain. Arrived twenty-two forty-seven.” She paused, listened to the room, then added, almost amused, “And yes, I’m alone. If you’re hearing this and I sound braver than I feel, that’s editing.”",
+                    "She walked, keeping her dictation going in short bursts—drawing room, covered furniture, a faint smell of dust and fabric; library, rows of books that made her feel like an intruder in someone else’s private mind. She noted the mundane possibilities automatically: drafts, settling beams, animals in walls, old pipes expanding and contracting."
+                  ],
+                  "extensions": {}
+                },
+                {
+                  "number": 13,
+                  "first_paragraph_number": 35,
+                  "title": "Corridor sensations",
+                  "summary": "While exploring, Anna feels subtle drafts and reaches the west corridor where the portraits feel intimate.",
+                  "paragraphs": [
+                    "The house offered small interruptions. A cooler patch of air that moved against her wrist when there were no open windows. A subtle shift in pressure near the west corridor that made her ears feel full. Anna caught herself slowing, her body responding before her skepticism could organize a sentence.",
+                    "She reached the corridor and felt something tighten behind her ribs. The portraits here were closer together, more intimate, less formal. Some of the faces looked unfinished around the edges, as if the painter had been interrupted and never returned.",
+                    "Halfway down, one painting hung slightly lower than the others, the frame’s angle off by a few degrees. Anna stopped because her eyes stopped. The corridor seemed to narrow toward that frame, the house’s quiet arranging itself into a point."
+                  ],
+                  "extensions": {}
+                },
+                {
+                  "number": 14,
+                  "first_paragraph_number": 38,
+                  "title": "Approaching the portrait",
+                  "summary": "She stops before a slightly lower portrait, feeling her breath matter as she approaches.",
+                  "paragraphs": [
+                    "She had the sense that her next breath mattered. She let it out anyway and stepped closer.",
+                    "The portrait showed a young woman in nineteenth-century dress—dark lace at the throat, hair pinned in heavy curls. The painter had given her an expression that held both patience and amusement, as if she were waiting for someone to catch up.",
+                    "Anna’s mouth dried.",
+                    "The face was hers.",
+                    "Not in the loose, flattering way people claimed strangers resembled each other. The same cheekbones. The same small asymmetry in the mouth. The same faint shadow beneath the left eye that makeup never fully erased. Even the tiny scar near her hairline, earned in childhood and usually hidden by her bangs, sat there on the painted skin like a signature."
+                  ],
+                  "extensions": {}
+                },
+                {
+                  "number": 15,
+                  "first_paragraph_number": 43,
+                  "title": "Recognition",
+                  "summary": "The portrait reveals a young woman identical to Anna, dated 1894, prompting her to search for explanations.",
+                  "paragraphs": [
+                    "She leaned in until her breath fogged the varnish. A date sat in the corner: **1894**.",
+                    "Anna stepped back, recorder still running in her pocket, and tried to manufacture an explanation. Prank. Coincidence. Some creepy art student with too much time. Her mind offered options like flashcards, all of them flimsy."
+                  ],
+                  "extensions": {}
+                },
+                {
+                  "number": 16,
+                  "first_paragraph_number": 45,
+                  "title": "Recorded whisper",
+                  "summary": "A floorboard creaks; Anna rewinds her recorder, plays it back, and hears a whispered version of her name.",
+                  "paragraphs": [
+                    "A floorboard creaked upstairs.",
+                    "Anna froze, then forced herself to move. She walked back to the hall table with the stiff carefulness of someone pretending she isn’t listening. She stopped the recorder, ejected the cassette, and rewound it, the mechanism’s whirr giving her something solid to hold on to.",
+                    "She pressed play.",
+                    "At first, the tape gave her rain, her own footsteps, the calmness she’d performed into the microphone. Then came a quiet exhale, so close it raised gooseflesh along her arms.",
+                    "Anna held the recorder tighter.",
+                    "A whisper surfaced under the breath, thin and structured, as if the sound had been threaded through static on purpose.",
+                    "“An…na.”"
+                  ],
+                  "extensions": {}
+                },
+                {
+                  "number": 17,
+                  "first_paragraph_number": 52,
+                  "title": "Emerging presence",
+                  "summary": "The tape clicks back to silence as a shape moves into the lamplight at the bottom of the stairs.",
+                  "paragraphs": [
+                    "Her name, pulled apart and put back together by something that didn’t use it often.",
+                    "The tape clicked. Silence returned.",
+                    "From the bottom of the staircase, something shifted into the edge of the lamplight—slow, deliberate—claiming the space where her skepticism had been standing a moment before."
+                  ],
+                  "extensions": {}
+                }
+              ],
+              "extensions": {}
+            }
+          ]
+        },
+        "extensions": {
+          "__carmilla_flat_file_node__": "file",
+          "value": {}
+        }
+      }
+    }
+  },
+  "bindings": {
+    "previous_summaries": {
+      "kind": "store_scope",
+      "store": "case",
+      "path": "previous_summaries"
+    },
+    "chapter_text_with_paragraphs": {
+      "kind": "store_scope",
+      "store": "case",
+      "path": "chapter_text_with_paragraphs"
+    },
+    "dir": {
+      "kind": "store_scope",
+      "store": "case",
+      "path": "dir"
+    },
+    "previous_dirs": {
+      "kind": "store_scope",
+      "store": "case",
+      "path": "previous_dirs"
+    },
+    "next_dirs": {
+      "kind": "store_scope",
+      "store": "case",
+      "path": "next_dirs"
+    },
+    "title": {
+      "kind": "store_scope",
+      "store": "case",
+      "path": "title"
+    },
+    "story_title": {
+      "kind": "store_scope",
+      "store": "case",
+      "path": "story_title"
+    },
+    "first_paragraph_number": {
+      "kind": "store_scope",
+      "store": "case",
+      "path": "first_paragraph_number"
+    },
+    "last_paragraph_number": {
+      "kind": "store_scope",
+      "store": "case",
+      "path": "last_paragraph_number"
+    },
+    "paragraphs": {
+      "kind": "store_scope",
+      "store": "case",
+      "path": "paragraphs"
+    },
+    "parts": {
+      "kind": "store_scope",
+      "store": "case",
+      "path": "parts"
+    },
+    "extensions": {
+      "kind": "store_scope",
+      "store": "case",
+      "path": "extensions"
+    }
+  },
   "source": {
     "type": "carmilla.workflow_step_eval",
     "workflow_name": "story_parser",
@@ -9,374 +479,5 @@
     "case_name": "the-portrait-at-harrowick-house-5",
     "target_step": "SPLIT_SCENES[01_chapter_one_byline_after_midnight]",
     "captured_at": "2026-06-05T13:04:59.225Z"
-  },
-  "variables": {
-    "previous_summaries": [],
-    "chapter_text_with_paragraphs": "# The Portrait at Harrowick House\n\n## Prologue\n\n#### Paragraph 1\nIn the autumn of 1894, Harrowick House kept its lights burning later than usual. Rain worried at the windows, and the servants moved through the corridors with lowered voices, carrying coal, lamps, and trays they hoped would not be sent back untouched. Something in the household had shifted during the previous month. No one named it. The house did not encourage that kind of honesty.\n\n#### Paragraph 2\nThe portrait was begun on a Thursday in the west corridor, where the light held longest and the walls kept a little warmth after sunset. The painter, a narrow man with tobacco-stained fingers, had been summoned in haste and told only that the work was to be done quickly, accurately, and without questions. He agreed to two of those terms. By the second sitting he had already decided that accuracy was the dangerous part.\n\n#### Paragraph 3\nThe young woman who posed for him wore black lace at her throat and dark velvet at her wrists. Her posture never faltered. Her expression changed only in degrees too small to measure, yet the room altered whenever she lifted her eyes from her folded hands. On the first day, the painter blamed fatigue for the strange pull of her face. On the second, he blamed the weather. On the third, while mixing shadow into the curve beneath one painted eye, he felt a certainty settle over him with the quiet weight of a hand on the shoulder: he was not painting a likeness for the present, but for someone who had not yet arrived.\n\n#### Paragraph 4\nWhen the portrait was finished, the mistress of the house stood before it for a long time without speaking. Then she ordered it hung in the west corridor and instructed the staff that it was never to be removed, never to be covered, and never to be discussed with guests. Years later, after names had faded from ledgers and whole branches of the family had thinned into rumor, the house remained faithful to that instruction. Some promises, once made inside Harrowick House, did not weaken with time. They waited.\n\n## Chapter One: Byline After Midnight\n\n#### Paragraph 5\nAnna Karstane told herself she’d agreed to this for the story. That was the clean version she could say out loud: a first-person overnight in a “haunted” estate, written with enough skepticism to annoy the campus occult club and enough atmosphere to make the arts editor smile. The messier truth sat underneath it—her curiosity had teeth, and she’d always had the habit of touching things that warned her away.\n\n#### Paragraph 6\nThe taxi’s heater worked in short bursts, like it was negotiating with the cold. Outside, rain stitched the night into something dense and private. The driver didn’t talk much, which Anna appreciated; she was already drafting the opening paragraph in her head and deleting it at the same time.\n\n#### Paragraph 7\nShe looked like she belonged to the edge of a concert poster rather than a journalism department: black jeans, combat boots, a fitted leather jacket that smelled faintly of smoke and old perfume. A silver choker caught the occasional dashboard glow. Her eyeliner, applied with the confidence of practice, had started to soften at one corner where rain had found its way in—an imperfect smear that made her look tired and defiant at once.\n\n#### Paragraph 8\nIn her bag were the tools of a student reporter from the late eighties: a notepad with dog-eared pages, a cheap film camera she’d borrowed from the media lab, and a small cassette recorder she used to dictate quotes so she wouldn’t lose them to adrenaline. She didn’t call it ghost-hunting. She called it documentation.\n\n#### Paragraph 9\nHer editor at the student paper had made a show of being responsible. *Don’t sensationalize,* he’d said, pushing his glasses up. *And don’t sue us.* Then he’d leaned closer and added, *If you come back with something good, I’ll put it above the sports column for once.*\n\n#### Paragraph 10\nHarrowick House sat on the edge of a town that pretended it didn’t have a history. The older locals didn’t talk about the manor so much as they talked around it, the way people skirted potholes they’d hit before. A cracked sign leaned in ivy: HARROWICK HOUSE. The taxi turned onto the gravel lane, and the tires made a sound like someone quietly grinding their teeth.\n\n#### Paragraph 11\nThe estate appeared through the rain in pieces—gables, dark windows, a tower that held on to the sky. One upper window glowed with a dull warmth, a single square that looked almost domestic until you noticed how still it was. Anna took that in and filed it away. Lights had explanations. If she couldn’t find one, she’d write that down too.\n\n#### Paragraph 12\nA man waited under the portico, coat collar up, posture tight. Mr. Harrowick matched the voice from the phone: careful, controlled, the kind of person who measured his own words as if they cost money. He didn’t offer a dramatic greeting. He offered a keyring and a look that asked her to be competent.\n\n#### Paragraph 13\n“You’re Anna Karstane,” he said. He pronounced her name correctly, which surprised her.\n\n#### Paragraph 14\n“That’s me.” She tried a smile that came out more like a baring of teeth. “Student journalist. I’ll do my best to disappoint everyone who wants this to be a séance.”\n\n#### Paragraph 15\nHarrowick’s mouth twitched, a quick movement he didn’t let become a smile. “I don’t want theatrics,” he said. “I want someone who observes.” His gaze went to the recorder in her hand. “You’re recording?”\n\n#### Paragraph 16\n“Notes,” Anna said. “Quotes. Details. It keeps me honest.”\n\n#### Paragraph 17\nHe nodded once. “Good. Then here are the terms. You stay inside until dawn. You don’t bring anyone in, and you don’t wander the grounds at night. If you decide to leave, you leave a note on the hall table. Clear and obvious. No riddles.”\n\n#### Paragraph 18\n“And in the morning?” Anna asked.\n\n#### Paragraph 19\n“The taxi returns at seven,” Harrowick said. “One knock at the door. If you answer, you leave. If you don’t, the driver waits ten minutes, then goes back to town and calls me. I return with a spare key.” His jaw tightened on the next part. “If I still can’t reach you by nine, I call emergency services. I don’t want attention,” he added, voice flattening, “and I want you alive more.”\n\n#### Paragraph 20\nAnna raised her brows. “That’s almost reassuring.”\n\n#### Paragraph 21\n“It’s practical,” Harrowick said. He hesitated, then looked past her shoulder as if the house were standing behind her like a person. “There’s one more thing. If you find… items. Letters, photographs, anything you think is related. Leave them where they are.”\n\n#### Paragraph 22\n“Because the house doesn’t like it?” Anna asked, aiming for lightness.\n\n#### Paragraph 23\nHarrowick’s eyes stayed dry. “Because I don’t trust what changes when things are moved,” he said. “And because I’m tired of being wrong about this place.”\n\n#### Paragraph 24\nThe driver cleared his throat. Anna glanced back at the taxi, then at Harrowick. Alone meant alone; her editor had hated that part, but it made the feature cleaner. A witness who could be quoted, a setting that could do its work without an audience.\n\n#### Paragraph 25\nHarrowick stepped into the taxi’s back seat. The driver pulled away. Headlights swept across the front steps, made the wet stone shine, and then the lane swallowed the light. The engine noise thinned into rain and finally disappeared.\n\n#### Paragraph 26\nSilence took its place with unsettling speed. Anna stood under the portico and listened. Her pulse felt loud in her ears, and she resented it on principle. She dug out a cigarette, lit it with her back to the wind, and drew smoke into her lungs like it was punctuation.\n\n#### Paragraph 27\nShe exhaled slowly. “It’s just a building,” she told herself, because saying it anchored her. The cigarette burned down faster than she expected. She crushed it under her boot and pocketed the pack again.\n\n#### Paragraph 28\nThe front door opened with a weighty sigh of hinges. Inside, the air smelled of dry wood and something faintly floral, like old sachets. Anna stepped over the threshold and felt the temperature change against her skin, a coolness that didn’t belong to the season.\n\n#### Paragraph 29\nFor a heartbeat, her perception did something odd. The hall seemed to tilt. She had the distinct sensation of hovering an inch behind herself, watching her own shoulders rise and fall under the leather jacket, watching her hand tighten around the keyring. The feeling snapped back so quickly it left a thin nausea behind.\n\n#### Paragraph 30\nAnna blinked, swallowed, and blamed adrenaline. She’d pulled all-nighters in the newsroom; her body did strange things when it wanted sleep and didn’t get it. That explanation tasted sensible, so she kept it.\n\n#### Paragraph 31\nThe entrance hall rose high enough to swallow sound. A staircase climbed at the far end. Lamps cast weak pools of light through yellowed shades, and portraits covered the walls: severe men, pale women, children dressed like small adults. Their painted eyes didn’t follow her. They didn’t need to.\n\n#### Paragraph 32\nAnna picked a narrow table in the center of the hall and set up with the kind of deliberate neatness she pretended she didn’t possess. Notebook. Camera. Recorder. Flashlight. She liked order; it made the night feel like a series of tasks rather than a dare.\n\n#### Paragraph 33\nShe pressed the recorder’s button and spoke softly, the way she did when she wanted her future self to trust her past self. “Entry one. Harrowick House. Friday night. Rain. Arrived twenty-two forty-seven.” She paused, listened to the room, then added, almost amused, “And yes, I’m alone. If you’re hearing this and I sound braver than I feel, that’s editing.”\n\n#### Paragraph 34\nShe walked, keeping her dictation going in short bursts—drawing room, covered furniture, a faint smell of dust and fabric; library, rows of books that made her feel like an intruder in someone else’s private mind. She noted the mundane possibilities automatically: drafts, settling beams, animals in walls, old pipes expanding and contracting.\n\n#### Paragraph 35\nThe house offered small interruptions. A cooler patch of air that moved against her wrist when there were no open windows. A subtle shift in pressure near the west corridor that made her ears feel full. Anna caught herself slowing, her body responding before her skepticism could organize a sentence.\n\n#### Paragraph 36\nShe reached the corridor and felt something tighten behind her ribs. The portraits here were closer together, more intimate, less formal. Some of the faces looked unfinished around the edges, as if the painter had been interrupted and never returned.\n\n#### Paragraph 37\nHalfway down, one painting hung slightly lower than the others, the frame’s angle off by a few degrees. Anna stopped because her eyes stopped. The corridor seemed to narrow toward that frame, the house’s quiet arranging itself into a point.\n\n#### Paragraph 38\nShe had the sense that her next breath mattered. She let it out anyway and stepped closer.\n\n#### Paragraph 39\nThe portrait showed a young woman in nineteenth-century dress—dark lace at the throat, hair pinned in heavy curls. The painter had given her an expression that held both patience and amusement, as if she were waiting for someone to catch up.\n\n#### Paragraph 40\nAnna’s mouth dried.\n\n#### Paragraph 41\nThe face was hers.\n\n#### Paragraph 42\nNot in the loose, flattering way people claimed strangers resembled each other. The same cheekbones. The same small asymmetry in the mouth. The same faint shadow beneath the left eye that makeup never fully erased. Even the tiny scar near her hairline, earned in childhood and usually hidden by her bangs, sat there on the painted skin like a signature.\n\n#### Paragraph 43\nShe leaned in until her breath fogged the varnish. A date sat in the corner: **1894**.\n\n#### Paragraph 44\nAnna stepped back, recorder still running in her pocket, and tried to manufacture an explanation. Prank. Coincidence. Some creepy art student with too much time. Her mind offered options like flashcards, all of them flimsy.\n\n#### Paragraph 45\nA floorboard creaked upstairs.\n\n#### Paragraph 46\nAnna froze, then forced herself to move. She walked back to the hall table with the stiff carefulness of someone pretending she isn’t listening. She stopped the recorder, ejected the cassette, and rewound it, the mechanism’s whirr giving her something solid to hold on to.\n\n#### Paragraph 47\nShe pressed play.\n\n#### Paragraph 48\nAt first, the tape gave her rain, her own footsteps, the calmness she’d performed into the microphone. Then came a quiet exhale, so close it raised gooseflesh along her arms.\n\n#### Paragraph 49\nAnna held the recorder tighter.\n\n#### Paragraph 50\nA whisper surfaced under the breath, thin and structured, as if the sound had been threaded through static on purpose.\n\n#### Paragraph 51\n“An…na.”\n\n#### Paragraph 52\nHer name, pulled apart and put back together by something that didn’t use it often.\n\n#### Paragraph 53\nThe tape clicked. Silence returned.\n\n#### Paragraph 54\nFrom the bottom of the staircase, something shifted into the edge of the lamplight—slow, deliberate—claiming the space where her skepticism had been standing a moment before.\n\n"
-  },
-  "structured_validation_context": {
-    "dir": "01_chapter_one_byline_after_midnight",
-    "previous_dirs": [],
-    "next_dirs": [
-      "02_chapter_two_the_house_takes_dictation"
-    ],
-    "title": "Chapter One: Byline After Midnight",
-    "story_title": "The Portrait at Harrowick House",
-    "first_paragraph_number": 1,
-    "last_paragraph_number": 54,
-    "paragraphs": [
-      "In the autumn of 1894, Harrowick House kept its lights burning later than usual. Rain worried at the windows, and the servants moved through the corridors with lowered voices, carrying coal, lamps, and trays they hoped would not be sent back untouched. Something in the household had shifted during the previous month. No one named it. The house did not encourage that kind of honesty.",
-      "The portrait was begun on a Thursday in the west corridor, where the light held longest and the walls kept a little warmth after sunset. The painter, a narrow man with tobacco-stained fingers, had been summoned in haste and told only that the work was to be done quickly, accurately, and without questions. He agreed to two of those terms. By the second sitting he had already decided that accuracy was the dangerous part.",
-      "The young woman who posed for him wore black lace at her throat and dark velvet at her wrists. Her posture never faltered. Her expression changed only in degrees too small to measure, yet the room altered whenever she lifted her eyes from her folded hands. On the first day, the painter blamed fatigue for the strange pull of her face. On the second, he blamed the weather. On the third, while mixing shadow into the curve beneath one painted eye, he felt a certainty settle over him with the quiet weight of a hand on the shoulder: he was not painting a likeness for the present, but for someone who had not yet arrived.",
-      "When the portrait was finished, the mistress of the house stood before it for a long time without speaking. Then she ordered it hung in the west corridor and instructed the staff that it was never to be removed, never to be covered, and never to be discussed with guests. Years later, after names had faded from ledgers and whole branches of the family had thinned into rumor, the house remained faithful to that instruction. Some promises, once made inside Harrowick House, did not weaken with time. They waited.",
-      "Anna Karstane told herself she’d agreed to this for the story. That was the clean version she could say out loud: a first-person overnight in a “haunted” estate, written with enough skepticism to annoy the campus occult club and enough atmosphere to make the arts editor smile. The messier truth sat underneath it—her curiosity had teeth, and she’d always had the habit of touching things that warned her away.",
-      "The taxi’s heater worked in short bursts, like it was negotiating with the cold. Outside, rain stitched the night into something dense and private. The driver didn’t talk much, which Anna appreciated; she was already drafting the opening paragraph in her head and deleting it at the same time.",
-      "She looked like she belonged to the edge of a concert poster rather than a journalism department: black jeans, combat boots, a fitted leather jacket that smelled faintly of smoke and old perfume. A silver choker caught the occasional dashboard glow. Her eyeliner, applied with the confidence of practice, had started to soften at one corner where rain had found its way in—an imperfect smear that made her look tired and defiant at once.",
-      "In her bag were the tools of a student reporter from the late eighties: a notepad with dog-eared pages, a cheap film camera she’d borrowed from the media lab, and a small cassette recorder she used to dictate quotes so she wouldn’t lose them to adrenaline. She didn’t call it ghost-hunting. She called it documentation.",
-      "Her editor at the student paper had made a show of being responsible. *Don’t sensationalize,* he’d said, pushing his glasses up. *And don’t sue us.* Then he’d leaned closer and added, *If you come back with something good, I’ll put it above the sports column for once.*",
-      "Harrowick House sat on the edge of a town that pretended it didn’t have a history. The older locals didn’t talk about the manor so much as they talked around it, the way people skirted potholes they’d hit before. A cracked sign leaned in ivy: HARROWICK HOUSE. The taxi turned onto the gravel lane, and the tires made a sound like someone quietly grinding their teeth.",
-      "The estate appeared through the rain in pieces—gables, dark windows, a tower that held on to the sky. One upper window glowed with a dull warmth, a single square that looked almost domestic until you noticed how still it was. Anna took that in and filed it away. Lights had explanations. If she couldn’t find one, she’d write that down too.",
-      "A man waited under the portico, coat collar up, posture tight. Mr. Harrowick matched the voice from the phone: careful, controlled, the kind of person who measured his own words as if they cost money. He didn’t offer a dramatic greeting. He offered a keyring and a look that asked her to be competent.",
-      "“You’re Anna Karstane,” he said. He pronounced her name correctly, which surprised her.",
-      "“That’s me.” She tried a smile that came out more like a baring of teeth. “Student journalist. I’ll do my best to disappoint everyone who wants this to be a séance.”",
-      "Harrowick’s mouth twitched, a quick movement he didn’t let become a smile. “I don’t want theatrics,” he said. “I want someone who observes.” His gaze went to the recorder in her hand. “You’re recording?”",
-      "“Notes,” Anna said. “Quotes. Details. It keeps me honest.”",
-      "He nodded once. “Good. Then here are the terms. You stay inside until dawn. You don’t bring anyone in, and you don’t wander the grounds at night. If you decide to leave, you leave a note on the hall table. Clear and obvious. No riddles.”",
-      "“And in the morning?” Anna asked.",
-      "“The taxi returns at seven,” Harrowick said. “One knock at the door. If you answer, you leave. If you don’t, the driver waits ten minutes, then goes back to town and calls me. I return with a spare key.” His jaw tightened on the next part. “If I still can’t reach you by nine, I call emergency services. I don’t want attention,” he added, voice flattening, “and I want you alive more.”",
-      "Anna raised her brows. “That’s almost reassuring.”",
-      "“It’s practical,” Harrowick said. He hesitated, then looked past her shoulder as if the house were standing behind her like a person. “There’s one more thing. If you find… items. Letters, photographs, anything you think is related. Leave them where they are.”",
-      "“Because the house doesn’t like it?” Anna asked, aiming for lightness.",
-      "Harrowick’s eyes stayed dry. “Because I don’t trust what changes when things are moved,” he said. “And because I’m tired of being wrong about this place.”",
-      "The driver cleared his throat. Anna glanced back at the taxi, then at Harrowick. Alone meant alone; her editor had hated that part, but it made the feature cleaner. A witness who could be quoted, a setting that could do its work without an audience.",
-      "Harrowick stepped into the taxi’s back seat. The driver pulled away. Headlights swept across the front steps, made the wet stone shine, and then the lane swallowed the light. The engine noise thinned into rain and finally disappeared.",
-      "Silence took its place with unsettling speed. Anna stood under the portico and listened. Her pulse felt loud in her ears, and she resented it on principle. She dug out a cigarette, lit it with her back to the wind, and drew smoke into her lungs like it was punctuation.",
-      "She exhaled slowly. “It’s just a building,” she told herself, because saying it anchored her. The cigarette burned down faster than she expected. She crushed it under her boot and pocketed the pack again.",
-      "The front door opened with a weighty sigh of hinges. Inside, the air smelled of dry wood and something faintly floral, like old sachets. Anna stepped over the threshold and felt the temperature change against her skin, a coolness that didn’t belong to the season.",
-      "For a heartbeat, her perception did something odd. The hall seemed to tilt. She had the distinct sensation of hovering an inch behind herself, watching her own shoulders rise and fall under the leather jacket, watching her hand tighten around the keyring. The feeling snapped back so quickly it left a thin nausea behind.",
-      "Anna blinked, swallowed, and blamed adrenaline. She’d pulled all-nighters in the newsroom; her body did strange things when it wanted sleep and didn’t get it. That explanation tasted sensible, so she kept it.",
-      "The entrance hall rose high enough to swallow sound. A staircase climbed at the far end. Lamps cast weak pools of light through yellowed shades, and portraits covered the walls: severe men, pale women, children dressed like small adults. Their painted eyes didn’t follow her. They didn’t need to.",
-      "Anna picked a narrow table in the center of the hall and set up with the kind of deliberate neatness she pretended she didn’t possess. Notebook. Camera. Recorder. Flashlight. She liked order; it made the night feel like a series of tasks rather than a dare.",
-      "She pressed the recorder’s button and spoke softly, the way she did when she wanted her future self to trust her past self. “Entry one. Harrowick House. Friday night. Rain. Arrived twenty-two forty-seven.” She paused, listened to the room, then added, almost amused, “And yes, I’m alone. If you’re hearing this and I sound braver than I feel, that’s editing.”",
-      "She walked, keeping her dictation going in short bursts—drawing room, covered furniture, a faint smell of dust and fabric; library, rows of books that made her feel like an intruder in someone else’s private mind. She noted the mundane possibilities automatically: drafts, settling beams, animals in walls, old pipes expanding and contracting.",
-      "The house offered small interruptions. A cooler patch of air that moved against her wrist when there were no open windows. A subtle shift in pressure near the west corridor that made her ears feel full. Anna caught herself slowing, her body responding before her skepticism could organize a sentence.",
-      "She reached the corridor and felt something tighten behind her ribs. The portraits here were closer together, more intimate, less formal. Some of the faces looked unfinished around the edges, as if the painter had been interrupted and never returned.",
-      "Halfway down, one painting hung slightly lower than the others, the frame’s angle off by a few degrees. Anna stopped because her eyes stopped. The corridor seemed to narrow toward that frame, the house’s quiet arranging itself into a point.",
-      "She had the sense that her next breath mattered. She let it out anyway and stepped closer.",
-      "The portrait showed a young woman in nineteenth-century dress—dark lace at the throat, hair pinned in heavy curls. The painter had given her an expression that held both patience and amusement, as if she were waiting for someone to catch up.",
-      "Anna’s mouth dried.",
-      "The face was hers.",
-      "Not in the loose, flattering way people claimed strangers resembled each other. The same cheekbones. The same small asymmetry in the mouth. The same faint shadow beneath the left eye that makeup never fully erased. Even the tiny scar near her hairline, earned in childhood and usually hidden by her bangs, sat there on the painted skin like a signature.",
-      "She leaned in until her breath fogged the varnish. A date sat in the corner: **1894**.",
-      "Anna stepped back, recorder still running in her pocket, and tried to manufacture an explanation. Prank. Coincidence. Some creepy art student with too much time. Her mind offered options like flashcards, all of them flimsy.",
-      "A floorboard creaked upstairs.",
-      "Anna froze, then forced herself to move. She walked back to the hall table with the stiff carefulness of someone pretending she isn’t listening. She stopped the recorder, ejected the cassette, and rewound it, the mechanism’s whirr giving her something solid to hold on to.",
-      "She pressed play.",
-      "At first, the tape gave her rain, her own footsteps, the calmness she’d performed into the microphone. Then came a quiet exhale, so close it raised gooseflesh along her arms.",
-      "Anna held the recorder tighter.",
-      "A whisper surfaced under the breath, thin and structured, as if the sound had been threaded through static on purpose.",
-      "“An…na.”",
-      "Her name, pulled apart and put back together by something that didn’t use it often.",
-      "The tape clicked. Silence returned.",
-      "From the bottom of the staircase, something shifted into the edge of the lamplight—slow, deliberate—claiming the space where her skepticism had been standing a moment before."
-    ],
-    "parts": [
-      {
-        "title": "Prologue",
-        "type": "prologue",
-        "first_paragraph_number": 1,
-        "paragraphs": [
-          "In the autumn of 1894, Harrowick House kept its lights burning later than usual. Rain worried at the windows, and the servants moved through the corridors with lowered voices, carrying coal, lamps, and trays they hoped would not be sent back untouched. Something in the household had shifted during the previous month. No one named it. The house did not encourage that kind of honesty.",
-          "The portrait was begun on a Thursday in the west corridor, where the light held longest and the walls kept a little warmth after sunset. The painter, a narrow man with tobacco-stained fingers, had been summoned in haste and told only that the work was to be done quickly, accurately, and without questions. He agreed to two of those terms. By the second sitting he had already decided that accuracy was the dangerous part.",
-          "The young woman who posed for him wore black lace at her throat and dark velvet at her wrists. Her posture never faltered. Her expression changed only in degrees too small to measure, yet the room altered whenever she lifted her eyes from her folded hands. On the first day, the painter blamed fatigue for the strange pull of her face. On the second, he blamed the weather. On the third, while mixing shadow into the curve beneath one painted eye, he felt a certainty settle over him with the quiet weight of a hand on the shoulder: he was not painting a likeness for the present, but for someone who had not yet arrived.",
-          "When the portrait was finished, the mistress of the house stood before it for a long time without speaking. Then she ordered it hung in the west corridor and instructed the staff that it was never to be removed, never to be covered, and never to be discussed with guests. Years later, after names had faded from ledgers and whole branches of the family had thinned into rumor, the house remained faithful to that instruction. Some promises, once made inside Harrowick House, did not weaken with time. They waited."
-        ],
-        "statistics": {
-          "letter_count": 1553,
-          "digit_count": 4,
-          "other_character_count": 387,
-          "word_count": 344,
-          "sentence_count": 20
-        },
-        "scenes": [
-          {
-            "number": 1,
-            "first_paragraph_number": 1,
-            "title": "Rain‑lit corridors",
-            "summary": "Rainy autumn night finds Harrowick House dimly lit as servants move quietly through its corridors.",
-            "paragraphs": [
-              "In the autumn of 1894, Harrowick House kept its lights burning later than usual. Rain worried at the windows, and the servants moved through the corridors with lowered voices, carrying coal, lamps, and trays they hoped would not be sent back untouched. Something in the household had shifted during the previous month. No one named it. The house did not encourage that kind of honesty."
-            ],
-            "extensions": {}
-          },
-          {
-            "number": 2,
-            "first_paragraph_number": 2,
-            "title": "Commissioned portrait",
-            "summary": "A painter is summoned to the west corridor to quickly begin a portrait under vague orders.",
-            "paragraphs": [
-              "The portrait was begun on a Thursday in the west corridor, where the light held longest and the walls kept a little warmth after sunset. The painter, a narrow man with tobacco-stained fingers, had been summoned in haste and told only that the work was to be done quickly, accurately, and without questions. He agreed to two of those terms. By the second sitting he had already decided that accuracy was the dangerous part."
-            ],
-            "extensions": {}
-          },
-          {
-            "number": 3,
-            "first_paragraph_number": 3,
-            "title": "Painter's revelation",
-            "summary": "The painter realizes he is capturing a future subject rather than a present likeness.",
-            "paragraphs": [
-              "The young woman who posed for him wore black lace at her throat and dark velvet at her wrists. Her posture never faltered. Her expression changed only in degrees too small to measure, yet the room altered whenever she lifted her eyes from her folded hands. On the first day, the painter blamed fatigue for the strange pull of her face. On the second, he blamed the weather. On the third, while mixing shadow into the curve beneath one painted eye, he felt a certainty settle over him with the quiet weight of a hand on the shoulder: he was not painting a likeness for the present, but for someone who had not yet arrived."
-            ],
-            "extensions": {}
-          },
-          {
-            "number": 4,
-            "first_paragraph_number": 4,
-            "title": "Portrait hung",
-            "summary": "The finished portrait is hung in the west corridor and the house vows never to move it.",
-            "paragraphs": [
-              "When the portrait was finished, the mistress of the house stood before it for a long time without speaking. Then she ordered it hung in the west corridor and instructed the staff that it was never to be removed, never to be covered, and never to be discussed with guests. Years later, after names had faded from ledgers and whole branches of the family had thinned into rumor, the house remained faithful to that instruction. Some promises, once made inside Harrowick House, did not weaken with time. They waited."
-            ],
-            "extensions": {}
-          }
-        ],
-        "extensions": {}
-      },
-      {
-        "title": "Chapter One: Byline After Midnight",
-        "type": "chapter",
-        "first_paragraph_number": 5,
-        "paragraphs": [
-          "Anna Karstane told herself she’d agreed to this for the story. That was the clean version she could say out loud: a first-person overnight in a “haunted” estate, written with enough skepticism to annoy the campus occult club and enough atmosphere to make the arts editor smile. The messier truth sat underneath it—her curiosity had teeth, and she’d always had the habit of touching things that warned her away.",
-          "The taxi’s heater worked in short bursts, like it was negotiating with the cold. Outside, rain stitched the night into something dense and private. The driver didn’t talk much, which Anna appreciated; she was already drafting the opening paragraph in her head and deleting it at the same time.",
-          "She looked like she belonged to the edge of a concert poster rather than a journalism department: black jeans, combat boots, a fitted leather jacket that smelled faintly of smoke and old perfume. A silver choker caught the occasional dashboard glow. Her eyeliner, applied with the confidence of practice, had started to soften at one corner where rain had found its way in—an imperfect smear that made her look tired and defiant at once.",
-          "In her bag were the tools of a student reporter from the late eighties: a notepad with dog-eared pages, a cheap film camera she’d borrowed from the media lab, and a small cassette recorder she used to dictate quotes so she wouldn’t lose them to adrenaline. She didn’t call it ghost-hunting. She called it documentation.",
-          "Her editor at the student paper had made a show of being responsible. *Don’t sensationalize,* he’d said, pushing his glasses up. *And don’t sue us.* Then he’d leaned closer and added, *If you come back with something good, I’ll put it above the sports column for once.*",
-          "Harrowick House sat on the edge of a town that pretended it didn’t have a history. The older locals didn’t talk about the manor so much as they talked around it, the way people skirted potholes they’d hit before. A cracked sign leaned in ivy: HARROWICK HOUSE. The taxi turned onto the gravel lane, and the tires made a sound like someone quietly grinding their teeth.",
-          "The estate appeared through the rain in pieces—gables, dark windows, a tower that held on to the sky. One upper window glowed with a dull warmth, a single square that looked almost domestic until you noticed how still it was. Anna took that in and filed it away. Lights had explanations. If she couldn’t find one, she’d write that down too.",
-          "A man waited under the portico, coat collar up, posture tight. Mr. Harrowick matched the voice from the phone: careful, controlled, the kind of person who measured his own words as if they cost money. He didn’t offer a dramatic greeting. He offered a keyring and a look that asked her to be competent.",
-          "“You’re Anna Karstane,” he said. He pronounced her name correctly, which surprised her.",
-          "“That’s me.” She tried a smile that came out more like a baring of teeth. “Student journalist. I’ll do my best to disappoint everyone who wants this to be a séance.”",
-          "Harrowick’s mouth twitched, a quick movement he didn’t let become a smile. “I don’t want theatrics,” he said. “I want someone who observes.” His gaze went to the recorder in her hand. “You’re recording?”",
-          "“Notes,” Anna said. “Quotes. Details. It keeps me honest.”",
-          "He nodded once. “Good. Then here are the terms. You stay inside until dawn. You don’t bring anyone in, and you don’t wander the grounds at night. If you decide to leave, you leave a note on the hall table. Clear and obvious. No riddles.”",
-          "“And in the morning?” Anna asked.",
-          "“The taxi returns at seven,” Harrowick said. “One knock at the door. If you answer, you leave. If you don’t, the driver waits ten minutes, then goes back to town and calls me. I return with a spare key.” His jaw tightened on the next part. “If I still can’t reach you by nine, I call emergency services. I don’t want attention,” he added, voice flattening, “and I want you alive more.”",
-          "Anna raised her brows. “That’s almost reassuring.”",
-          "“It’s practical,” Harrowick said. He hesitated, then looked past her shoulder as if the house were standing behind her like a person. “There’s one more thing. If you find… items. Letters, photographs, anything you think is related. Leave them where they are.”",
-          "“Because the house doesn’t like it?” Anna asked, aiming for lightness.",
-          "Harrowick’s eyes stayed dry. “Because I don’t trust what changes when things are moved,” he said. “And because I’m tired of being wrong about this place.”",
-          "The driver cleared his throat. Anna glanced back at the taxi, then at Harrowick. Alone meant alone; her editor had hated that part, but it made the feature cleaner. A witness who could be quoted, a setting that could do its work without an audience.",
-          "Harrowick stepped into the taxi’s back seat. The driver pulled away. Headlights swept across the front steps, made the wet stone shine, and then the lane swallowed the light. The engine noise thinned into rain and finally disappeared.",
-          "Silence took its place with unsettling speed. Anna stood under the portico and listened. Her pulse felt loud in her ears, and she resented it on principle. She dug out a cigarette, lit it with her back to the wind, and drew smoke into her lungs like it was punctuation.",
-          "She exhaled slowly. “It’s just a building,” she told herself, because saying it anchored her. The cigarette burned down faster than she expected. She crushed it under her boot and pocketed the pack again.",
-          "The front door opened with a weighty sigh of hinges. Inside, the air smelled of dry wood and something faintly floral, like old sachets. Anna stepped over the threshold and felt the temperature change against her skin, a coolness that didn’t belong to the season.",
-          "For a heartbeat, her perception did something odd. The hall seemed to tilt. She had the distinct sensation of hovering an inch behind herself, watching her own shoulders rise and fall under the leather jacket, watching her hand tighten around the keyring. The feeling snapped back so quickly it left a thin nausea behind.",
-          "Anna blinked, swallowed, and blamed adrenaline. She’d pulled all-nighters in the newsroom; her body did strange things when it wanted sleep and didn’t get it. That explanation tasted sensible, so she kept it.",
-          "The entrance hall rose high enough to swallow sound. A staircase climbed at the far end. Lamps cast weak pools of light through yellowed shades, and portraits covered the walls: severe men, pale women, children dressed like small adults. Their painted eyes didn’t follow her. They didn’t need to.",
-          "Anna picked a narrow table in the center of the hall and set up with the kind of deliberate neatness she pretended she didn’t possess. Notebook. Camera. Recorder. Flashlight. She liked order; it made the night feel like a series of tasks rather than a dare.",
-          "She pressed the recorder’s button and spoke softly, the way she did when she wanted her future self to trust her past self. “Entry one. Harrowick House. Friday night. Rain. Arrived twenty-two forty-seven.” She paused, listened to the room, then added, almost amused, “And yes, I’m alone. If you’re hearing this and I sound braver than I feel, that’s editing.”",
-          "She walked, keeping her dictation going in short bursts—drawing room, covered furniture, a faint smell of dust and fabric; library, rows of books that made her feel like an intruder in someone else’s private mind. She noted the mundane possibilities automatically: drafts, settling beams, animals in walls, old pipes expanding and contracting.",
-          "The house offered small interruptions. A cooler patch of air that moved against her wrist when there were no open windows. A subtle shift in pressure near the west corridor that made her ears feel full. Anna caught herself slowing, her body responding before her skepticism could organize a sentence.",
-          "She reached the corridor and felt something tighten behind her ribs. The portraits here were closer together, more intimate, less formal. Some of the faces looked unfinished around the edges, as if the painter had been interrupted and never returned.",
-          "Halfway down, one painting hung slightly lower than the others, the frame’s angle off by a few degrees. Anna stopped because her eyes stopped. The corridor seemed to narrow toward that frame, the house’s quiet arranging itself into a point.",
-          "She had the sense that her next breath mattered. She let it out anyway and stepped closer.",
-          "The portrait showed a young woman in nineteenth-century dress—dark lace at the throat, hair pinned in heavy curls. The painter had given her an expression that held both patience and amusement, as if she were waiting for someone to catch up.",
-          "Anna’s mouth dried.",
-          "The face was hers.",
-          "Not in the loose, flattering way people claimed strangers resembled each other. The same cheekbones. The same small asymmetry in the mouth. The same faint shadow beneath the left eye that makeup never fully erased. Even the tiny scar near her hairline, earned in childhood and usually hidden by her bangs, sat there on the painted skin like a signature.",
-          "She leaned in until her breath fogged the varnish. A date sat in the corner: **1894**.",
-          "Anna stepped back, recorder still running in her pocket, and tried to manufacture an explanation. Prank. Coincidence. Some creepy art student with too much time. Her mind offered options like flashcards, all of them flimsy.",
-          "A floorboard creaked upstairs.",
-          "Anna froze, then forced herself to move. She walked back to the hall table with the stiff carefulness of someone pretending she isn’t listening. She stopped the recorder, ejected the cassette, and rewound it, the mechanism’s whirr giving her something solid to hold on to.",
-          "She pressed play.",
-          "At first, the tape gave her rain, her own footsteps, the calmness she’d performed into the microphone. Then came a quiet exhale, so close it raised gooseflesh along her arms.",
-          "Anna held the recorder tighter.",
-          "A whisper surfaced under the breath, thin and structured, as if the sound had been threaded through static on purpose.",
-          "“An…na.”",
-          "Her name, pulled apart and put back together by something that didn’t use it often.",
-          "The tape clicked. Silence returned.",
-          "From the bottom of the staircase, something shifted into the edge of the lamplight—slow, deliberate—claiming the space where her skepticism had been standing a moment before."
-        ],
-        "statistics": {
-          "letter_count": 8090,
-          "digit_count": 4,
-          "other_character_count": 2157,
-          "word_count": 1809,
-          "sentence_count": 149
-        },
-        "scenes": [
-          {
-            "number": 5,
-            "first_paragraph_number": 5,
-            "title": "Anna’s motivation",
-            "summary": "Anna Karstane rationalizes her overnight assignment and reflects on her journalistic drive.",
-            "paragraphs": [
-              "Anna Karstane told herself she’d agreed to this for the story. That was the clean version she could say out loud: a first-person overnight in a “haunted” estate, written with enough skepticism to annoy the campus occult club and enough atmosphere to make the arts editor smile. The messier truth sat underneath it—her curiosity had teeth, and she’d always had the habit of touching things that warned her away.",
-              "The taxi’s heater worked in short bursts, like it was negotiating with the cold. Outside, rain stitched the night into something dense and private. The driver didn’t talk much, which Anna appreciated; she was already drafting the opening paragraph in her head and deleting it at the same time.",
-              "She looked like she belonged to the edge of a concert poster rather than a journalism department: black jeans, combat boots, a fitted leather jacket that smelled faintly of smoke and old perfume. A silver choker caught the occasional dashboard glow. Her eyeliner, applied with the confidence of practice, had started to soften at one corner where rain had found its way in—an imperfect smear that made her look tired and defiant at once.",
-              "In her bag were the tools of a student reporter from the late eighties: a notepad with dog-eared pages, a cheap film camera she’d borrowed from the media lab, and a small cassette recorder she used to dictate quotes so she wouldn’t lose them to adrenaline. She didn’t call it ghost-hunting. She called it documentation.",
-              "Her editor at the student paper had made a show of being responsible. *Don’t sensationalize,* he’d said, pushing his glasses up. *And don’t sue us.* Then he’d leaned closer and added, *If you come back with something good, I’ll put it above the sports column for once.*"
-            ],
-            "extensions": {}
-          },
-          {
-            "number": 6,
-            "first_paragraph_number": 10,
-            "title": "Approach to the manor",
-            "summary": "Anna’s taxi drives through rain toward Harrowick House, revealing the manor’s looming silhouette.",
-            "paragraphs": [
-              "Harrowick House sat on the edge of a town that pretended it didn’t have a history. The older locals didn’t talk about the manor so much as they talked around it, the way people skirted potholes they’d hit before. A cracked sign leaned in ivy: HARROWICK HOUSE. The taxi turned onto the gravel lane, and the tires made a sound like someone quietly grinding their teeth.",
-              "The estate appeared through the rain in pieces—gables, dark windows, a tower that held on to the sky. One upper window glowed with a dull warmth, a single square that looked almost domestic until you noticed how still it was. Anna took that in and filed it away. Lights had explanations. If she couldn’t find one, she’d write that down too."
-            ],
-            "extensions": {}
-          },
-          {
-            "number": 7,
-            "first_paragraph_number": 12,
-            "title": "First meeting",
-            "summary": "Anna meets Mr. Harrowick at the portico, who greets her formally and hands over a keyring.",
-            "paragraphs": [
-              "A man waited under the portico, coat collar up, posture tight. Mr. Harrowick matched the voice from the phone: careful, controlled, the kind of person who measured his own words as if they cost money. He didn’t offer a dramatic greeting. He offered a keyring and a look that asked her to be competent.",
-              "“You’re Anna Karstane,” he said. He pronounced her name correctly, which surprised her.",
-              "“That’s me.” She tried a smile that came out more like a baring of teeth. “Student journalist. I’ll do my best to disappoint everyone who wants this to be a séance.”"
-            ],
-            "extensions": {}
-          },
-          {
-            "number": 8,
-            "first_paragraph_number": 15,
-            "title": "Terms of stay",
-            "summary": "Har‑rowick outlines the overnight terms, including staying until dawn and recording observations.",
-            "paragraphs": [
-              "Harrowick’s mouth twitched, a quick movement he didn’t let become a smile. “I don’t want theatrics,” he said. “I want someone who observes.” His gaze went to the recorder in her hand. “You’re recording?”",
-              "“Notes,” Anna said. “Quotes. Details. It keeps me honest.”",
-              "He nodded once. “Good. Then here are the terms. You stay inside until dawn. You don’t bring anyone in, and you don’t wander the grounds at night. If you decide to leave, you leave a note on the hall table. Clear and obvious. No riddles.”",
-              "“And in the morning?” Anna asked.",
-              "“The taxi returns at seven,” Harrowick said. “One knock at the door. If you answer, you leave. If you don’t, the driver waits ten minutes, then goes back to town and calls me. I return with a spare key.” His jaw tightened on the next part. “If I still can’t reach you by nine, I call emergency services. I don’t want attention,” he added, voice flattening, “and I want you alive more.”"
-            ],
-            "extensions": {}
-          },
-          {
-            "number": 9,
-            "first_paragraph_number": 20,
-            "title": "Items and trust",
-            "summary": "Anna asks about finding items; Harrowick explains his distrust of moving things in the house.",
-            "paragraphs": [
-              "Anna raised her brows. “That’s almost reassuring.”",
-              "“It’s practical,” Harrowick said. He hesitated, then looked past her shoulder as if the house were standing behind her like a person. “There’s one more thing. If you find… items. Letters, photographs, anything you think is related. Leave them where they are.”",
-              "“Because the house doesn’t like it?” Anna asked, aiming for lightness.",
-              "Harrowick’s eyes stayed dry. “Because I don’t trust what changes when things are moved,” he said. “And because I’m tired of being wrong about this place.”",
-              "The driver cleared his throat. Anna glanced back at the taxi, then at Harrowick. Alone meant alone; her editor had hated that part, but it made the feature cleaner. A witness who could be quoted, a setting that could do its work without an audience."
-            ],
-            "extensions": {}
-          },
-          {
-            "number": 10,
-            "first_paragraph_number": 25,
-            "title": "Alone outside",
-            "summary": "Har‑rowick departs in the taxi; Anna waits alone under the portico, lights flicker and she smokes.",
-            "paragraphs": [
-              "Harrowick stepped into the taxi’s back seat. The driver pulled away. Headlights swept across the front steps, made the wet stone shine, and then the lane swallowed the light. The engine noise thinned into rain and finally disappeared.",
-              "Silence took its place with unsettling speed. Anna stood under the portico and listened. Her pulse felt loud in her ears, and she resented it on principle. She dug out a cigarette, lit it with her back to the wind, and drew smoke into her lungs like it was punctuation.",
-              "She exhaled slowly. “It’s just a building,” she told herself, because saying it anchored her. The cigarette burned down faster than she expected. She crushed it under her boot and pocketed the pack again."
-            ],
-            "extensions": {}
-          },
-          {
-            "number": 11,
-            "first_paragraph_number": 28,
-            "title": "Entering the foyer",
-            "summary": "Anna enters the foyer, feeling a sudden tilt in perception before noting the hall’s size and portraits.",
-            "paragraphs": [
-              "The front door opened with a weighty sigh of hinges. Inside, the air smelled of dry wood and something faintly floral, like old sachets. Anna stepped over the threshold and felt the temperature change against her skin, a coolness that didn’t belong to the season.",
-              "For a heartbeat, her perception did something odd. The hall seemed to tilt. She had the distinct sensation of hovering an inch behind herself, watching her own shoulders rise and fall under the leather jacket, watching her hand tighten around the keyring. The feeling snapped back so quickly it left a thin nausea behind.",
-              "Anna blinked, swallowed, and blamed adrenaline. She’d pulled all-nighters in the newsroom; her body did strange things when it wanted sleep and didn’t get it. That explanation tasted sensible, so she kept it.",
-              "The entrance hall rose high enough to swallow sound. A staircase climbed at the far end. Lamps cast weak pools of light through yellowed shades, and portraits covered the walls: severe men, pale women, children dressed like small adults. Their painted eyes didn’t follow her. They didn’t need to."
-            ],
-            "extensions": {}
-          },
-          {
-            "number": 12,
-            "first_paragraph_number": 32,
-            "title": "Setting up",
-            "summary": "She sets up her notebook, camera, and recorder on a table and begins dictating her first entry.",
-            "paragraphs": [
-              "Anna picked a narrow table in the center of the hall and set up with the kind of deliberate neatness she pretended she didn’t possess. Notebook. Camera. Recorder. Flashlight. She liked order; it made the night feel like a series of tasks rather than a dare.",
-              "She pressed the recorder’s button and spoke softly, the way she did when she wanted her future self to trust her past self. “Entry one. Harrowick House. Friday night. Rain. Arrived twenty-two forty-seven.” She paused, listened to the room, then added, almost amused, “And yes, I’m alone. If you’re hearing this and I sound braver than I feel, that’s editing.”",
-              "She walked, keeping her dictation going in short bursts—drawing room, covered furniture, a faint smell of dust and fabric; library, rows of books that made her feel like an intruder in someone else’s private mind. She noted the mundane possibilities automatically: drafts, settling beams, animals in walls, old pipes expanding and contracting."
-            ],
-            "extensions": {}
-          },
-          {
-            "number": 13,
-            "first_paragraph_number": 35,
-            "title": "Corridor sensations",
-            "summary": "While exploring, Anna feels subtle drafts and reaches the west corridor where the portraits feel intimate.",
-            "paragraphs": [
-              "The house offered small interruptions. A cooler patch of air that moved against her wrist when there were no open windows. A subtle shift in pressure near the west corridor that made her ears feel full. Anna caught herself slowing, her body responding before her skepticism could organize a sentence.",
-              "She reached the corridor and felt something tighten behind her ribs. The portraits here were closer together, more intimate, less formal. Some of the faces looked unfinished around the edges, as if the painter had been interrupted and never returned.",
-              "Halfway down, one painting hung slightly lower than the others, the frame’s angle off by a few degrees. Anna stopped because her eyes stopped. The corridor seemed to narrow toward that frame, the house’s quiet arranging itself into a point."
-            ],
-            "extensions": {}
-          },
-          {
-            "number": 14,
-            "first_paragraph_number": 38,
-            "title": "Approaching the portrait",
-            "summary": "She stops before a slightly lower portrait, feeling her breath matter as she approaches.",
-            "paragraphs": [
-              "She had the sense that her next breath mattered. She let it out anyway and stepped closer.",
-              "The portrait showed a young woman in nineteenth-century dress—dark lace at the throat, hair pinned in heavy curls. The painter had given her an expression that held both patience and amusement, as if she were waiting for someone to catch up.",
-              "Anna’s mouth dried.",
-              "The face was hers.",
-              "Not in the loose, flattering way people claimed strangers resembled each other. The same cheekbones. The same small asymmetry in the mouth. The same faint shadow beneath the left eye that makeup never fully erased. Even the tiny scar near her hairline, earned in childhood and usually hidden by her bangs, sat there on the painted skin like a signature."
-            ],
-            "extensions": {}
-          },
-          {
-            "number": 15,
-            "first_paragraph_number": 43,
-            "title": "Recognition",
-            "summary": "The portrait reveals a young woman identical to Anna, dated 1894, prompting her to search for explanations.",
-            "paragraphs": [
-              "She leaned in until her breath fogged the varnish. A date sat in the corner: **1894**.",
-              "Anna stepped back, recorder still running in her pocket, and tried to manufacture an explanation. Prank. Coincidence. Some creepy art student with too much time. Her mind offered options like flashcards, all of them flimsy."
-            ],
-            "extensions": {}
-          },
-          {
-            "number": 16,
-            "first_paragraph_number": 45,
-            "title": "Recorded whisper",
-            "summary": "A floorboard creaks; Anna rewinds her recorder, plays it back, and hears a whispered version of her name.",
-            "paragraphs": [
-              "A floorboard creaked upstairs.",
-              "Anna froze, then forced herself to move. She walked back to the hall table with the stiff carefulness of someone pretending she isn’t listening. She stopped the recorder, ejected the cassette, and rewound it, the mechanism’s whirr giving her something solid to hold on to.",
-              "She pressed play.",
-              "At first, the tape gave her rain, her own footsteps, the calmness she’d performed into the microphone. Then came a quiet exhale, so close it raised gooseflesh along her arms.",
-              "Anna held the recorder tighter.",
-              "A whisper surfaced under the breath, thin and structured, as if the sound had been threaded through static on purpose.",
-              "“An…na.”"
-            ],
-            "extensions": {}
-          },
-          {
-            "number": 17,
-            "first_paragraph_number": 52,
-            "title": "Emerging presence",
-            "summary": "The tape clicks back to silence as a shape moves into the lamplight at the bottom of the stairs.",
-            "paragraphs": [
-              "Her name, pulled apart and put back together by something that didn’t use it often.",
-              "The tape clicked. Silence returned.",
-              "From the bottom of the staircase, something shifted into the edge of the lamplight—slow, deliberate—claiming the space where her skepticism had been standing a moment before."
-            ],
-            "extensions": {}
-          }
-        ],
-        "extensions": {}
-      }
-    ],
-    "extensions": {}
   }
 }

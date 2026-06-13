@@ -124,10 +124,9 @@ def _write_split_scenes_example() -> None:
                 "type": "pydantic",
                 "model_file": "model.py",
                 "model_entrypoint": "model.SceneList",
-                "validation_context_from_case": "structured_validation_context",
             },
             "template": {
-                "engine": "jinja2",
+                "engine": "jinjax",
                 "path": "prompt.md",
             },
             "models": {
@@ -158,17 +157,16 @@ def _write_split_scenes_example() -> None:
         ]
         _write_json(
             cases_dir / f"{case_id}.json",
-            {
-                "schema_version": "prompt_lab.case/v1",
-                "id": case_id,
-                "title": fixture["meta"].get("display_case_name") or case_id,
-                "source": _source_metadata(fixture),
-                "variables": {
+            _case_payload(
+                case_id=case_id,
+                title=fixture["meta"].get("display_case_name") or case_id,
+                source=_source_metadata(fixture),
+                values={
                     "previous_summaries": previous_summaries,
                     "chapter_text_with_paragraphs": context[f"chapters/{chapter}/text_with_paragraphs"],
+                    **chapter_data,
                 },
-                "structured_validation_context": chapter_data,
-            },
+            ),
         )
 
 
@@ -191,7 +189,7 @@ def _write_summarize_chapter_example() -> None:
                 "type": "text",
             },
             "template": {
-                "engine": "jinja2",
+                "engine": "jinjax",
                 "path": "prompt.md",
             },
             "models": {
@@ -215,15 +213,14 @@ def _write_summarize_chapter_example() -> None:
         context = fixture["context_values"]
         _write_json(
             cases_dir / f"{case_id}.json",
-            {
-                "schema_version": "prompt_lab.case/v1",
-                "id": case_id,
-                "title": fixture["meta"].get("display_case_name") or case_id,
-                "source": _source_metadata(fixture),
-                "variables": {
+            _case_payload(
+                case_id=case_id,
+                title=fixture["meta"].get("display_case_name") or case_id,
+                source=_source_metadata(fixture),
+                values={
                     "chapter_text_with_scenes": context[f"chapters/{chapter}/text_with_scenes"],
                 },
-            },
+            ),
         )
 
 
@@ -245,6 +242,35 @@ def _target_chapter(fixture: dict[str, Any]) -> str:
     if not match:
         raise ValueError(f"Cannot find target chapter in target_step: {target_step}")
     return match.group(1)
+
+
+def _case_payload(
+    *,
+    case_id: str,
+    title: str,
+    source: dict[str, str],
+    values: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": "prompt_lab.case/v2",
+        "id": case_id,
+        "title": title,
+        "stores": {
+            "case": {
+                "kind": "flat_file_tree",
+                "values": {name: _file_node(value) for name, value in values.items()},
+            }
+        },
+        "bindings": {
+            name: {"kind": "store_scope", "store": "case", "path": name}
+            for name in values
+        },
+        "source": source,
+    }
+
+
+def _file_node(value: Any) -> dict[str, Any]:
+    return {"__carmilla_flat_file_node__": "file", "value": value}
 
 
 def _reset_dir(path: Path) -> None:

@@ -7,11 +7,10 @@
   "output": {
     "type": "pydantic",
     "model_file": "model.py",
-    "model_entrypoint": "model.SceneList",
-    "validation_context_from_case": "structured_validation_context"
+    "model_entrypoint": "model.SceneList"
   },
   "template": {
-    "engine": "jinja2",
+    "engine": "jinjax",
     "path": "prompt.md"
   },
   "models": {

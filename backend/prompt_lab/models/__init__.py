@@ -1,0 +1,1 @@
+"""Prompt Lab Pydantic contracts."""

@@ -8,7 +8,7 @@
     "type": "text"
   },
   "template": {
-    "engine": "jinja2",
+    "engine": "jinjax",
     "path": "prompt.md"
   },
   "models": {
