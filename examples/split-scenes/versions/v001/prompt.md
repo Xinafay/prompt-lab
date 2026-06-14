@@ -29,16 +29,16 @@ Return only JSON matching this schema:
 <<MODEL>>
 ```
 
-{% if previous_summaries %}
+{% if chapter.data.previous_dirs %}
 Summary of previous parts of the story:
 
 ---
-{% for summary in previous_summaries %}
-{{ summary }}
+{% for dir in chapter.data.previous_dirs %}
+{{ state.chapters[dir].summary }}
 {% endfor %}
 ---
 {% endif %}
 
 Current part markdown with numbered paragraphs:
 
-{{ chapter_text_with_paragraphs }}
+{{ chapter.text_with_paragraphs }}
