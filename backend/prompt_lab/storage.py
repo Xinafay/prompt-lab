@@ -52,6 +52,8 @@ class PromptLabStore:
             return []
         manifests: dict[str, ExperimentArtifact] = {}
         for manifest_path in sorted(self.experiments_root.glob("*/experiment.json")):
+            if manifest_path.parent.name.endswith("_old"):
+                continue
             artifact = ExperimentArtifact.model_validate(_read_json(manifest_path))
             manifests[artifact.id] = artifact
         return [manifests[key] for key in sorted(manifests)]

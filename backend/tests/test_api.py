@@ -232,6 +232,33 @@ def test_api_seeds_examples_into_experiments_on_startup() -> None:
         ).is_file()
 
 
+def test_api_ignores_old_example_directories_when_seeding() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        for directory, title in (
+            (root / "examples" / "demo", "Demo"),
+            (root / "examples" / "demo_old", "Old Demo"),
+        ):
+            (directory / "versions" / "v001").mkdir(parents=True)
+            payload = demo_experiment_payload()
+            payload["title"] = title
+            (directory / "experiment.json").write_text(
+                json.dumps(payload, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            (directory / "versions" / "v001" / "prompt.md").write_text(
+                "Hello", encoding="utf-8"
+            )
+
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        response = TestClient(app).get("/api/experiments")
+
+        assert response.status_code == 200
+        assert [item["title"] for item in response.json()] == ["Demo"]
+        assert (root / "experiments" / "demo" / "experiment.json").is_file()
+        assert not (root / "experiments" / "demo_old").exists()
+
+
 def test_api_gets_version_overview() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -734,6 +761,7 @@ def main() -> int:
         test_api_rejects_experiment_update_id_mismatch,
         test_api_rejects_experiment_update_missing_active_version,
         test_api_seeds_examples_into_experiments_on_startup,
+        test_api_ignores_old_example_directories_when_seeding,
         test_api_gets_version_overview,
         test_api_lists_experiment_versions,
         test_api_lists_latest_run_artifacts,

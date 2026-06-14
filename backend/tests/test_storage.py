@@ -25,6 +25,41 @@ def test_store_does_not_list_examples_directly() -> None:
         assert store.list_experiments() == []
 
 
+def test_store_ignores_old_runtime_experiment_directories() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        for directory, title in (
+            (root / "experiments" / "demo", "Demo"),
+            (root / "experiments" / "demo_old", "Old Demo"),
+        ):
+            (directory / "versions" / "v001").mkdir(parents=True)
+            payload = {
+                "schema_version": "prompt_lab.experiment/v1",
+                "id": "demo",
+                "title": title,
+                "description": "",
+                "active_version": "v001",
+                "output": {"type": "text"},
+                "template": {"engine": "jinja2", "path": "prompt.md"},
+                "models": {"generator_model": "local/a", "judge_model": "openai/b"},
+                "run_defaults": {
+                    "repeat_count": 3,
+                    "llm_cache": "disabled",
+                    "case_order": "case-major",
+                },
+            }
+            (directory / "experiment.json").write_text(
+                json.dumps(payload, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+        store = PromptLabStore(experiments_root=root / "experiments", examples_root=root / "examples")
+
+        experiments = store.list_experiments()
+        assert len(experiments) == 1
+        assert experiments[0].title == "Demo"
+
+
 def test_store_loads_cases_for_experiment() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -321,6 +356,7 @@ def test_store_rejects_save_missing_active_version() -> None:
 def main() -> int:
     tests = [
         test_store_does_not_list_examples_directly,
+        test_store_ignores_old_runtime_experiment_directories,
         test_store_loads_cases_for_experiment,
         test_store_rejects_read_path_escape,
         test_store_rejects_write_path_escape,

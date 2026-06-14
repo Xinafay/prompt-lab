@@ -13,8 +13,13 @@ class SeedResult:
 
 def _has_runtime_experiment_manifests(experiments_root: Path) -> bool:
     return experiments_root.is_dir() and any(
-        path.is_file() for path in experiments_root.glob("*/experiment.json")
+        path.is_file() and not _is_ignored_experiment_dir(path.parent)
+        for path in experiments_root.glob("*/experiment.json")
     )
+
+
+def _is_ignored_experiment_dir(path: Path) -> bool:
+    return path.name.endswith("_old")
 
 
 def seed_experiments_from_examples(
@@ -30,6 +35,8 @@ def seed_experiments_from_examples(
 
     copied: list[str] = []
     for example_dir in sorted(path for path in examples_root.iterdir() if path.is_dir()):
+        if _is_ignored_experiment_dir(example_dir):
+            continue
         manifest_path = example_dir / "experiment.json"
         if not manifest_path.is_file():
             continue
