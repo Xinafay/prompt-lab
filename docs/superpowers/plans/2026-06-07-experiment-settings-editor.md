@@ -562,9 +562,7 @@ export function ExperimentSettings({
         output: {
           type: "pydantic",
           model_file: current.output.model_file ?? "model.py",
-          model_entrypoint: current.output.model_entrypoint ?? "",
-          validation_context_from_case:
-            current.output.validation_context_from_case ?? null
+          model_entrypoint: current.output.model_entrypoint ?? ""
         }
       };
     });
@@ -721,24 +719,6 @@ export function ExperimentSettings({
                     output: {
                       ...current.output,
                       model_entrypoint: event.target.value
-                    }
-                  }))
-                }
-              />
-            </label>
-            <label className="settings-field">
-              <span>Validation context field</span>
-              <input
-                value={draft.output.validation_context_from_case ?? ""}
-                onChange={(event) =>
-                  updateDraft((current) => ({
-                    ...current,
-                    output: {
-                      ...current.output,
-                      validation_context_from_case:
-                        event.target.value.trim() === ""
-                          ? null
-                          : event.target.value
                     }
                   }))
                 }

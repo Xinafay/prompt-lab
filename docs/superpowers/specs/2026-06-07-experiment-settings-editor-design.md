@@ -38,8 +38,8 @@ The form is split into compact sections:
 - Identity: read-only `id`, editable `title`, editable `description`.
 - Version: editable `active_version`.
 - Models: editable `generator_model`, editable `judge_model`.
-- Output: editable `type`; when `type` is `pydantic`, show `model_file`,
-  `model_entrypoint`, and `validation_context_from_case`.
+- Output: editable `type`; when `type` is `pydantic`, show `model_file` and
+  `model_entrypoint`.
 - Template: read-only `engine` set to `jinja2`, editable `path`.
 - Run defaults: editable `repeat_count`, read-only `llm_cache` and
   `case_order`.

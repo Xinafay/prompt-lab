@@ -412,10 +412,10 @@ def test_api_seeds_examples_into_experiments_on_startup() -> None:
             encoding="utf-8",
         )
         (version / "prompt.md").write_text("Hello {{ name }}", encoding="utf-8")
-        cases = version / "cases"
+        cases = example / "cases"
         cases.mkdir()
         (cases / "case-a.json").write_text(
-            '{"schema_version":"prompt_lab.case/v1","id":"case-a","title":"Case A","variables":{"name":"Ada"}}',
+            '{"schema_version":"prompt_lab.case/v2","id":"case-a","title":"Case A","stores":{"case":{"kind":"flat_file_tree","values":{}}},"bindings":{"name":{"kind":"value","value":"Ada"}}}',
             encoding="utf-8",
         )
 

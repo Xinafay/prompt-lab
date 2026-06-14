@@ -426,10 +426,11 @@ Add tests proving existing runners can use fake-response generator callables wit
 ```python
 def test_run_text_case_accepts_fake_llm_response_callable() -> None:
     case = CaseArtifact(
-        schema_version="prompt_lab.case/v1",
+        schema_version="prompt_lab.case/v2",
         id="case-a",
         title="Case A",
-        variables={"value": "hello"},
+        stores={"case": {"kind": "flat_file_tree", "values": {}}},
+        bindings={"value": {"kind": "value", "value": "hello"}},
     )
 
     def fake_generate_text(model: str, prompt: str) -> object:
@@ -465,10 +466,11 @@ class DryOutput(BaseModel):
 
 def test_dry_run_structured_case_returns_valid_model_json() -> None:
     case = CaseArtifact(
-        schema_version="prompt_lab.case/v1",
+        schema_version="prompt_lab.case/v2",
         id="case-a",
         title="Case A",
-        variables={"value": "hello"},
+        stores={"case": {"kind": "flat_file_tree", "values": {}}},
+        bindings={"value": {"kind": "value", "value": "hello"}},
     )
     def fake_generate_structured(
         model: str,
