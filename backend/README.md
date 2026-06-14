@@ -37,6 +37,10 @@ case uses `prompt_lab.case/v2`; the backend materializes its `stores + bindings`
 into the plain context dictionary passed to prompt rendering and Pydantic
 validation.
 
+Cases live once per experiment under `cases/` and are shared by all versions.
+Version directories hold the active prompt/model files plus generated run,
+review, proposal, and comparison artifacts.
+
 Judge, proposal, and comparison system prompts live in editable Markdown/Jinja files:
 
 - `backend/prompt_lab/system_prompts/judge.md.jinja`
@@ -56,6 +60,19 @@ On backend startup, if `experiments/` does not exist or contains no
 `*/experiment.json` manifests, Prompt Lab copies top-level example experiment
 directories from `examples/` into `experiments/`. Once seeded, the backend lists,
 loads, and writes only `experiments/`.
+
+Carmilla exports complete Prompt Lab experiments through its eval runner. From
+the Carmilla repository root:
+
+```bash
+python -m python.workflow_runtime.eval_runner \
+  --workflow story_parser \
+  --test split-scenes \
+  --export-prompt-lab /Users/karol/Projects/sinafai/prompt-lab/examples/split-scenes
+```
+
+The command writes shared `cases/`, version files, and top-level experiment
+metadata, then reports created, existing, and skipped file events to stderr.
 
 Environment overrides:
 

@@ -1,11 +1,28 @@
 # Prompt Lab Examples
 
-These examples are generated from Carmilla Story Parser eval fixtures and converted to a neutral Prompt Lab format.
+These examples are generated from Carmilla Story Parser eval fixtures and
+exported as complete neutral Prompt Lab experiments.
 
 Case files use `prompt_lab.case/v2`: serialized `stores` plus top-level
 `bindings` that become the prompt/validation context. The committed prompts use
 the `jinjax` template engine copied from Carmilla's portable `shared.jinjax`
 package.
+
+Each example keeps workflow state cases in the experiment-level `cases/`
+directory. Version directories contain only version-specific prompt/model files
+and generated runtime artifacts after seeding into `experiments/`; cases are
+shared by all versions of an experiment.
+
+From the Carmilla repository root, regenerate an example with:
+
+```bash
+python -m python.workflow_runtime.eval_runner \
+  --workflow story_parser \
+  --test split-scenes \
+  --export-prompt-lab /Users/karol/Projects/sinafai/prompt-lab/examples/split-scenes
+```
+
+The exporter reports created, existing, and skipped files to stderr.
 
 Examples:
 

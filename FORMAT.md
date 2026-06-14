@@ -48,6 +48,22 @@ Text-output experiments use:
 Pydantic validation receives the same materialized case context that prompt
 rendering uses.
 
+## Directory Layout
+
+An experiment directory keeps cases at the experiment level and version-specific
+prompt/model files under `versions/`:
+
+```text
+cases/
+  case-id.json
+versions/v001/
+  prompt.md
+  model.py       # only for Pydantic experiments
+```
+
+State cases are shared by all versions. Creating a new version copies or writes
+only prompt/model files; state inputs are not duplicated.
+
 ## Case
 
 Cases use `prompt_lab.case/v2`. A case represents one concrete prompt
@@ -146,8 +162,6 @@ rendering and validation. For the case above, templates can reference
 versions/v001/
   prompt.md
   model.py       # only for Pydantic experiments
-  cases/
-    case-id.json
 ```
 
 Generated runs, reviews, proposals, and comparisons are written inside the

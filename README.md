@@ -43,6 +43,20 @@ Lab copies examples into `experiments/`. Runtime reads, generated artifacts, and
 future GUI edits use `experiments/` only. The `experiments/` directory is ignored
 by git.
 
+Carmilla can export a complete Prompt Lab experiment directly from saved workflow
+eval fixtures. From the Carmilla repository root, run:
+
+```bash
+python -m python.workflow_runtime.eval_runner \
+  --workflow story_parser \
+  --test split-scenes \
+  --export-prompt-lab /Users/karol/Projects/sinafai/prompt-lab/examples/split-scenes
+```
+
+The export command writes the experiment manifest, rubric, shared `cases/`, and
+initial version files. It prints created, existing, and skipped file events to
+stderr so callers can see what changed without parsing the generated files.
+
 Each experiment version keeps one active workflow chain:
 
 - Running a version replaces the previous active run artifacts for that version
