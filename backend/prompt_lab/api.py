@@ -719,7 +719,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         prompt_template = store.read_text(
             experiment_id, version, experiment.template.path
         )
-        cases = store.load_cases(experiment_id, version)
+        cases = store.load_cases(experiment_id)
         return {
             "experiment": experiment.model_dump(mode="json"),
             "version": version,
@@ -800,7 +800,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         dry_run = request.dry_run if request is not None else False
         experiment = store.load_experiment(experiment_id)
         version_dir = store.version_dir(experiment_id, version)
-        cases = store.load_cases(experiment_id, version)
+        cases = store.load_cases(experiment_id)
         if not cases:
             raise HTTPException(status_code=400, detail="Version has no cases")
         for case in cases:
@@ -954,7 +954,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             prompt_template = store.read_text(
                 experiment_id, version, experiment.template.path
             )
-            cases = store.load_cases(experiment_id, version)
+            cases = store.load_cases(experiment_id)
             run_artifacts = [
                 RunArtifact.model_validate(json.loads(path.read_text(encoding="utf-8")))
                 for path in sorted(run_batch_dir.glob("*/*.json"))
@@ -1085,41 +1085,25 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         baseline_version_dir = store.version_dir(experiment_id, baseline_version)
         candidate_version_dir = store.version_dir(experiment_id, candidate_version)
 
-        baseline_cases = store.load_cases(experiment_id, baseline_version)
-        candidate_cases = store.load_cases(experiment_id, candidate_version)
+        baseline_cases = store.load_cases(experiment_id)
+        candidate_cases = baseline_cases
         if not baseline_cases:
-            raise HTTPException(status_code=400, detail="Baseline version has no cases")
-        if not candidate_cases:
-            raise HTTPException(status_code=400, detail="Candidate version has no cases")
-        for case in [*baseline_cases, *candidate_cases]:
+            raise HTTPException(status_code=400, detail="Experiment has no cases")
+        for case in baseline_cases:
             _validate_case_id_path_segment(case.id)
-        baseline_case_ids = {case.id for case in baseline_cases}
-        candidate_case_ids = {case.id for case in candidate_cases}
-        if baseline_case_ids != candidate_case_ids:
-            missing_from_candidate = sorted(baseline_case_ids - candidate_case_ids)
-            extra_in_candidate = sorted(candidate_case_ids - baseline_case_ids)
-            detail_parts = ["Baseline and candidate case ids must match"]
-            if missing_from_candidate:
-                detail_parts.append(
-                    f"missing from candidate: {', '.join(missing_from_candidate)}"
-                )
-            if extra_in_candidate:
-                detail_parts.append(
-                    f"extra in candidate: {', '.join(extra_in_candidate)}"
-                )
-            raise HTTPException(status_code=400, detail="; ".join(detail_parts))
+        shared_case_ids = {case.id for case in baseline_cases}
 
         repeat_count = experiment.run_defaults.repeat_count
         baseline_run_batch_id, baseline_run_artifacts = _load_latest_validated_run_batch(
             version_dir=baseline_version_dir,
             version=baseline_version,
-            cases=baseline_case_ids,
+            cases=shared_case_ids,
             repeat_count=repeat_count,
         )
         candidate_run_batch_id, candidate_run_artifacts = _load_latest_validated_run_batch(
             version_dir=candidate_version_dir,
             version=candidate_version,
-            cases=candidate_case_ids,
+            cases=shared_case_ids,
             repeat_count=repeat_count,
         )
 
@@ -1402,6 +1386,9 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         try:
             shutil.copytree(source_version_dir, staging_dir)
             _remove_generated_version_dirs(staging_dir)
+            legacy_cases_dir = staging_dir / "cases"
+            if legacy_cases_dir.exists():
+                shutil.rmtree(legacy_cases_dir)
 
             prompt_target = _resolve_version_local_write_path(
                 staging_dir, experiment.template.path

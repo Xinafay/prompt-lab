@@ -109,8 +109,8 @@ class PromptLabStore:
             raise NotFoundError("File not found")
         return path.read_text(encoding="utf-8")
 
-    def load_cases(self, experiment_id: str, version: str) -> list[CaseArtifact]:
-        cases_dir = self.version_dir(experiment_id, version) / "cases"
+    def load_cases(self, experiment_id: str) -> list[CaseArtifact]:
+        cases_dir = self.experiment_dir(experiment_id) / "cases"
         if not cases_dir.is_dir():
             return []
         return [

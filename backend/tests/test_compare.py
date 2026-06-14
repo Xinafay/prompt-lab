@@ -115,12 +115,14 @@ def write_demo_experiment(root: Path, *, repeat_count: int = 2) -> tuple[Path, P
     example = root / "examples" / "demo"
     baseline_dir = example / "versions" / "v001"
     candidate_dir = example / "versions" / "v002"
+    cases_dir = example / "cases"
+    cases_dir.mkdir(parents=True)
+    write_json(
+        cases_dir / "case-a.json",
+        valid_case_payload(),
+    )
     for version_dir in [baseline_dir, candidate_dir]:
-        (version_dir / "cases").mkdir(parents=True)
-        write_json(
-            version_dir / "cases" / "case-a.json",
-            valid_case_payload(),
-        )
+        version_dir.mkdir(parents=True)
         (version_dir / "model.py").write_text(
             "from pydantic import BaseModel\n\nclass DemoOutput(BaseModel):\n    answer: str\n",
             encoding="utf-8",
@@ -500,7 +502,7 @@ def test_api_allocates_next_comparison_without_overwriting() -> None:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
 
-def test_api_rejects_mismatched_case_ids_without_comparing() -> None:
+def test_api_comparison_uses_shared_experiment_cases() -> None:
     calls: list[str] = []
 
     def fake_generate_structured(
@@ -520,14 +522,6 @@ def test_api_rejects_mismatched_case_ids_without_comparing() -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             baseline_dir, candidate_dir = write_demo_experiment(root)
-            write_json(
-                candidate_dir / "cases" / "case-extra.json",
-                valid_case_payload(
-                    case_id="case-extra",
-                    title="Extra Candidate Case",
-                    value="extra",
-                ),
-            )
             write_run_batch(
                 baseline_dir,
                 "baseline-batch",
@@ -539,7 +533,6 @@ def test_api_rejects_mismatched_case_ids_without_comparing() -> None:
                 "candidate-batch",
                 version="v002",
                 answer_prefix="candidate",
-                case_ids=["case-a", "case-extra"],
             )
             app = create_app(PromptLabConfig.from_env(project_root=root))
             runtime_candidate_dir = runtime_version_dir(root, "v002")
@@ -549,10 +542,9 @@ def test_api_rejects_mismatched_case_ids_without_comparing() -> None:
                 json={"baseline_version": "v001", "candidate_version": "v002"},
             )
 
-            assert response.status_code == 400
-            assert "case ids must match" in response.json()["detail"]
-            assert calls == []
-            assert not (runtime_candidate_dir / "comparisons").exists()
+            assert response.status_code == 200
+            assert calls
+            assert (runtime_candidate_dir / "comparisons" / "comparison-001").is_dir()
     finally:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
@@ -700,7 +692,7 @@ def main() -> int:
         test_api_creates_comparison_under_candidate_version,
         test_api_creates_dry_run_comparison_without_live_llm,
         test_api_allocates_next_comparison_without_overwriting,
-        test_api_rejects_mismatched_case_ids_without_comparing,
+        test_api_comparison_uses_shared_experiment_cases,
         test_api_selects_latest_run_batches_for_both_versions_by_mtime,
         test_api_rejects_comparison_metadata_mismatch_without_writing,
     ]

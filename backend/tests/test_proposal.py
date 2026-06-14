@@ -52,7 +52,9 @@ def write_review_fixture(root: Path, *, output_type: str = "pydantic") -> Path:
         },
     )
     (example / "rubric.md").write_text("Keep answers complete.", encoding="utf-8")
-    (version_dir / "cases").mkdir(parents=True)
+    cases_dir = example / "cases"
+    cases_dir.mkdir(parents=True)
+    version_dir.mkdir(parents=True)
     (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
     if output_type == "pydantic":
         (version_dir / "model.py").write_text(
@@ -62,7 +64,7 @@ def write_review_fixture(root: Path, *, output_type: str = "pydantic") -> Path:
             encoding="utf-8",
         )
     write_json(
-        version_dir / "cases" / "case-a.json",
+        cases_dir / "case-a.json",
         valid_case_payload(),
     )
     write_json(
@@ -479,7 +481,8 @@ def test_api_create_version_copies_clean_source_and_replaces_pydantic_files() ->
         assert "summary: str" in (new_version_dir / "model.py").read_text(
             encoding="utf-8"
         )
-        assert (new_version_dir / "cases" / "case-a.json").is_file()
+        assert not (new_version_dir / "cases").exists()
+        assert (runtime_version_dir.parent.parent / "cases" / "case-a.json").is_file()
         assert not (new_version_dir / "runs").exists()
         assert not (new_version_dir / "reviews").exists()
         assert not (new_version_dir / "comparisons").exists()

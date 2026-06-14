@@ -123,7 +123,9 @@ def write_demo_experiment(
     case_ids = case_ids or ["case-a"]
     example = root / "examples" / "demo"
     version_dir = example / "versions" / "v001"
-    (version_dir / "cases").mkdir(parents=True)
+    cases_dir = example / "cases"
+    cases_dir.mkdir(parents=True)
+    version_dir.mkdir(parents=True)
     write_json(
         example / "experiment.json",
         {
@@ -156,7 +158,7 @@ def write_demo_experiment(
     )
     for case_id in case_ids:
         write_json(
-            version_dir / "cases" / f"{case_id}.json",
+            cases_dir / f"{case_id}.json",
             valid_case_payload(id=case_id, title=f"Case {case_id}"),
         )
     return version_dir

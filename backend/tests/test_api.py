@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -72,6 +71,38 @@ def write_demo_experiment_manifest(root: Path) -> None:
     (example / "versions" / "v001").mkdir(parents=True)
     (example / "experiment.json").write_text(
         json.dumps(demo_experiment_payload(), ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def write_demo_pydantic_experiment(root: Path) -> None:
+    example = root / "examples" / "demo"
+    version_dir = example / "versions" / "v001"
+    (example / "cases").mkdir(parents=True)
+    version_dir.mkdir(parents=True)
+    (example / "experiment.json").write_text(
+        json.dumps(
+            {
+                **demo_experiment_payload(),
+                "output": {
+                    "type": "pydantic",
+                    "model_file": "model.py",
+                    "model_entrypoint": "model.DemoOutput",
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (version_dir / "prompt.md").write_text(
+        "Say {{ value }}\n\n<<MODEL>>", encoding="utf-8"
+    )
+    (version_dir / "model.py").write_text(
+        "from pydantic import BaseModel\n\nclass DemoOutput(BaseModel):\n    answer: str\n",
+        encoding="utf-8",
+    )
+    (example / "cases" / "a.json").write_text(
+        json.dumps(demo_case_payload(), ensure_ascii=False),
         encoding="utf-8",
     )
 
@@ -175,7 +206,7 @@ def test_api_seeds_examples_into_experiments_on_startup() -> None:
             encoding="utf-8",
         )
         (version / "prompt.md").write_text("Hello {{ name }}", encoding="utf-8")
-        cases = version / "cases"
+        cases = example / "cases"
         cases.mkdir()
         (cases / "case-a.json").write_text(
             json.dumps(
@@ -206,14 +237,15 @@ def test_api_gets_version_overview() -> None:
         root = Path(tmp)
         example = root / "examples" / "demo"
         version_dir = example / "versions" / "v001"
-        (version_dir / "cases").mkdir(parents=True)
+        (example / "cases").mkdir(parents=True)
+        version_dir.mkdir(parents=True, exist_ok=True)
         (example / "experiment.json").write_text(
             '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"Demo experiment","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
             encoding="utf-8",
         )
         (example / "rubric.md").write_text("Prefer concise answers.", encoding="utf-8")
         (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
-        (version_dir / "cases" / "a.json").write_text(
+        (example / "cases" / "a.json").write_text(
             json.dumps(demo_case_payload(), ensure_ascii=False),
             encoding="utf-8",
         )
@@ -269,8 +301,9 @@ def test_api_lists_latest_run_artifacts() -> None:
             encoding="utf-8",
         )
         (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
-        (version_dir / "cases").mkdir()
-        (version_dir / "cases" / "a.json").write_text(
+        (example / "cases").mkdir()
+        version_dir.mkdir(parents=True, exist_ok=True)
+        (example / "cases" / "a.json").write_text(
             json.dumps(demo_case_payload(), ensure_ascii=False),
             encoding="utf-8",
         )
@@ -332,13 +365,14 @@ def test_api_starts_run_job() -> None:
             root = Path(tmp)
             example = root / "examples" / "demo"
             version_dir = example / "versions" / "v001"
-            (version_dir / "cases").mkdir(parents=True)
+            (example / "cases").mkdir(parents=True)
+            version_dir.mkdir(parents=True, exist_ok=True)
             (example / "experiment.json").write_text(
                 '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
                 encoding="utf-8",
             )
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
-            (version_dir / "cases" / "a.json").write_text(
+            (example / "cases" / "a.json").write_text(
                 json.dumps(demo_case_payload(), ensure_ascii=False),
                 encoding="utf-8",
             )
@@ -404,13 +438,14 @@ def test_api_starting_run_clears_existing_runtime_chain() -> None:
             root = Path(tmp)
             example = root / "examples" / "demo"
             version_dir = example / "versions" / "v001"
-            (version_dir / "cases").mkdir(parents=True)
+            (example / "cases").mkdir(parents=True)
+            version_dir.mkdir(parents=True, exist_ok=True)
             (example / "experiment.json").write_text(
                 '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
                 encoding="utf-8",
             )
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
-            (version_dir / "cases" / "a.json").write_text(
+            (example / "cases" / "a.json").write_text(
                 json.dumps(demo_case_payload(), ensure_ascii=False),
                 encoding="utf-8",
             )
@@ -455,13 +490,14 @@ def test_api_dry_run_text_version_avoids_live_llm() -> None:
             root = Path(tmp)
             example = root / "examples" / "demo"
             version_dir = example / "versions" / "v001"
-            (version_dir / "cases").mkdir(parents=True)
+            (example / "cases").mkdir(parents=True)
+            version_dir.mkdir(parents=True, exist_ok=True)
             (example / "experiment.json").write_text(
                 '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
                 encoding="utf-8",
             )
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
-            (version_dir / "cases" / "a.json").write_text(
+            (example / "cases" / "a.json").write_text(
                 json.dumps(demo_case_payload(), ensure_ascii=False),
                 encoding="utf-8",
             )
@@ -523,22 +559,7 @@ def test_api_runs_pydantic_version() -> None:
         response_model: Any,
         validation_context: dict[str, Any] | None,
     ) -> FakeGeneratedStructured:
-        assert validation_context is not None
-        last_part = validation_context["parts"][-1]
-        last_paragraph_number = (
-            last_part["first_paragraph_number"] + len(last_part["paragraphs"]) - 1
-        )
-        output = response_model.model_validate(
-            [
-                {
-                    "identifier": 1,
-                    "summary": "One complete scene.",
-                    "title": "Complete Scene",
-                    "paragraph_number": last_paragraph_number,
-                }
-            ],
-            context=validation_context,
-        )
+        output = response_model.model_validate({"answer": "ok"})
         return FakeGeneratedStructured(output)
 
     original_generate_structured = llm_client.generate_structured
@@ -546,15 +567,11 @@ def test_api_runs_pydantic_version() -> None:
     try:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
-            examples_root = root / "examples"
-            shutil.copytree(
-                Path("examples") / "split-scenes",
-                examples_root / "split-scenes",
-            )
+            write_demo_pydantic_experiment(root)
             app = create_app(PromptLabConfig.from_env(project_root=root))
 
             response = TestClient(app, raise_server_exceptions=False).post(
-                "/api/experiments/split-scenes/versions/v001/runs"
+                "/api/experiments/demo/versions/v001/runs"
             )
 
             assert response.status_code == 200
@@ -563,7 +580,7 @@ def test_api_runs_pydantic_version() -> None:
                 (
                     root
                     / "experiments"
-                    / "split-scenes"
+                    / "demo"
                     / "versions"
                     / "v001"
                     / "runs"
@@ -594,15 +611,11 @@ def test_api_dry_run_pydantic_version_avoids_live_llm() -> None:
     try:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
-            examples_root = root / "examples"
-            shutil.copytree(
-                Path("examples") / "split-scenes",
-                examples_root / "split-scenes",
-            )
+            write_demo_pydantic_experiment(root)
             app = create_app(PromptLabConfig.from_env(project_root=root))
 
             response = TestClient(app, raise_server_exceptions=False).post(
-                "/api/experiments/split-scenes/versions/v001/runs",
+                "/api/experiments/demo/versions/v001/runs",
                 json={"dry_run": True},
             )
 
@@ -612,7 +625,7 @@ def test_api_dry_run_pydantic_version_avoids_live_llm() -> None:
                 (
                     root
                     / "experiments"
-                    / "split-scenes"
+                    / "demo"
                     / "versions"
                     / "v001"
                     / "runs"
@@ -649,7 +662,8 @@ def test_api_rejects_empty_cases_without_calling_llm() -> None:
             root = Path(tmp)
             example = root / "examples" / "demo"
             version_dir = example / "versions" / "v001"
-            (version_dir / "cases").mkdir(parents=True)
+            (example / "cases").mkdir(parents=True)
+            version_dir.mkdir(parents=True, exist_ok=True)
             (example / "experiment.json").write_text(
                 '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
                 encoding="utf-8",
@@ -686,13 +700,14 @@ def test_api_rejects_unsafe_case_id_without_calling_llm() -> None:
             root = Path(tmp)
             example = root / "examples" / "demo"
             version_dir = example / "versions" / "v001"
-            (version_dir / "cases").mkdir(parents=True)
+            (example / "cases").mkdir(parents=True)
+            version_dir.mkdir(parents=True, exist_ok=True)
             (example / "experiment.json").write_text(
                 '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
                 encoding="utf-8",
             )
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
-            (version_dir / "cases" / "a.json").write_text(
+            (example / "cases" / "a.json").write_text(
                 json.dumps(
                     demo_case_payload(case_id="../escape"),
                     ensure_ascii=False,
