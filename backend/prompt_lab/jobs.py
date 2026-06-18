@@ -11,7 +11,11 @@ def _now() -> str:
 
 
 _COUNTER = count(1)
-_TERMINAL_STATUSES = {"completed", "failed"}
+_TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
+
+
+class JobAlreadyRunningError(RuntimeError):
+    """Raised when a workflow tries to start while another job is active."""
 
 
 @dataclass(frozen=True)
@@ -46,11 +50,17 @@ class JobManager:
         self._lock = Lock()
         self._jobs: dict[str, JobStatus] = {}
         self._events: dict[str, list[JobEvent]] = {}
+        self._active_job_id: str | None = None
 
     def start_job(self, *, kind: str, experiment_id: str, version: str, total_units: int) -> JobStatus:
         if total_units <= 0:
             raise ValueError("total_units must be at least 1")
         with self._lock:
+            if self._active_job_id is not None:
+                active = self._jobs[self._active_job_id]
+                raise JobAlreadyRunningError(
+                    f"Workflow job {active.job_id} is already running."
+                )
             job_id = f"{kind}-{next(_COUNTER):06d}"
             job = JobStatus(
                 job_id=job_id,
@@ -62,8 +72,15 @@ class JobManager:
             )
             self._jobs[job_id] = job
             self._events[job_id] = []
+            self._active_job_id = job_id
             self._append_event(job, "started")
             return job
+
+    def active_job(self) -> JobStatus | None:
+        with self._lock:
+            if self._active_job_id is None:
+                return None
+            return self._jobs[self._active_job_id]
 
     def get(self, job_id: str) -> JobStatus:
         with self._lock:
@@ -100,6 +117,7 @@ class JobManager:
                 finished_at=_now(),
             )
             self._jobs[job_id] = job
+            self._clear_active_job(job_id)
             self._append_event(job, message)
             return job
 
@@ -110,8 +128,26 @@ class JobManager:
                 raise ValueError(f"Cannot fail {old.status} job {job_id}")
             job = replace(old, status="failed", message=message, finished_at=_now())
             self._jobs[job_id] = job
+            self._clear_active_job(job_id)
             self._append_event(job, message)
             return job
+
+    def cancel(self, job_id: str, *, message: str) -> JobStatus:
+        with self._lock:
+            old = self._jobs[job_id]
+            if old.status in _TERMINAL_STATUSES:
+                raise ValueError(f"Cannot cancel {old.status} job {job_id}")
+            job = replace(
+                old, status="cancelled", message=message, finished_at=_now()
+            )
+            self._jobs[job_id] = job
+            self._clear_active_job(job_id)
+            self._append_event(job, message)
+            return job
+
+    def _clear_active_job(self, job_id: str) -> None:
+        if self._active_job_id == job_id:
+            self._active_job_id = None
 
     def _append_event(self, job: JobStatus, message: str) -> None:
         events = self._events[job.job_id]

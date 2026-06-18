@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from threading import Event, Thread
 from tempfile import TemporaryDirectory
 from typing import Any
 
@@ -453,6 +454,80 @@ def test_api_starts_run_job() -> None:
         llm_client.generate_text = original_generate_text  # type: ignore[assignment]
 
 
+def test_api_reports_active_job_and_rejects_second_run() -> None:
+    class FakeGeneratedText:
+        output = "ok"
+        usage: dict[str, Any] = {}
+
+    started = Event()
+    release = Event()
+
+    def slow_generate_text(model: str, prompt: str) -> FakeGeneratedText:
+        del model, prompt
+        started.set()
+        if not release.wait(timeout=5):
+            raise TimeoutError("test timed out waiting to release fake LLM")
+        return FakeGeneratedText()
+
+    original_generate_text = llm_client.generate_text
+    llm_client.generate_text = slow_generate_text  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            example = root / "examples" / "demo"
+            version_dir = example / "versions" / "v001"
+            (example / "cases").mkdir(parents=True)
+            version_dir.mkdir(parents=True, exist_ok=True)
+            (example / "experiment.json").write_text(
+                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
+                encoding="utf-8",
+            )
+            (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
+            (example / "cases" / "a.json").write_text(
+                json.dumps(demo_case_payload(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+            client = TestClient(app, raise_server_exceptions=False)
+            responses: list[Any] = []
+
+            def start_run() -> None:
+                responses.append(
+                    client.post("/api/experiments/demo/versions/v001/runs")
+                )
+
+            thread = Thread(target=start_run)
+            thread.start()
+            try:
+                assert started.wait(timeout=5)
+
+                active_response = client.get("/api/jobs/active")
+                assert active_response.status_code == 200
+                active_job = active_response.json()["job"]
+                assert active_job["kind"] == "run_version"
+                assert active_job["status"] == "running"
+
+                duplicate_response = client.post(
+                    "/api/experiments/demo/versions/v001/runs"
+                )
+                assert duplicate_response.status_code == 409
+                assert active_job["job_id"] in duplicate_response.json()["detail"]
+
+                cancel_response = client.post(
+                    f"/api/jobs/{active_job['job_id']}/cancel"
+                )
+                assert cancel_response.status_code == 200
+                assert cancel_response.json()["status"] == "cancelled"
+                assert client.get("/api/jobs/active").json() == {"job": None}
+            finally:
+                release.set()
+                thread.join(timeout=5)
+            assert responses
+    finally:
+        release.set()
+        llm_client.generate_text = original_generate_text  # type: ignore[assignment]
+
+
 def test_api_starting_run_clears_existing_runtime_chain() -> None:
     class FakeGeneratedText:
         output = "ok"
@@ -768,6 +843,7 @@ def main() -> int:
         test_api_lists_empty_runs_when_version_has_no_batches,
         test_api_missing_experiment_returns_404,
         test_api_starts_run_job,
+        test_api_reports_active_job_and_rejects_second_run,
         test_api_starting_run_clears_existing_runtime_chain,
         test_api_dry_run_text_version_avoids_live_llm,
         test_api_runs_pydantic_version,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from prompt_lab.jobs import JobManager
+from prompt_lab.jobs import JobAlreadyRunningError, JobManager
 
 
 def assert_raises(expected_error: type[Exception], func: object) -> Exception:
@@ -48,6 +48,54 @@ def test_job_manager_records_initial_started_event() -> None:
     assert events[0].completed_units == 0
     assert events[0].total_units == 3
     assert job.finished_at is None
+
+
+def test_job_manager_tracks_active_job_until_terminal_status() -> None:
+    jobs = JobManager()
+
+    assert jobs.active_job() is None
+    job = jobs.start_job(
+        kind="run_version", experiment_id="demo", version="v001", total_units=1
+    )
+
+    assert jobs.active_job() == job
+    jobs.complete(job.job_id, message="done")
+
+    assert jobs.active_job() is None
+
+
+def test_job_manager_rejects_second_running_job() -> None:
+    jobs = JobManager()
+    first = jobs.start_job(
+        kind="run_version", experiment_id="demo", version="v001", total_units=1
+    )
+
+    error = assert_raises(
+        JobAlreadyRunningError,
+        lambda: jobs.start_job(
+            kind="judge", experiment_id="demo", version="v001", total_units=1
+        ),
+    )
+
+    assert first.job_id in str(error)
+    assert jobs.active_job() == first
+
+
+def test_job_manager_cancels_running_job_with_terminal_event() -> None:
+    jobs = JobManager()
+    job = jobs.start_job(
+        kind="run_version", experiment_id="demo", version="v001", total_units=2
+    )
+
+    cancelled = jobs.cancel(job.job_id, message="cancelled by user")
+    terminal_event = jobs.events(job.job_id)[-1]
+
+    assert cancelled.status == "cancelled"
+    assert cancelled.message == "cancelled by user"
+    assert cancelled.finished_at is not None
+    assert terminal_event.status == "cancelled"
+    assert terminal_event.message == "cancelled by user"
+    assert jobs.active_job() is None
 
 
 def test_job_manager_events_are_ordered_snapshots() -> None:
@@ -230,6 +278,9 @@ def main() -> int:
         test_job_manager_records_progress_events,
         test_job_manager_completes_job,
         test_job_manager_records_initial_started_event,
+        test_job_manager_tracks_active_job_until_terminal_status,
+        test_job_manager_rejects_second_running_job,
+        test_job_manager_cancels_running_job_with_terminal_event,
         test_job_manager_events_are_ordered_snapshots,
         test_job_manager_rejects_invalid_total_units,
         test_job_manager_rejects_completed_units_out_of_bounds,

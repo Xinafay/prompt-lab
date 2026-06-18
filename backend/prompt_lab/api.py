@@ -26,7 +26,7 @@ from prompt_lab.dry_run import (
 )
 from prompt_lab.experiment_seed import seed_experiments_from_examples
 from prompt_lab.judge import build_judge_prompt
-from prompt_lab.jobs import JobManager
+from prompt_lab.jobs import JobAlreadyRunningError, JobManager
 from prompt_lab.models.artifacts import ExperimentArtifact, RunArtifact
 from prompt_lab.models.judgments import (
     ComparisonArtifact,
@@ -749,6 +749,11 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             "runs": [run.model_dump(mode="json") for run in run_artifacts],
         }
 
+    @app.get("/api/jobs/active")
+    def get_active_job() -> dict[str, object]:
+        active_job = job_manager.active_job()
+        return {"job": asdict(active_job) if active_job is not None else None}
+
     @app.get("/api/jobs/{job_id}")
     def get_job(job_id: str) -> dict[str, object]:
         try:
@@ -790,11 +795,21 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                         f"data: {json.dumps(asdict(event), ensure_ascii=False)}\n\n"
                     )
 
-                if job.status in {"completed", "failed"}:
+                if job.status in {"completed", "failed", "cancelled"}:
                     return
                 time.sleep(0.1)
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+    @app.post("/api/jobs/{job_id}/cancel")
+    def cancel_job(job_id: str) -> dict[str, object]:
+        try:
+            job = job_manager.cancel(job_id, message="Cancelled by user")
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Job not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return asdict(job)
 
     @app.post("/api/experiments/{experiment_id}/versions/{version}/runs")
     def run_experiment_version(
@@ -822,14 +837,17 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             response_model = load_model_entrypoint(
                 version_dir, model_file, model_entrypoint
             )
-        _remove_runtime_children(version_dir, ["runs", "reviews", "comparisons"])
-        job = job_manager.start_job(
-            kind="run_version",
-            experiment_id=experiment_id,
-            version=version,
-            total_units=len(cases) * repeat_count,
-        )
+        try:
+            job = job_manager.start_job(
+                kind="run_version",
+                experiment_id=experiment_id,
+                version=version,
+                total_units=len(cases) * repeat_count,
+            )
+        except JobAlreadyRunningError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         job_id = job.job_id
+        _remove_runtime_children(version_dir, ["runs", "reviews", "comparisons"])
 
         def execute_run_job() -> None:
             completed_units = 0
@@ -837,6 +855,8 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 for case, repeat_index in iter_case_major(
                     cases, repeat_count=repeat_count
                 ):
+                    if job_manager.get(job_id).status == "cancelled":
+                        return
                     job_manager.update(
                         job_id,
                         completed_units=completed_units,
@@ -897,6 +917,8 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                             template_text=template_text,
                             generate_text=generate_text,
                         )
+                    if job_manager.get(job_id).status == "cancelled":
+                        return
                     store.write_run_artifact(
                         experiment_id,
                         version,
@@ -913,7 +935,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 job_manager.complete(job_id, message="Run completed")
             except Exception as exc:
                 current_job = job_manager.get(job_id)
-                if current_job.status not in {"completed", "failed"}:
+                if current_job.status not in {"completed", "failed", "cancelled"}:
                     job_manager.fail(job_id, message=str(exc) or type(exc).__name__)
 
         background_tasks.add_task(execute_run_job)
