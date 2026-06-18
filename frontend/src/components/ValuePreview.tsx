@@ -1,3 +1,5 @@
+import { visibleJsonEntries } from "../jsonPreview";
+
 interface ValuePreviewProps {
   value: unknown;
 }
@@ -30,19 +32,12 @@ function isInspectable(value: unknown): value is Record<string, unknown> | unkno
   return value !== null && typeof value === "object";
 }
 
-function childEntries(value: Record<string, unknown> | unknown[]) {
-  if (Array.isArray(value)) {
-    return value.map((item, index) => [String(index), item] as const);
-  }
-  return Object.entries(value);
-}
-
 function JsonTree({ depth = 0, value }: { depth?: number; value: unknown }) {
   if (!isInspectable(value)) {
     return <span className="json-tree-leaf">{previewValue(value)}</span>;
   }
 
-  const entries = childEntries(value);
+  const entries = visibleJsonEntries(value);
   if (entries.length === 0) {
     return <span className="json-tree-leaf">{Array.isArray(value) ? "[]" : "{}"}</span>;
   }

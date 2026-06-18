@@ -71,6 +71,9 @@ function currentExperimentRoute() {
   return parseExperimentRoute(new URL(window.location.href));
 }
 
+const SHOW_DRY_RUN_CONTROLS =
+  import.meta.env.VITE_PROMPT_LAB_SHOW_DRY_RUN === "1";
+
 function App() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [selectedExperiment, setSelectedExperiment] =
@@ -1025,6 +1028,7 @@ function App() {
                     jobStatus={jobStatus}
                     onActiveVersionChange={handleActiveVersionChange}
                     onWorkflowModeChange={setWorkflowMode}
+                    showDryRunControls={SHOW_DRY_RUN_CONTROLS}
                     workflowMessage={workflowMessage}
                     workflowMode={workflowMode}
                     primaryAction={
@@ -1069,7 +1073,7 @@ function App() {
                         >
                           {workflowBusy ? "Comparing..." : "Compare versions"}
                         </button>
-                      ) : (
+                      ) : activeTab === "runs" ? (
                         <button
                           className="primary-action"
                           disabled={workflowBusy || jobStatus?.status === "running"}
@@ -1080,7 +1084,7 @@ function App() {
                             ? "Running..."
                             : "Run version"}
                         </button>
-                      )
+                      ) : null
                     }
                   />
 

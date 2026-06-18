@@ -13,6 +13,7 @@ interface WorkflowToolbarProps {
   onActiveVersionChange: (version: string) => void;
   onWorkflowModeChange: (mode: WorkflowMode) => void;
   primaryAction: ReactNode;
+  showDryRunControls: boolean;
 }
 
 export function WorkflowToolbar({
@@ -25,12 +26,14 @@ export function WorkflowToolbar({
   isVersionSwitching = false,
   onActiveVersionChange = () => undefined,
   onWorkflowModeChange,
-  primaryAction
+  primaryAction,
+  showDryRunControls
 }: WorkflowToolbarProps) {
   const statusMessage =
     jobStatus === null
       ? workflowMessage
       : `${jobStatus.status}: ${jobStatus.message} (${jobStatus.completed_units}/${jobStatus.total_units})`;
+  const showActions = showDryRunControls || primaryAction !== null;
 
   return (
     <div className="workflow-toolbar" aria-label="Workflow context">
@@ -50,26 +53,32 @@ export function WorkflowToolbar({
             ))}
           </select>
         </label>
-        <span className={`workflow-mode-badge mode-${workflowMode}`}>
-          {workflowMode === "dry-run" ? "Dry-run" : "Live"}
-        </span>
+        {showDryRunControls ? (
+          <span className={`workflow-mode-badge mode-${workflowMode}`}>
+            {workflowMode === "dry-run" ? "Dry-run" : "Live"}
+          </span>
+        ) : null}
         {statusMessage !== null ? (
           <span className="workflow-status">{statusMessage}</span>
         ) : null}
       </div>
-      <div className="workflow-actions">
-        <label className="dry-run-toggle">
-          <input
-            checked={workflowMode === "dry-run"}
-            onChange={(event) =>
-              onWorkflowModeChange(event.target.checked ? "dry-run" : "live")
-            }
-            type="checkbox"
-          />
-          <span>Dry-run</span>
-        </label>
-        {primaryAction}
-      </div>
+      {showActions ? (
+        <div className="workflow-actions">
+          {showDryRunControls ? (
+            <label className="dry-run-toggle">
+              <input
+                checked={workflowMode === "dry-run"}
+                onChange={(event) =>
+                  onWorkflowModeChange(event.target.checked ? "dry-run" : "live")
+                }
+                type="checkbox"
+              />
+              <span>Dry-run</span>
+            </label>
+          ) : null}
+          {primaryAction}
+        </div>
+      ) : null}
     </div>
   );
 }
