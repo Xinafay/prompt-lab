@@ -1,4 +1,5 @@
 import type { ComparisonArtifact } from "../types";
+import { TooltipButton } from "./TooltipButton";
 
 interface ComparisonViewProps {
   knownVersions: string[];
@@ -44,14 +45,19 @@ export function ComparisonView({
     <section className="comparison-panel" aria-label="Comparison">
       <div className="section-heading">
         <h3>Comparison</h3>
-        <button
+        <TooltipButton
           className="secondary-action"
           disabled={isBusy || sameVersion}
+          disabledReason={
+            isBusy
+              ? "Wait for the current workflow action to finish."
+              : "Choose two different versions before comparing."
+          }
           onClick={onCompare}
           type="button"
         >
           {isBusy ? "Comparing..." : "Compare versions"}
-        </button>
+        </TooltipButton>
       </div>
       <div className="comparison-controls">
         <label>

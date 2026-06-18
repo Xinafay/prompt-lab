@@ -26,6 +26,7 @@ import { ExperimentsList } from "./components/ExperimentsList";
 import { ProposalView } from "./components/ProposalView";
 import { ReviewView } from "./components/ReviewView";
 import { RunsView } from "./components/RunsView";
+import { TooltipButton } from "./components/TooltipButton";
 import { WorkbenchTabs } from "./components/WorkbenchTabs";
 import { WorkflowToolbar } from "./components/WorkflowToolbar";
 import type {
@@ -47,6 +48,7 @@ import {
   parseExperimentRoute,
   type WorkbenchTab
 } from "./urlState";
+import { getJudgeActionState } from "./workflowActions";
 
 type LoadState =
   | { status: "loading" }
@@ -969,6 +971,9 @@ function App() {
     return [...versions].sort();
   }, [createdVersion, selectedExperiment, versionSummaries]);
 
+  const hasRuns = detailState.status === "loaded" && detailState.runs.runs.length > 0;
+  const judgeAction = getJudgeActionState({ hasRuns, isBusy: workflowBusy });
+
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -1033,25 +1038,27 @@ function App() {
                     workflowMode={workflowMode}
                     primaryAction={
                       activeTab === "review" ? (
-                        <button
+                        <TooltipButton
                           className="primary-action"
-                          disabled={workflowBusy}
+                          disabled={judgeAction.disabled}
+                          disabledReason={judgeAction.disabledReason}
                           onClick={handleJudgeVersion}
                           type="button"
                         >
-                          {workflowBusy ? "Judging..." : "Judge active run"}
-                        </button>
+                          {judgeAction.label}
+                        </TooltipButton>
                       ) : activeTab === "proposal" && proposalResponse !== null ? (
-                        <button
+                        <TooltipButton
                           className="primary-action"
                           disabled={workflowBusy}
+                          disabledReason="Wait for the current workflow action to finish."
                           onClick={handleCreateVersion}
                           type="button"
                         >
                           Create next version
-                        </button>
+                        </TooltipButton>
                       ) : activeTab === "proposal" ? (
-                        <button
+                        <TooltipButton
                           className="primary-action"
                           disabled={
                             workflowBusy ||
@@ -1059,31 +1066,44 @@ function App() {
                             decisionsDirty ||
                             humanNotesDirty
                           }
+                          disabledReason={
+                            workflowBusy
+                              ? "Wait for the current workflow action to finish."
+                              : reviewState === null
+                                ? "Judge the active run before generating a proposal."
+                                : "Save review decisions and human notes before generating a proposal."
+                          }
                           onClick={handleGenerateProposal}
                           type="button"
                         >
                           {workflowBusy ? "Generating..." : "Generate proposal"}
-                        </button>
+                        </TooltipButton>
                       ) : activeTab === "compare" ? (
-                        <button
+                        <TooltipButton
                           className="primary-action"
                           disabled={workflowBusy || baselineVersion === candidateVersion}
+                          disabledReason={
+                            workflowBusy
+                              ? "Wait for the current workflow action to finish."
+                              : "Choose two different versions before comparing."
+                          }
                           onClick={handleCompareVersions}
                           type="button"
                         >
                           {workflowBusy ? "Comparing..." : "Compare versions"}
-                        </button>
+                        </TooltipButton>
                       ) : activeTab === "runs" ? (
-                        <button
+                        <TooltipButton
                           className="primary-action"
                           disabled={workflowBusy || jobStatus?.status === "running"}
+                          disabledReason="Wait for the current run to finish."
                           onClick={handleRunVersion}
                           type="button"
                         >
                           {jobStatus?.status === "running"
                             ? "Running..."
                             : "Run version"}
-                        </button>
+                        </TooltipButton>
                       ) : null
                     }
                   />
@@ -1155,6 +1175,8 @@ function App() {
                         hasUnsavedDecisionChanges={decisionsDirty}
                         hasUnsavedHumanNotesChanges={humanNotesDirty}
                         isBusy={workflowBusy}
+                        judgeDisabled={judgeAction.disabled}
+                        judgeDisabledReason={judgeAction.disabledReason}
                         onDecisionChange={handleDecisionChange}
                         onHumanNotesChange={handleHumanNotesChange}
                         onJudge={handleJudgeVersion}

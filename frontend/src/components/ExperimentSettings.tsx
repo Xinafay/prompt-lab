@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import type { Experiment, OutputType } from "../types";
+import { TooltipButton } from "./TooltipButton";
 
 interface ExperimentSettingsProps {
   experiment: Experiment;
@@ -110,9 +111,14 @@ export function ExperimentSettings({
           <p>Edit the manifest stored in the runtime experiments workspace.</p>
         </div>
         <div className="settings-actions">
-          <button
+          <TooltipButton
             className="secondary-action"
             disabled={isBusy || !isDirty}
+            disabledReason={
+              isBusy
+                ? "Wait for the settings save to finish."
+                : "Change a setting before resetting the form."
+            }
             onClick={() => {
               setDraft(cloneExperiment(experiment));
               setError(null);
@@ -123,10 +129,19 @@ export function ExperimentSettings({
             type="button"
           >
             Reset
-          </button>
-          <button className="primary-action" disabled={isBusy || !isDirty} type="submit">
+          </TooltipButton>
+          <TooltipButton
+            className="primary-action"
+            disabled={isBusy || !isDirty}
+            disabledReason={
+              isBusy
+                ? "Wait for the settings save to finish."
+                : "Change a setting before saving."
+            }
+            type="submit"
+          >
             {isBusy ? "Saving..." : "Save"}
-          </button>
+          </TooltipButton>
         </div>
       </div>
 

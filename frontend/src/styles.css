@@ -354,6 +354,84 @@ select {
   cursor: not-allowed;
 }
 
+.disabled-tooltip-wrapper {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  cursor: help;
+}
+
+.disabled-tooltip-wrapper > button {
+  width: 100%;
+}
+
+.disabled-tooltip-wrapper > button:disabled {
+  pointer-events: none;
+}
+
+.disabled-tooltip-wrapper::after {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  width: max-content;
+  max-width: 280px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #111827;
+  box-shadow: 0 12px 28px rgb(16 24 40 / 0.24);
+  color: #ffffff;
+  content: attr(data-tooltip);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  text-align: left;
+  transform: translateY(3px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    visibility 120ms ease;
+  visibility: hidden;
+  white-space: normal;
+}
+
+.disabled-tooltip-wrapper::before {
+  position: absolute;
+  right: 18px;
+  bottom: calc(100% + 3px);
+  z-index: 31;
+  width: 10px;
+  height: 10px;
+  background: #111827;
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transform: rotate(45deg) translateY(3px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    visibility 120ms ease;
+  visibility: hidden;
+}
+
+.disabled-tooltip-wrapper:hover::after,
+.disabled-tooltip-wrapper:focus::after,
+.disabled-tooltip-wrapper:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
+  visibility: visible;
+}
+
+.disabled-tooltip-wrapper:hover::before,
+.disabled-tooltip-wrapper:focus::before,
+.disabled-tooltip-wrapper:focus-visible::before {
+  opacity: 1;
+  transform: rotate(45deg) translateY(0);
+  visibility: visible;
+}
+
 .overview-section,
 .runs-panel,
 .case-browser {
@@ -376,9 +454,21 @@ select {
 .settings-header,
 .settings-actions {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.settings-actions > button,
+.settings-actions .disabled-tooltip-wrapper {
+  width: 112px;
+}
+
+.settings-actions > button,
+.settings-actions .disabled-tooltip-wrapper > button {
+  min-height: 42px;
+  padding: 0 18px;
+  font-size: 14px;
 }
 
 .settings-header h2 {

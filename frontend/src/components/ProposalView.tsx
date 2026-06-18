@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import type { CreatedVersionResponse, ProposalResponse, ReviewState } from "../types";
+import { TooltipButton } from "./TooltipButton";
 
 type ProposalSection = "prompt" | "model" | "rationale";
 
@@ -39,14 +40,21 @@ export function ProposalView({
     <section className="proposal-panel" aria-label="Proposal">
       <div className="section-heading">
         <h3>Proposal</h3>
-        <button
+        <TooltipButton
           className="secondary-action"
           disabled={isBusy || reviewState === null || hasUnsavedReviewChanges}
+          disabledReason={
+            isBusy
+              ? "Wait for the current workflow action to finish."
+              : reviewState === null
+                ? "Judge the active run before generating a proposal."
+                : "Save review decisions and human notes before generating a proposal."
+          }
           onClick={onGenerateProposal}
           type="button"
         >
           {isBusy ? "Generating..." : "Generate proposal"}
-        </button>
+        </TooltipButton>
       </div>
 
       {hasUnsavedReviewChanges ? (
@@ -86,14 +94,15 @@ export function ProposalView({
                 </button>
               ))}
             </div>
-            <button
+            <TooltipButton
               className="primary-action"
               disabled={isBusy}
+              disabledReason="Wait for the current workflow action to finish."
               onClick={onCreateVersion}
               type="button"
             >
               Create next version
-            </button>
+            </TooltipButton>
           </div>
 
           {activeSection === "prompt" ? (

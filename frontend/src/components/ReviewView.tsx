@@ -1,8 +1,11 @@
 import type { FindingDecisionValue, ReviewState } from "../types";
+import { TooltipButton } from "./TooltipButton";
 
 interface ReviewViewProps {
   reviewState: ReviewState | null;
   isBusy: boolean;
+  judgeDisabled: boolean;
+  judgeDisabledReason: string | null;
   hasUnsavedDecisionChanges: boolean;
   hasUnsavedHumanNotesChanges: boolean;
   onJudge: () => void;
@@ -31,6 +34,8 @@ function labelDecision(value: FindingDecisionValue): string {
 export function ReviewView({
   reviewState,
   isBusy,
+  judgeDisabled,
+  judgeDisabledReason,
   hasUnsavedDecisionChanges,
   hasUnsavedHumanNotesChanges,
   onJudge,
@@ -60,9 +65,15 @@ export function ReviewView({
     <section className="review-panel" aria-label="Review">
       <div className="section-heading">
         <h3>Review</h3>
-        <button className="secondary-action" disabled={isBusy} onClick={onJudge} type="button">
+        <TooltipButton
+          className="secondary-action"
+          disabled={judgeDisabled}
+          disabledReason={judgeDisabledReason}
+          onClick={onJudge}
+          type="button"
+        >
           {isBusy ? "Judging..." : "Judge active run"}
-        </button>
+        </TooltipButton>
       </div>
 
       {reviewState === null ? (
@@ -102,14 +113,19 @@ export function ReviewView({
                   </div>
                 ) : null}
               </div>
-              <button
+              <TooltipButton
                 className="secondary-action"
                 disabled={isBusy || !hasUnsavedDecisionChanges}
+                disabledReason={
+                  isBusy
+                    ? "Wait for the current workflow action to finish."
+                    : "Change a decision before saving."
+                }
                 onClick={onSaveDecisions}
                 type="button"
               >
                 Save decisions
-              </button>
+              </TooltipButton>
             </div>
             {hasUnsavedDecisionChanges ? (
               <p className="dirty-copy">Unsaved decision changes.</p>
@@ -199,14 +215,19 @@ export function ReviewView({
                   <p className="dirty-copy">Unsaved notes.</p>
                 ) : null}
               </div>
-              <button
+              <TooltipButton
                 className="secondary-action"
                 disabled={isBusy || !hasUnsavedHumanNotesChanges}
+                disabledReason={
+                  isBusy
+                    ? "Wait for the current workflow action to finish."
+                    : "Change human notes before saving."
+                }
                 onClick={onSaveHumanNotes}
                 type="button"
               >
                 Save notes
-              </button>
+              </TooltipButton>
             </div>
             <textarea
               className="notes-input"
