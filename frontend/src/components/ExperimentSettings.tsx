@@ -6,6 +6,8 @@ interface ExperimentSettingsProps {
   experiment: Experiment;
   isBusy: boolean;
   message: string | null;
+  onDirtyChange: (isDirty: boolean) => void;
+  onDraftChange: (draft: Experiment | null) => void;
   onReset: () => void;
   onSave: (experiment: Experiment) => Promise<void>;
 }
@@ -35,6 +37,8 @@ export function ExperimentSettings({
   experiment,
   isBusy,
   message,
+  onDirtyChange,
+  onDraftChange,
   onReset,
   onSave
 }: ExperimentSettingsProps) {
@@ -55,6 +59,11 @@ export function ExperimentSettings({
     () => JSON.stringify(preparedDraft) !== JSON.stringify(preparedExperiment),
     [preparedDraft, preparedExperiment]
   );
+
+  useEffect(() => {
+    onDirtyChange(isDirty);
+    onDraftChange(isDirty ? preparedDraft : null);
+  }, [isDirty, onDirtyChange, onDraftChange, preparedDraft]);
 
   function updateDraft(updater: (current: Experiment) => Experiment) {
     setDraft((current) => updater(current));
@@ -107,6 +116,8 @@ export function ExperimentSettings({
             onClick={() => {
               setDraft(cloneExperiment(experiment));
               setError(null);
+              onDirtyChange(false);
+              onDraftChange(null);
               onReset();
             }}
             type="button"

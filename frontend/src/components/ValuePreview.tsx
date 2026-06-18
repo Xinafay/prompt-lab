@@ -26,6 +26,51 @@ function formatJson(value: unknown): string {
   }
 }
 
+function isInspectable(value: unknown): value is Record<string, unknown> | unknown[] {
+  return value !== null && typeof value === "object";
+}
+
+function childEntries(value: Record<string, unknown> | unknown[]) {
+  if (Array.isArray(value)) {
+    return value.map((item, index) => [String(index), item] as const);
+  }
+  return Object.entries(value);
+}
+
+function JsonTree({ depth = 0, value }: { depth?: number; value: unknown }) {
+  if (!isInspectable(value)) {
+    return <span className="json-tree-leaf">{previewValue(value)}</span>;
+  }
+
+  const entries = childEntries(value);
+  if (entries.length === 0) {
+    return <span className="json-tree-leaf">{Array.isArray(value) ? "[]" : "{}"}</span>;
+  }
+
+  return (
+    <ul className="json-tree-list">
+      {entries.map(([key, child]) => (
+        <li className="json-tree-item" key={`${depth}-${key}`}>
+          {isInspectable(child) ? (
+            <details open={depth < 1}>
+              <summary>
+                <span className="json-tree-key">{key}</span>
+                <span>{describeValue(child)}</span>
+              </summary>
+              <JsonTree depth={depth + 1} value={child} />
+            </details>
+          ) : (
+            <div className="json-tree-row">
+              <span className="json-tree-key">{key}</span>
+              <span>{previewValue(child)}</span>
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function describeValue(value: unknown): string {
   if (value === null) {
     return "null";
@@ -77,6 +122,12 @@ export function ValuePreview({ value }: ValuePreviewProps) {
   return (
     <div className="value-preview">
       <p>{previewValue(value)}</p>
+      {isInspectable(value) ? (
+        <details className="value-tree" open>
+          <summary>Explore keys</summary>
+          <JsonTree value={value} />
+        </details>
+      ) : null}
       <details>
         <summary>Raw JSON</summary>
         <pre>{formatJson(value)}</pre>

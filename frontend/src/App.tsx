@@ -26,7 +26,7 @@ import { ExperimentsList } from "./components/ExperimentsList";
 import { ProposalView } from "./components/ProposalView";
 import { ReviewView } from "./components/ReviewView";
 import { RunsView } from "./components/RunsView";
-import { WorkbenchTabs, type WorkbenchTab } from "./components/WorkbenchTabs";
+import { WorkbenchTabs } from "./components/WorkbenchTabs";
 import { WorkflowToolbar } from "./components/WorkflowToolbar";
 import type {
   ComparisonArtifact,
@@ -42,7 +42,11 @@ import type {
   VersionSummary,
   WorkflowMode
 } from "./types";
-import { parseExperimentId, writeSelectedExperimentId } from "./urlState";
+import {
+  buildExperimentPath,
+  parseExperimentRoute,
+  type WorkbenchTab
+} from "./urlState";
 
 type LoadState =
   | { status: "loading" }
@@ -54,6 +58,18 @@ type DetailState =
   | { status: "loading" }
   | { status: "loaded"; overview: VersionOverview; runs: RunsResponse }
   | { status: "error"; message: string };
+
+type HistoryMode = "push" | "replace";
+
+type PendingNavigation =
+  | { kind: "experiment"; experiment: Experiment | null }
+  | { kind: "route"; route: ReturnType<typeof currentExperimentRoute> }
+  | { kind: "tab"; tab: WorkbenchTab }
+  | { kind: "version"; version: string };
+
+function currentExperimentRoute() {
+  return parseExperimentRoute(new URL(window.location.href));
+}
 
 function App() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
@@ -68,7 +84,9 @@ function App() {
     useState<CreatedVersionResponse | null>(null);
   const [comparison, setComparison] = useState<ComparisonArtifact | null>(null);
   const [versionSummaries, setVersionSummaries] = useState<VersionSummary[]>([]);
-  const [activeTab, setActiveTab] = useState<WorkbenchTab>("overview");
+  const [activeTab, setActiveTab] = useState<WorkbenchTab>(
+    () => currentExperimentRoute().tab
+  );
   const [workflowMode, setWorkflowMode] = useState<WorkflowMode>("live");
   const [baselineVersion, setBaselineVersion] = useState("v001");
   const [candidateVersion, setCandidateVersion] = useState("v001");
@@ -76,6 +94,12 @@ function App() {
   const [workflowMessage, setWorkflowMessage] = useState<string | null>(null);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
+  const [settingsDirty, setSettingsDirty] = useState(false);
+  const [settingsDraft, setSettingsDraft] = useState<Experiment | null>(null);
+  const [pendingNavigation, setPendingNavigation] =
+    useState<PendingNavigation | null>(null);
+  const [navigationError, setNavigationError] = useState<string | null>(null);
+  const [navigationSaving, setNavigationSaving] = useState(false);
   const [decisionsDirty, setDecisionsDirty] = useState(false);
   const [humanNotesDirty, setHumanNotesDirty] = useState(false);
   const selectedKeyRef = useRef<string | null>(null);
@@ -84,7 +108,34 @@ function App() {
   const baselineVersionRef = useRef("v001");
   const candidateVersionRef = useRef("v001");
 
-  function selectExperiment(experiment: Experiment | null) {
+  function writeExperimentRoute(
+    experimentId: string,
+    tab: WorkbenchTab,
+    historyMode: HistoryMode
+  ) {
+    const url = new URL(window.location.href);
+    url.pathname = buildExperimentPath(experimentId, tab);
+    url.search = "";
+    const method = historyMode === "push" ? "pushState" : "replaceState";
+    window.history[method](window.history.state, "", url);
+  }
+
+  function activateTab(tab: WorkbenchTab, historyMode: HistoryMode = "replace") {
+    setActiveTab(tab);
+    if (selectedExperiment !== null) {
+      writeExperimentRoute(selectedExperiment.id, tab, historyMode);
+    }
+  }
+
+  function selectExperiment(
+    experiment: Experiment | null,
+    options?: {
+      historyMode?: HistoryMode;
+      tab?: WorkbenchTab;
+      updateUrl?: boolean;
+    }
+  ) {
+    const nextTab = options?.tab ?? activeTab;
     selectedKeyRef.current =
       experiment === null ? null : `${experiment.id}:${experiment.active_version}`;
     runRequestIdRef.current += 1;
@@ -99,15 +150,124 @@ function App() {
     setSettingsMessage(null);
     setWorkflowBusy(false);
     setSettingsBusy(false);
+    setSettingsDirty(false);
+    setSettingsDraft(null);
+    setPendingNavigation(null);
+    setNavigationError(null);
+    setNavigationSaving(false);
     setDecisionsDirty(false);
     setHumanNotesDirty(false);
-    setActiveTab("overview");
+    setActiveTab(nextTab);
     if (experiment !== null) {
-      writeSelectedExperimentId(experiment.id);
+      if (options?.updateUrl !== false) {
+        writeExperimentRoute(
+          experiment.id,
+          nextTab,
+          options?.historyMode ?? "replace"
+        );
+      }
       setCandidateVersion(experiment.active_version);
       setBaselineVersion("v001");
       candidateVersionRef.current = experiment.active_version;
       baselineVersionRef.current = "v001";
+    }
+  }
+
+  function shouldBlockSettingsNavigation(): boolean {
+    return activeTab === "settings" && settingsDirty && !settingsBusy;
+  }
+
+  function experimentForRoute(route: ReturnType<typeof currentExperimentRoute>) {
+    if (state.status !== "loaded") {
+      return null;
+    }
+    if (route.experimentId === null) {
+      return state.experiments[0] ?? null;
+    }
+    return (
+      state.experiments.find((experiment) => experiment.id === route.experimentId) ??
+      state.experiments[0] ??
+      null
+    );
+  }
+
+  function performPendingNavigation(navigation: PendingNavigation) {
+    if (navigation.kind === "experiment") {
+      selectExperiment(navigation.experiment, { historyMode: "push" });
+      return;
+    }
+    if (navigation.kind === "route") {
+      selectExperiment(experimentForRoute(navigation.route), {
+        historyMode: "push",
+        tab: navigation.route.tab
+      });
+      return;
+    }
+    if (navigation.kind === "tab") {
+      activateTab(navigation.tab, "push");
+      return;
+    }
+    void performActiveVersionChange(navigation.version);
+  }
+
+  function requestExperimentSelection(experiment: Experiment | null) {
+    if (experiment?.id === selectedExperiment?.id) {
+      return;
+    }
+    if (shouldBlockSettingsNavigation()) {
+      setNavigationError(null);
+      setPendingNavigation({ kind: "experiment", experiment });
+      return;
+    }
+    selectExperiment(experiment, { historyMode: "push" });
+  }
+
+  function requestTabChange(tab: WorkbenchTab) {
+    if (tab === activeTab) {
+      return;
+    }
+    if (shouldBlockSettingsNavigation()) {
+      setNavigationError(null);
+      setPendingNavigation({ kind: "tab", tab });
+      return;
+    }
+    activateTab(tab, "push");
+  }
+
+  function handleStayOnSettings() {
+    setPendingNavigation(null);
+    setNavigationError(null);
+  }
+
+  function handleDiscardSettingsAndContinue() {
+    if (pendingNavigation === null) {
+      return;
+    }
+    const navigation = pendingNavigation;
+    setSettingsDirty(false);
+    setSettingsDraft(null);
+    setPendingNavigation(null);
+    setNavigationError(null);
+    performPendingNavigation(navigation);
+  }
+
+  async function handleSaveSettingsAndContinue() {
+    if (pendingNavigation === null || settingsDraft === null) {
+      return;
+    }
+    const navigation = pendingNavigation;
+    setNavigationSaving(true);
+    setNavigationError(null);
+    try {
+      await handleSaveExperimentSettings(settingsDraft);
+      setSettingsDirty(false);
+      setSettingsDraft(null);
+      setPendingNavigation(null);
+      performPendingNavigation(navigation);
+    } catch (error) {
+      setNavigationError(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setNavigationSaving(false);
     }
   }
 
@@ -140,14 +300,17 @@ function App() {
         if (!cancelled) {
           setState({ status: "loaded", experiments });
           if (selectedKeyRef.current === null) {
-            const requestedExperimentId = parseExperimentId(window.location.search);
+            const requestedRoute = currentExperimentRoute();
             const requestedExperiment =
-              requestedExperimentId === null
+              requestedRoute.experimentId === null
                 ? null
                 : experiments.find(
-                    (experiment) => experiment.id === requestedExperimentId
+                    (experiment) => experiment.id === requestedRoute.experimentId
                   ) ?? null;
-            selectExperiment(requestedExperiment ?? experiments[0] ?? null);
+            selectExperiment(requestedExperiment ?? experiments[0] ?? null, {
+              historyMode: "replace",
+              tab: requestedRoute.tab
+            });
           }
         }
       } catch (error) {
@@ -166,6 +329,56 @@ function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (state.status !== "loaded") {
+      return;
+    }
+    const loadedExperiments = state.experiments;
+
+    function handlePopState() {
+      const requestedRoute = currentExperimentRoute();
+      if (shouldBlockSettingsNavigation()) {
+        if (selectedExperiment !== null) {
+          writeExperimentRoute(selectedExperiment.id, activeTab, "replace");
+        }
+        setNavigationError(null);
+        setPendingNavigation({ kind: "route", route: requestedRoute });
+        return;
+      }
+      const requestedExperiment =
+        requestedRoute.experimentId === null
+          ? loadedExperiments[0] ?? null
+          : loadedExperiments.find(
+              (experiment) => experiment.id === requestedRoute.experimentId
+            ) ?? loadedExperiments[0] ?? null;
+      selectExperiment(requestedExperiment, {
+        tab: requestedRoute.tab,
+        updateUrl: false
+      });
+    }
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [activeTab, selectedExperiment, settingsBusy, settingsDirty, state]);
+
+  useEffect(() => {
+    if (!settingsDirty) {
+      return;
+    }
+
+    function handleBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [settingsDirty]);
 
   useEffect(() => {
     if (selectedExperiment === null) {
@@ -306,7 +519,7 @@ function App() {
           ? "Dry-run generated the active run."
           : "Active run completed."
       );
-      setActiveTab("runs");
+      activateTab("runs");
     } catch (error) {
       if (!isCurrentRequest()) {
         return;
@@ -401,7 +614,7 @@ function App() {
           ? "Dry-run review loaded as the active review."
           : "Active review loaded."
       );
-      setActiveTab("review");
+      activateTab("review");
     } catch (error) {
       if (isWorkflowCurrent(requestId, selectionKey)) {
         setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
@@ -537,7 +750,7 @@ function App() {
       setProposalResponse(response);
       setCreatedVersion(null);
       setWorkflowMessage(dryRun ? "Dry-run proposal generated." : "Proposal generated.");
-      setActiveTab("proposal");
+      activateTab("proposal");
     } catch (error) {
       if (isWorkflowCurrent(requestId, selectionKey)) {
         setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
@@ -622,7 +835,7 @@ function App() {
           ? "Dry-run comparison loaded."
           : "Comparison loaded."
       );
-      setActiveTab("compare");
+      activateTab("compare");
     } catch (error) {
       if (isWorkflowCurrent(requestId, selectionKey)) {
         setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
@@ -675,7 +888,9 @@ function App() {
       const savedExperiment = await updateExperiment(selectedExperiment.id, experiment);
       await refreshExperimentsAfterSettingsSave(savedExperiment);
       setSettingsMessage("Settings saved.");
-      setActiveTab("settings");
+      setSettingsDirty(false);
+      setSettingsDraft(null);
+      activateTab("settings");
     } catch (error) {
       setSettingsMessage(error instanceof Error ? error.message : "Unknown error");
       throw error;
@@ -689,6 +904,15 @@ function App() {
   }
 
   async function handleActiveVersionChange(version: string) {
+    if (shouldBlockSettingsNavigation()) {
+      setNavigationError(null);
+      setPendingNavigation({ kind: "version", version });
+      return;
+    }
+    await performActiveVersionChange(version);
+  }
+
+  async function performActiveVersionChange(version: string) {
     if (selectedExperiment === null || version === selectedExperiment.active_version) {
       return;
     }
@@ -707,7 +931,7 @@ function App() {
       });
       await refreshExperimentsAfterSettingsSave(savedExperiment);
       setWorkflowMessage(`Switched to ${version}.`);
-      setActiveTab("overview");
+      activateTab(activeTab);
     } catch (error) {
       setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
     } finally {
@@ -771,7 +995,7 @@ function App() {
           <div className="tool-layout">
             <ExperimentsList
               experiments={state.experiments}
-              onSelect={selectExperiment}
+              onSelect={requestExperimentSelection}
               selectedExperimentId={selectedExperiment?.id ?? null}
             />
 
@@ -860,7 +1084,10 @@ function App() {
                     }
                   />
 
-                  <WorkbenchTabs activeTab={activeTab} onTabChange={setActiveTab} />
+                  <WorkbenchTabs
+                    activeTab={activeTab}
+                    onTabChange={requestTabChange}
+                  />
 
                   <div className="workbench-body">
                     {activeTab === "overview" ? (
@@ -900,6 +1127,8 @@ function App() {
                         experiment={detailState.overview.experiment}
                         isBusy={settingsBusy}
                         message={settingsMessage}
+                        onDirtyChange={setSettingsDirty}
+                        onDraftChange={setSettingsDraft}
                         onReset={handleResetExperimentSettings}
                         onSave={handleSaveExperimentSettings}
                       />
@@ -962,6 +1191,54 @@ function App() {
           </div>
         ) : null}
       </section>
+
+      {pendingNavigation !== null ? (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            aria-labelledby="settings-navigation-title"
+            aria-modal="true"
+            className="settings-navigation-modal"
+            role="dialog"
+          >
+            <div>
+              <h2 id="settings-navigation-title">Unsaved settings changes</h2>
+              <p>
+                Save the current experiment settings before leaving this view, or
+                discard the draft changes.
+              </p>
+            </div>
+            {navigationError !== null ? (
+              <div className="settings-error">{navigationError}</div>
+            ) : null}
+            <div className="modal-actions">
+              <button
+                className="secondary-action"
+                disabled={navigationSaving}
+                onClick={handleStayOnSettings}
+                type="button"
+              >
+                Stay
+              </button>
+              <button
+                className="secondary-action danger-action"
+                disabled={navigationSaving}
+                onClick={handleDiscardSettingsAndContinue}
+                type="button"
+              >
+                Discard changes
+              </button>
+              <button
+                className="primary-action"
+                disabled={navigationSaving || settingsDraft === null}
+                onClick={() => void handleSaveSettingsAndContinue()}
+                type="button"
+              >
+                {navigationSaving ? "Saving..." : "Save and continue"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }

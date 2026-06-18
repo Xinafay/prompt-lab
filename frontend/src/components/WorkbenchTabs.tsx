@@ -1,26 +1,23 @@
-export type WorkbenchTab =
-  | "overview"
-  | "settings"
-  | "cases"
-  | "runs"
-  | "review"
-  | "proposal"
-  | "compare";
+import { type WorkbenchTab, workbenchTabs } from "../urlState";
 
 interface WorkbenchTabsProps {
   activeTab: WorkbenchTab;
   onTabChange: (tab: WorkbenchTab) => void;
 }
 
-const tabs: Array<{ id: WorkbenchTab; label: string }> = [
-  { id: "overview", label: "Overview" },
-  { id: "settings", label: "Settings" },
-  { id: "cases", label: "Cases" },
-  { id: "runs", label: "Runs" },
-  { id: "review", label: "Review" },
-  { id: "proposal", label: "Proposal" },
-  { id: "compare", label: "Compare" }
-];
+const tabLabels: Record<WorkbenchTab, string> = {
+  overview: "Overview",
+  settings: "Settings",
+  cases: "Cases",
+  runs: "Runs",
+  review: "Review",
+  proposal: "Proposal",
+  compare: "Compare"
+};
+
+const tabs: Array<{ id: WorkbenchTab; label: string }> = workbenchTabs.map(
+  (tab) => ({ id: tab, label: tabLabels[tab] })
+);
 
 export function WorkbenchTabs({ activeTab, onTabChange }: WorkbenchTabsProps) {
   return (

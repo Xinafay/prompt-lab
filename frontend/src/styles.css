@@ -28,7 +28,7 @@ select {
 }
 
 .app-shell {
-  width: min(1560px, calc(100vw - 24px));
+  width: min(3200px, calc(100vw - 24px));
   margin: 0 auto;
   padding: 16px 0;
 }
@@ -787,6 +787,47 @@ select {
   font-weight: 750;
 }
 
+.value-tree {
+  min-width: 0;
+}
+
+.json-tree-list {
+  display: grid;
+  gap: 5px;
+  margin: 8px 0 0;
+  padding-left: 16px;
+}
+
+.json-tree-item {
+  min-width: 0;
+  color: #344054;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.json-tree-item summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.json-tree-row {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.26fr) minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.json-tree-key {
+  color: #111827;
+  font-weight: 760;
+  overflow-wrap: anywhere;
+}
+
+.json-tree-leaf {
+  overflow-wrap: anywhere;
+}
+
 .value-preview pre,
 .binding-json pre,
 .case-bindings-json pre {
@@ -1133,9 +1174,61 @@ select {
   background: #f4f7fa;
 }
 
+.danger-action {
+  border-color: #fecaca;
+  color: #b42318;
+}
+
+.danger-action:hover:not(:disabled) {
+  background: #fff1f0;
+}
+
 .secondary-action:disabled {
   color: #98a2b3;
   cursor: not-allowed;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(17 24 39 / 0.42);
+}
+
+.settings-navigation-modal {
+  display: grid;
+  gap: 16px;
+  width: min(520px, 100%);
+  padding: 18px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgb(16 24 40 / 0.22);
+}
+
+.settings-navigation-modal h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 18px;
+  font-weight: 760;
+  line-height: 1.25;
+}
+
+.settings-navigation-modal p {
+  margin: 6px 0 0;
+  color: #667085;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .review-content,
