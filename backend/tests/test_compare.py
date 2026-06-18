@@ -549,7 +549,7 @@ def test_api_comparison_uses_shared_experiment_cases() -> None:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
 
-def test_api_selects_latest_run_batches_for_both_versions_by_mtime() -> None:
+def test_api_selects_latest_run_batches_for_both_versions_by_name() -> None:
     captured: dict[str, Any] = {}
 
     def fake_generate_structured(
@@ -562,8 +562,8 @@ def test_api_selects_latest_run_batches_for_both_versions_by_mtime() -> None:
         return FakeGeneratedStructured(
             ComparisonArtifact.model_validate(
                 valid_comparison_payload(
-                    baseline_run_batch_ids=["baseline-new"],
-                    candidate_run_batch_ids=["candidate-new"],
+                    baseline_run_batch_ids=["baseline-run-000002"],
+                    candidate_run_batch_ids=["candidate-run-000002"],
                 )
             )
         )
@@ -575,49 +575,52 @@ def test_api_selects_latest_run_batches_for_both_versions_by_mtime() -> None:
             root = Path(tmp)
             baseline_dir, candidate_dir = write_demo_experiment(root)
             write_run_batch(
-                baseline_dir, "baseline-old", version="v001", answer_prefix="old base"
+                baseline_dir,
+                "baseline-run-000001",
+                version="v001",
+                answer_prefix="old base",
             )
             write_run_batch(
                 baseline_dir,
-                "baseline-new",
+                "baseline-run-000002",
                 version="v001",
                 answer_prefix="new base",
             )
             write_run_batch(
                 candidate_dir,
-                "candidate-old",
+                "candidate-run-000001",
                 version="v002",
                 answer_prefix="old candidate",
             )
             write_run_batch(
                 candidate_dir,
-                "candidate-new",
+                "candidate-run-000002",
                 version="v002",
                 answer_prefix="new candidate",
             )
             old_time = 1_700_000_000
             for old_dir, new_dir in [
                 (
-                    baseline_dir / "runs" / "baseline-old",
-                    baseline_dir / "runs" / "baseline-new",
+                    baseline_dir / "runs" / "baseline-run-000001",
+                    baseline_dir / "runs" / "baseline-run-000002",
                 ),
                 (
-                    candidate_dir / "runs" / "candidate-old",
-                    candidate_dir / "runs" / "candidate-new",
+                    candidate_dir / "runs" / "candidate-run-000001",
+                    candidate_dir / "runs" / "candidate-run-000002",
                 ),
             ]:
                 old_dir.touch()
                 new_dir.touch()
                 os.utime(
                     old_dir,
-                    ns=(old_time * 1_000_000_000, old_time * 1_000_000_000),
-                )
-                os.utime(
-                    new_dir,
                     ns=(
                         (old_time + 60) * 1_000_000_000,
                         (old_time + 60) * 1_000_000_000,
                     ),
+                )
+                os.utime(
+                    new_dir,
+                    ns=(old_time * 1_000_000_000, old_time * 1_000_000_000),
                 )
             app = create_app(PromptLabConfig.from_env(project_root=root))
 
@@ -627,10 +630,10 @@ def test_api_selects_latest_run_batches_for_both_versions_by_mtime() -> None:
             )
 
             assert response.status_code == 200
-            assert response.json()["baseline_run_batch_id"] == "baseline-new"
-            assert response.json()["candidate_run_batch_id"] == "candidate-new"
-            assert "baseline-new" in captured["prompt"]
-            assert "candidate-new" in captured["prompt"]
+            assert response.json()["baseline_run_batch_id"] == "baseline-run-000002"
+            assert response.json()["candidate_run_batch_id"] == "candidate-run-000002"
+            assert "baseline-run-000002" in captured["prompt"]
+            assert "candidate-run-000002" in captured["prompt"]
     finally:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
@@ -693,7 +696,7 @@ def main() -> int:
         test_api_creates_dry_run_comparison_without_live_llm,
         test_api_allocates_next_comparison_without_overwriting,
         test_api_comparison_uses_shared_experiment_cases,
-        test_api_selects_latest_run_batches_for_both_versions_by_mtime,
+        test_api_selects_latest_run_batches_for_both_versions_by_name,
         test_api_rejects_comparison_metadata_mismatch_without_writing,
     ]
     for test in tests:

@@ -261,12 +261,24 @@ def _render_comparison_markdown(comparison: ComparisonArtifact) -> str:
 
 
 def _select_latest_run_batch_dir(runs_dir: Path) -> Path | None:
-    if not runs_dir.is_dir():
-        return None
-    run_batch_dirs = [path for path in runs_dir.iterdir() if path.is_dir()]
+    run_batch_dirs = _run_batch_dirs_newest_first(runs_dir)
     if not run_batch_dirs:
         return None
-    return max(run_batch_dirs, key=lambda path: (path.stat().st_mtime_ns, path.name))
+    return run_batch_dirs[0]
+
+
+def _run_batch_dirs_newest_first(runs_dir: Path) -> list[Path]:
+    if not runs_dir.is_dir():
+        return []
+    run_batch_dirs = [path for path in runs_dir.iterdir() if path.is_dir()]
+    return sorted(run_batch_dirs, key=lambda path: path.name, reverse=True)
+
+
+def _load_run_artifacts_from_batch_dir(run_batch_dir: Path) -> list[RunArtifact]:
+    return [
+        RunArtifact.model_validate(json.loads(path.read_text(encoding="utf-8")))
+        for path in sorted(run_batch_dir.glob("*/*.json"))
+    ]
 
 
 def _validate_run_artifacts(
@@ -641,10 +653,7 @@ def _load_latest_validated_run_batch(
     if run_batch_dir is None:
         raise HTTPException(status_code=400, detail="Version has no run batches")
     selected_run_batch_id = run_batch_dir.name
-    run_artifacts = [
-        RunArtifact.model_validate(json.loads(path.read_text(encoding="utf-8")))
-        for path in sorted(run_batch_dir.glob("*/*.json"))
-    ]
+    run_artifacts = _load_run_artifacts_from_batch_dir(run_batch_dir)
     if not run_artifacts:
         raise HTTPException(status_code=400, detail="Run batch has no artifacts")
     _validate_run_artifacts(
@@ -734,10 +743,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         run_batch_dir = _select_latest_run_batch_dir(version_dir / "runs")
         if run_batch_dir is None:
             return {"run_batch_id": None, "runs": []}
-        run_artifacts = [
-            RunArtifact.model_validate(json.loads(path.read_text(encoding="utf-8")))
-            for path in sorted(run_batch_dir.glob("*/*.json"))
-        ]
+        run_artifacts = _load_run_artifacts_from_batch_dir(run_batch_dir)
         return {
             "run_batch_id": run_batch_dir.name,
             "runs": [run.model_dump(mode="json") for run in run_artifacts],
@@ -927,13 +933,22 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             experiment = store.load_experiment(experiment_id)
             version_dir = store.version_dir(experiment_id, version)
             runs_dir = version_dir / "runs"
+            experiment_dir = store.experiment_dir(experiment_id)
+            rubric_path = experiment_dir / "rubric.md"
+            rubric = _read_optional_text(rubric_path)
+            prompt_template = store.read_text(
+                experiment_id, version, experiment.template.path
+            )
+            cases = store.load_cases(experiment_id)
+            case_ids = {case.id for case in cases}
             if run_batch_id is None:
-                run_batch_dir = _select_latest_run_batch_dir(runs_dir)
-                if run_batch_dir is None:
-                    raise HTTPException(
-                        status_code=400, detail="Version has no run batches"
-                    )
-                selected_run_batch_id = run_batch_dir.name
+                selected_run_batch_id, run_artifacts = _load_latest_validated_run_batch(
+                    version_dir=version_dir,
+                    version=version,
+                    cases=case_ids,
+                    repeat_count=experiment.run_defaults.repeat_count,
+                )
+                run_batch_dir = runs_dir / selected_run_batch_id
             else:
                 _validate_run_batch_id_path_segment(run_batch_id)
                 selected_run_batch_id = run_batch_id
@@ -945,29 +960,18 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                     or not run_batch_dir.is_dir()
                 ):
                     raise HTTPException(status_code=404, detail="Run batch not found")
-            assert selected_run_batch_id is not None
-            assert run_batch_dir is not None
-
-            experiment_dir = store.experiment_dir(experiment_id)
-            rubric_path = experiment_dir / "rubric.md"
-            rubric = _read_optional_text(rubric_path)
-            prompt_template = store.read_text(
-                experiment_id, version, experiment.template.path
-            )
-            cases = store.load_cases(experiment_id)
-            run_artifacts = [
-                RunArtifact.model_validate(json.loads(path.read_text(encoding="utf-8")))
-                for path in sorted(run_batch_dir.glob("*/*.json"))
-            ]
-            if not run_artifacts:
-                raise HTTPException(status_code=400, detail="Run batch has no artifacts")
-            _validate_run_artifacts(
-                run_artifacts=run_artifacts,
-                selected_run_batch_id=selected_run_batch_id,
-                version=version,
-                case_ids={case.id for case in cases},
-                repeat_count=experiment.run_defaults.repeat_count,
-            )
+                run_artifacts = _load_run_artifacts_from_batch_dir(run_batch_dir)
+                if not run_artifacts:
+                    raise HTTPException(
+                        status_code=400, detail="Run batch has no artifacts"
+                    )
+                _validate_run_artifacts(
+                    run_artifacts=run_artifacts,
+                    selected_run_batch_id=selected_run_batch_id,
+                    version=version,
+                    case_ids=case_ids,
+                    repeat_count=experiment.run_defaults.repeat_count,
+                )
 
             if experiment.output.type == "pydantic":
                 model_file = experiment.output.model_file

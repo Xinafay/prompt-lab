@@ -584,7 +584,7 @@ def test_api_judgment_replaces_existing_reviews_and_proposals() -> None:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
 
-def test_api_selects_latest_run_batch_by_mtime_not_name() -> None:
+def test_api_selects_latest_run_batch_by_name_not_mtime() -> None:
     captured: dict[str, Any] = {}
 
     def fake_generate_structured(
@@ -597,7 +597,7 @@ def test_api_selects_latest_run_batch_by_mtime_not_name() -> None:
         return FakeGeneratedStructured(
             JudgmentArtifact.model_validate(
                 valid_judgment_payload(
-                    run_batch_ids=["aaa-new"], judge_model="openai/judge"
+                    run_batch_ids=["run_version-000002"], judge_model="openai/judge"
                 )
             )
         )
@@ -608,17 +608,17 @@ def test_api_selects_latest_run_batch_by_mtime_not_name() -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             version_dir = write_demo_experiment(root)
-            write_run_batch(version_dir, "zzz-old")
-            write_run_batch(version_dir, "aaa-new")
-            old_dir = version_dir / "runs" / "zzz-old"
-            new_dir = version_dir / "runs" / "aaa-new"
+            write_run_batch(version_dir, "run_version-000001")
+            write_run_batch(version_dir, "run_version-000002")
+            old_dir = version_dir / "runs" / "run_version-000001"
+            new_dir = version_dir / "runs" / "run_version-000002"
             old_time = 1_700_000_000
             new_time = old_time + 60
             old_dir.touch()
             new_dir.touch()
 
-            os.utime(old_dir, ns=(old_time * 1_000_000_000, old_time * 1_000_000_000))
-            os.utime(new_dir, ns=(new_time * 1_000_000_000, new_time * 1_000_000_000))
+            os.utime(old_dir, ns=(new_time * 1_000_000_000, new_time * 1_000_000_000))
+            os.utime(new_dir, ns=(old_time * 1_000_000_000, old_time * 1_000_000_000))
             app = create_app(PromptLabConfig.from_env(project_root=root))
 
             response = TestClient(app, raise_server_exceptions=False).post(
@@ -626,8 +626,60 @@ def test_api_selects_latest_run_batch_by_mtime_not_name() -> None:
             )
 
             assert response.status_code == 200
-            assert response.json()["run_batch_id"] == "aaa-new"
-            assert "aaa-new" in captured["prompt"]
+            assert response.json()["run_batch_id"] == "run_version-000002"
+            assert "run_version-000002" in captured["prompt"]
+    finally:
+        llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
+
+
+def test_api_uses_latest_named_run_batch_when_older_batch_mtime_is_newer() -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_generate_structured(
+        model: str,
+        prompt: str,
+        response_model: Any,
+        validation_context: dict[str, Any] | None,
+    ) -> FakeGeneratedStructured:
+        captured["prompt"] = prompt
+        return FakeGeneratedStructured(
+            JudgmentArtifact.model_validate(
+                valid_judgment_payload(
+                    run_batch_ids=["run_version-000002"], judge_model="openai/judge"
+                )
+            )
+        )
+
+    original_generate_structured = llm_client.generate_structured
+    llm_client.generate_structured = fake_generate_structured  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            version_dir = write_demo_experiment(root, repeat_count=2)
+            write_run_batch(version_dir, "run_version-000001", repeat_count=3)
+            write_run_batch(version_dir, "run_version-000002", repeat_count=2)
+            stale_dir = version_dir / "runs" / "run_version-000001"
+            latest_dir = version_dir / "runs" / "run_version-000002"
+            old_time = 1_700_000_000
+            stale_dir.touch()
+            latest_dir.touch()
+            os.utime(
+                stale_dir,
+                ns=((old_time + 60) * 1_000_000_000, (old_time + 60) * 1_000_000_000),
+            )
+            os.utime(
+                latest_dir,
+                ns=(old_time * 1_000_000_000, old_time * 1_000_000_000),
+            )
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+
+            response = TestClient(app, raise_server_exceptions=False).post(
+                "/api/experiments/demo/versions/v001/judgments"
+            )
+
+            assert response.status_code == 200
+            assert response.json()["run_batch_id"] == "run_version-000002"
+            assert "run_version-000002" in captured["prompt"]
     finally:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
@@ -887,7 +939,8 @@ def main() -> int:
         test_api_creates_judgment_and_default_accepted_decisions,
         test_api_creates_dry_run_judgment_without_live_llm,
         test_api_judgment_replaces_existing_reviews_and_proposals,
-        test_api_selects_latest_run_batch_by_mtime_not_name,
+        test_api_selects_latest_run_batch_by_name_not_mtime,
+        test_api_uses_latest_named_run_batch_when_older_batch_mtime_is_newer,
         test_api_rejects_run_artifact_version_mismatch_without_judging,
         test_api_rejects_missing_run_coverage_without_judging,
         test_api_rejects_judgment_metadata_mismatch_without_writing_review,
