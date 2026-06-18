@@ -1,4 +1,4 @@
-import { visibleJsonEntries } from "../jsonPreview";
+import { sanitizeJsonPreviewValue, visibleJsonEntries } from "../jsonPreview";
 
 interface ValuePreviewProps {
   value: unknown;
@@ -14,7 +14,7 @@ function compactText(value: string, maxLength = 220): string {
 
 function compactJson(value: unknown): string {
   try {
-    return compactText(JSON.stringify(value));
+    return compactText(JSON.stringify(sanitizeJsonPreviewValue(value)));
   } catch {
     return String(value);
   }
@@ -22,7 +22,7 @@ function compactJson(value: unknown): string {
 
 function formatJson(value: unknown): string {
   try {
-    return JSON.stringify(value, null, 2) ?? "undefined";
+    return JSON.stringify(sanitizeJsonPreviewValue(value), null, 2) ?? "undefined";
   } catch {
     return String(value);
   }

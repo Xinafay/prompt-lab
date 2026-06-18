@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   getCompareActionLabel,
+  getCompareActionState,
   getJudgeActionState,
   getProposalActionLabel,
   getRunActionLabel
@@ -76,5 +77,43 @@ test("compare action label changes when a comparison already exists", () => {
   assert.equal(
     getCompareActionLabel({ hasComparison: true, isBusy: true }),
     "Comparing..."
+  );
+});
+
+test("compare action explains when only one version exists", () => {
+  assert.deepEqual(
+    getCompareActionState({
+      hasComparison: false,
+      hasRuns: false,
+      isBusy: false,
+      sameVersion: true,
+      versionCount: 1
+    }),
+    {
+      disabled: true,
+      disabledReason: "Create another version before comparing.",
+      emptyMessage: "No comparison report. Create another version before comparing.",
+      note: "Create another version before comparing.",
+      label: "Compare versions"
+    }
+  );
+});
+
+test("compare action asks for runs before comparing different versions", () => {
+  assert.deepEqual(
+    getCompareActionState({
+      hasComparison: false,
+      hasRuns: false,
+      isBusy: false,
+      sameVersion: false,
+      versionCount: 2
+    }),
+    {
+      disabled: true,
+      disabledReason: "Run both versions before comparing.",
+      emptyMessage: "No comparison report. Run both versions before comparing.",
+      note: null,
+      label: "Compare versions"
+    }
   );
 });

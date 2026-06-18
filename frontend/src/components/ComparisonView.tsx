@@ -1,4 +1,5 @@
 import type { ComparisonArtifact } from "../types";
+import { getCompareActionState } from "../workflowActions";
 import { TooltipButton } from "./TooltipButton";
 
 interface ComparisonViewProps {
@@ -6,6 +7,7 @@ interface ComparisonViewProps {
   baselineVersion: string;
   candidateVersion: string;
   comparison: ComparisonArtifact | null;
+  hasRuns: boolean;
   isBusy: boolean;
   onBaselineVersionChange: (version: string) => void;
   onCandidateVersionChange: (version: string) => void;
@@ -34,12 +36,20 @@ export function ComparisonView({
   baselineVersion,
   candidateVersion,
   comparison,
+  hasRuns,
   isBusy,
   onBaselineVersionChange,
   onCandidateVersionChange,
   onCompare
 }: ComparisonViewProps) {
   const sameVersion = baselineVersion === candidateVersion;
+  const compareAction = getCompareActionState({
+    hasComparison: comparison !== null,
+    hasRuns,
+    isBusy,
+    sameVersion,
+    versionCount: knownVersions.length
+  });
 
   return (
     <section className="comparison-panel" aria-label="Comparison">
@@ -47,16 +57,12 @@ export function ComparisonView({
         <h3>Comparison</h3>
         <TooltipButton
           className="secondary-action"
-          disabled={isBusy || sameVersion}
-          disabledReason={
-            isBusy
-              ? "Wait for the current workflow action to finish."
-              : "Choose two different versions before comparing."
-          }
+          disabled={compareAction.disabled}
+          disabledReason={compareAction.disabledReason}
           onClick={onCompare}
           type="button"
         >
-          {isBusy ? "Comparing..." : "Compare versions"}
+          {compareAction.label}
         </TooltipButton>
       </div>
       <div className="comparison-controls">
@@ -90,16 +96,12 @@ export function ComparisonView({
         </label>
       </div>
 
-      {sameVersion ? (
-        <div className="comparison-note">
-          Choose two different versions before comparing.
-        </div>
+      {compareAction.note !== null ? (
+        <div className="comparison-note">{compareAction.note}</div>
       ) : null}
 
       {comparison === null ? (
-        <div className="empty-inline">
-          No comparison report. Run both versions before comparing.
-        </div>
+        <div className="empty-inline">{compareAction.emptyMessage}</div>
       ) : (
         <div className="comparison-report">
           <div className="review-summary">

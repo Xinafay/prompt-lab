@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { visibleJsonEntries } from "../src/jsonPreview.ts";
+import { sanitizeJsonPreviewValue, visibleJsonEntries } from "../src/jsonPreview.ts";
 
 test("hides technical object keys from JSON tree previews", () => {
   assert.deepEqual(
@@ -23,4 +23,32 @@ test("keeps array indexes visible in JSON tree previews", () => {
     ["0", "first"],
     ["1", "second"]
   ]);
+});
+
+test("removes technical keys recursively from JSON preview values", () => {
+  assert.deepEqual(
+    sanitizeJsonPreviewValue({
+      __carmilla_flat_file_node__: "file",
+      value: {
+        _internal: "hidden",
+        title: "Chapter One",
+        nested: [
+          {
+            __carmilla_flat_file_node__: "file",
+            value: "Visible text"
+          }
+        ]
+      }
+    }),
+    {
+      value: {
+        title: "Chapter One",
+        nested: [
+          {
+            value: "Visible text"
+          }
+        ]
+      }
+    }
+  );
 });

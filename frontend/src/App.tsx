@@ -51,7 +51,7 @@ import {
   type WorkbenchTab
 } from "./urlState";
 import {
-  getCompareActionLabel,
+  getCompareActionState,
   getJudgeActionState,
   getProposalActionLabel,
   getRunActionLabel
@@ -982,7 +982,15 @@ function App() {
     const requestedBaseline = baselineVersion;
     const requestedCandidate = candidateVersion;
     if (requestedBaseline === requestedCandidate) {
-      setWorkflowMessage("Choose two different versions before comparing.");
+      setWorkflowMessage(
+        knownVersions.length < 2
+          ? "Create another version before comparing."
+          : "Choose two different versions before comparing."
+      );
+      return;
+    }
+    if (!hasRuns) {
+      setWorkflowMessage("Run both versions before comparing.");
       return;
     }
     const dryRun = workflowMode === "dry-run";
@@ -1148,6 +1156,13 @@ function App() {
     hasRuns,
     isBusy: workflowLocked
   });
+  const compareAction = getCompareActionState({
+    hasComparison: comparison !== null,
+    hasRuns,
+    isBusy: workflowLocked,
+    sameVersion: baselineVersion === candidateVersion,
+    versionCount: knownVersions.length
+  });
 
   return (
     <main className="app-shell">
@@ -1250,19 +1265,12 @@ function App() {
                       ) : activeTab === "compare" ? (
                         <TooltipButton
                           className="primary-action"
-                          disabled={workflowLocked || baselineVersion === candidateVersion}
-                          disabledReason={
-                            workflowLocked
-                              ? "Wait for the current workflow action to finish."
-                              : "Choose two different versions before comparing."
-                          }
+                          disabled={compareAction.disabled}
+                          disabledReason={compareAction.disabledReason}
                           onClick={handleCompareVersions}
                           type="button"
                         >
-                          {getCompareActionLabel({
-                            hasComparison: comparison !== null,
-                            isBusy: workflowLocked
-                          })}
+                          {compareAction.label}
                         </TooltipButton>
                       ) : activeTab === "runs" ? (
                         <TooltipButton
@@ -1376,6 +1384,7 @@ function App() {
                         baselineVersion={baselineVersion}
                         candidateVersion={candidateVersion}
                         comparison={comparison}
+                        hasRuns={hasRuns}
                         isBusy={workflowLocked}
                         knownVersions={knownVersions}
                         onBaselineVersionChange={handleBaselineVersionChange}
