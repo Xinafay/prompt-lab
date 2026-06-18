@@ -710,6 +710,50 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         raise_if_workflow_job_cancelled(job_id)
         job_manager.complete(job_id, message=message)
 
+    def workflow_stream_callbacks(job_id: str):
+        return llm_client.cancellation_callbacks(
+            lambda: job_manager.get(job_id).status == "cancelled"
+        )
+
+    def generate_text_for_workflow(job_id: str, model: str, prompt: str) -> object:
+        callbacks = workflow_stream_callbacks(job_id)
+        try:
+            return llm_client.generate_text(
+                model,
+                prompt,
+                stream_callback=callbacks,
+            )
+        except TypeError as exc:
+            if "stream_callback" not in str(exc):
+                raise
+            return llm_client.generate_text(model, prompt)
+
+    def generate_structured_for_workflow(
+        job_id: str,
+        model: str,
+        prompt: str,
+        response_model: type[BaseModel],
+        validation_context: dict[str, object] | None,
+    ) -> llm_client.GeneratedStructured:
+        callbacks = workflow_stream_callbacks(job_id)
+        try:
+            return llm_client.generate_structured(
+                model,
+                prompt,
+                response_model,
+                validation_context,
+                stream_callback=callbacks,
+            )
+        except TypeError as exc:
+            if "stream_callback" not in str(exc):
+                raise
+            return llm_client.generate_structured(
+                model,
+                prompt,
+                response_model,
+                validation_context,
+            )
+
     @app.exception_handler(NotFoundError)
     def handle_not_found_error(
         request: object, exc: NotFoundError
@@ -895,7 +939,20 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                     )
                     if experiment.output.type == "pydantic":
                         assert response_model is not None
-                        generate_structured = llm_client.generate_structured
+                        def generate_structured(
+                            model: str,
+                            prompt: str,
+                            response_model: type[BaseModel],
+                            validation_context: dict[str, object] | None,
+                        ) -> object:
+                            return generate_structured_for_workflow(
+                                job_id,
+                                model,
+                                prompt,
+                                response_model,
+                                validation_context,
+                            )
+
                         if dry_run:
                             validation_context = materialize_case_context(case)
                             response_text = dry_structured_response_json(
@@ -928,7 +985,9 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                             generate_structured=generate_structured,
                         )
                     else:
-                        generate_text = llm_client.generate_text
+                        def generate_text(model: str, prompt: str) -> object:
+                            return generate_text_for_workflow(job_id, model, prompt)
+
                         if dry_run:
                             response_text = dry_text_response(case.id, repeat_index)
 
@@ -1072,7 +1131,8 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                     ),
                 )
             else:
-                generated = llm_client.generate_structured(
+                generated = generate_structured_for_workflow(
+                    job_id,
                     experiment.models.judge_model,
                     judge_prompt,
                     JudgmentArtifact,
@@ -1121,6 +1181,10 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 exc_info=True,
             )
             raise HTTPException(status_code=400, detail=detail) from exc
+        except llm_client.PromptLabLlmCancelled as exc:
+            raise HTTPException(
+                status_code=409, detail="Workflow job was cancelled"
+            ) from exc
         except HTTPException as exc:
             fail_workflow_job_if_running(job_id, str(exc.detail))
             if exc.status_code == 400:
@@ -1231,7 +1295,8 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                     ),
                 )
             else:
-                generated = llm_client.generate_structured(
+                generated = generate_structured_for_workflow(
+                    job_id,
                     experiment.models.judge_model,
                     comparison_prompt,
                     ComparisonArtifact,
@@ -1264,6 +1329,12 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 rubric, encoding="utf-8"
             )
             complete_workflow_job(job_id, "Comparison completed")
+        except llm_client.PromptLabLlmCancelled as exc:
+            if comparison_dir is not None:
+                _cleanup_reserved_comparison_dir(comparison_dir)
+            raise HTTPException(
+                status_code=409, detail="Workflow job was cancelled"
+            ) from exc
         except Exception as exc:
             if comparison_dir is not None:
                 _cleanup_reserved_comparison_dir(comparison_dir)
@@ -1405,7 +1476,8 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                     ),
                 )
             else:
-                generated = llm_client.generate_structured(
+                generated = generate_structured_for_workflow(
+                    job_id,
                     experiment.models.judge_model,
                     proposal_prompt,
                     ProposalDraft,
@@ -1455,6 +1527,10 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 "proposal": proposal.model_dump(mode="json"),
                 "source": source,
             }
+        except llm_client.PromptLabLlmCancelled as exc:
+            raise HTTPException(
+                status_code=409, detail="Workflow job was cancelled"
+            ) from exc
         except Exception as exc:
             fail_workflow_job_if_running(job_id, str(exc) or type(exc).__name__)
             raise

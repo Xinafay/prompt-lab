@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Callable
 from typing import Any
 
 from pydantic import BaseModel
@@ -9,13 +10,19 @@ from shared.llm.chat import Chat
 from shared.llm.chat_result import LlmResponse, assistant_conversation_message
 from shared.llm.chat_get_structured_lite import chat_get_structured_lite
 from shared.llm.chat_get_text import chat_get_text
+from shared.llm.cancellation import LlmRequestCancelled
 from shared.llm.clients.mock_client import MockChatClient
+from shared.llm.stream_callbacks import StreamCallbacks
 from shared.llm.structured_lite import StructuredLiteExhaustedError
 from shared.llm.structured_lite import structured_lite
 
 
 class PromptLabStructuredValidationError(Exception):
     """Raised when structured generation exhausts validation repair attempts."""
+
+
+class PromptLabLlmCancelled(Exception):
+    """Raised when a Prompt Lab workflow cancels an active LLM request."""
 
 
 @dataclass(frozen=True)
@@ -42,14 +49,33 @@ def _raw_response(result: Any) -> Any:
     raise AttributeError("LLM result has neither non-None response nor conversation.")
 
 
-def generate_text(model: str, prompt: str) -> GeneratedText:
+def cancellation_callbacks(is_cancelled: Callable[[], bool]) -> StreamCallbacks:
+    """Build stream callbacks that bridge Prompt Lab job cancellation into LLM transport."""
+
+    def raise_if_cancelled() -> None:
+        if is_cancelled():
+            raise LlmRequestCancelled("Workflow job was cancelled.")
+
+    return StreamCallbacks(cancel_check=raise_if_cancelled)
+
+
+def generate_text(
+    model: str,
+    prompt: str,
+    *,
+    stream_callback: StreamCallbacks | None = None,
+) -> GeneratedText:
     """Generate text with Prompt Lab cache policy."""
-    result = chat_get_text(
-        Chat(),
-        prompt,
-        {"model": model},
-        cache_enabled=False,
-    )
+    try:
+        result = chat_get_text(
+            Chat(),
+            prompt,
+            {"model": model},
+            stream_callback=stream_callback,
+            cache_enabled=False,
+        )
+    except LlmRequestCancelled as exc:
+        raise PromptLabLlmCancelled(str(exc)) from exc
     return GeneratedText(
         output=result.output,
         usage=result.usage or {},
@@ -62,6 +88,8 @@ def generate_structured(
     prompt: str,
     response_model: type[BaseModel],
     validation_context: dict[str, Any] | None,
+    *,
+    stream_callback: StreamCallbacks | None = None,
 ) -> GeneratedStructured:
     """Generate structured output with Prompt Lab cache policy."""
     try:
@@ -71,8 +99,11 @@ def generate_structured(
             preset={"model": model},
             response_model=response_model,
             validation_context=validation_context,
+            stream_callback=stream_callback,
             cache_enabled=False,
         )
+    except LlmRequestCancelled as exc:
+        raise PromptLabLlmCancelled(str(exc)) from exc
     except StructuredLiteExhaustedError as exc:
         raise PromptLabStructuredValidationError(str(exc)) from exc
     return GeneratedStructured(
