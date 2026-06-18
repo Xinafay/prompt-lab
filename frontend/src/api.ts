@@ -125,6 +125,15 @@ export function getJob(jobId: string): Promise<JobStatus> {
   return apiGet<JobStatus>(`/api/jobs/${encodeURIComponent(jobId)}`);
 }
 
+export async function getActiveJob(): Promise<JobStatus | null> {
+  const response = await apiGet<{ job: JobStatus | null }>("/api/jobs/active");
+  return response.job;
+}
+
+export function cancelJob(jobId: string): Promise<JobStatus> {
+  return apiPost<JobStatus>(`/api/jobs/${encodeURIComponent(jobId)}/cancel`);
+}
+
 export function getJobEvents(jobId: string): Promise<JobEvent[]> {
   return apiGet<JobEvent[]>(`/api/jobs/${encodeURIComponent(jobId)}/events`);
 }

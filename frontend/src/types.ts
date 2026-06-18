@@ -86,7 +86,7 @@ export interface JobStatus {
   kind: string;
   experiment_id: string;
   version: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "cancelled";
   total_units: number;
   completed_units: number;
   message: string;

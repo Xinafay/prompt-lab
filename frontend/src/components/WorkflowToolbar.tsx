@@ -12,6 +12,7 @@ interface WorkflowToolbarProps {
   isVersionSwitching: boolean;
   onActiveVersionChange: (version: string) => void;
   onWorkflowModeChange: (mode: WorkflowMode) => void;
+  onCancelJob?: () => void;
   primaryAction: ReactNode;
   showDryRunControls: boolean;
 }
@@ -25,6 +26,7 @@ export function WorkflowToolbar({
   workflowMode,
   isVersionSwitching = false,
   onActiveVersionChange = () => undefined,
+  onCancelJob,
   onWorkflowModeChange,
   primaryAction,
   showDryRunControls
@@ -33,7 +35,9 @@ export function WorkflowToolbar({
     jobStatus === null
       ? workflowMessage
       : `${jobStatus.status}: ${jobStatus.message} (${jobStatus.completed_units}/${jobStatus.total_units})`;
-  const showActions = showDryRunControls || primaryAction !== null;
+  const showCancelAction =
+    jobStatus?.status === "running" && onCancelJob !== undefined;
+  const showActions = showDryRunControls || primaryAction !== null || showCancelAction;
 
   return (
     <div className="workflow-toolbar" aria-label="Workflow context">
@@ -77,6 +81,15 @@ export function WorkflowToolbar({
             </label>
           ) : null}
           {primaryAction}
+          {showCancelAction ? (
+            <button
+              className="secondary-action danger-action"
+              onClick={onCancelJob}
+              type="button"
+            >
+              Cancel
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

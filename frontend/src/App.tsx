@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   apiGet,
+  cancelJob,
   compareVersions,
   createProposalVersion,
   generateProposal,
+  getActiveJob,
   getExperimentVersions,
   getJob,
   getLatestReviewState,
@@ -81,6 +83,14 @@ function currentExperimentRoute() {
 const SHOW_DRY_RUN_CONTROLS =
   import.meta.env.VITE_PROMPT_LAB_SHOW_DRY_RUN === "1";
 
+function workflowCompletionMessage(kind: string): string {
+  if (kind === "run_version") return "Active run completed.";
+  if (kind === "judge") return "Active review loaded.";
+  if (kind === "proposal") return "Proposal generated.";
+  if (kind === "compare") return "Comparison loaded.";
+  return "Workflow action completed.";
+}
+
 function App() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [selectedExperiment, setSelectedExperiment] =
@@ -113,6 +123,7 @@ function App() {
   const [decisionsDirty, setDecisionsDirty] = useState(false);
   const [humanNotesDirty, setHumanNotesDirty] = useState(false);
   const selectedKeyRef = useRef<string | null>(null);
+  const followedJobIdRef = useRef<string | null>(null);
   const runRequestIdRef = useRef(0);
   const workflowRequestIdRef = useRef(0);
   const baselineVersionRef = useRef("v001");
@@ -292,6 +303,9 @@ function App() {
     if (message !== undefined) {
       setWorkflowMessage(message);
     }
+    window.setTimeout(() => {
+      void syncActiveWorkflowJob("Workflow action running.");
+    }, 100);
     return requestId;
   }
 
@@ -299,6 +313,89 @@ function App() {
     return (
       workflowRequestIdRef.current === requestId && isSelectionCurrent(selectionKey)
     );
+  }
+
+  async function refreshSelectedVersionArtifacts(job: JobStatus) {
+    const selectionKey = `${job.experiment_id}:${job.version}`;
+    if (!isSelectionCurrent(selectionKey)) {
+      return;
+    }
+    const [overview, runs, latestReview] = await Promise.all([
+      getVersionOverview(job.experiment_id, job.version),
+      getVersionRuns(job.experiment_id, job.version),
+      getLatestReviewState(job.experiment_id, job.version)
+    ]);
+    const latestProposal =
+      latestReview === null
+        ? null
+        : await getReviewProposal(
+            job.experiment_id,
+            job.version,
+            latestReview.review_id
+          );
+    if (!isSelectionCurrent(selectionKey)) {
+      return;
+    }
+    setDetailState({ status: "loaded", overview, runs });
+    setReviewState(latestReview);
+    setProposalResponse(latestProposal);
+    setDecisionsDirty(false);
+    setHumanNotesDirty(false);
+    if (job.kind === "run_version" || job.kind === "judge") {
+      setCreatedVersion(null);
+      setComparison(null);
+    }
+  }
+
+  async function followWorkflowJob(job: JobStatus, message: string) {
+    if (job.status !== "running") {
+      setJobStatus(job);
+      return;
+    }
+    if (followedJobIdRef.current === job.job_id) {
+      return;
+    }
+    followedJobIdRef.current = job.job_id;
+    setJobStatus(job);
+    setWorkflowBusy(true);
+    setWorkflowMessage(message);
+    try {
+      const completedJob = await followJobEvents(
+        job.job_id,
+        job,
+        () => followedJobIdRef.current === job.job_id
+      );
+      if (followedJobIdRef.current !== job.job_id) {
+        return;
+      }
+      setJobStatus(completedJob);
+      setWorkflowBusy(false);
+      if (completedJob.status === "completed") {
+        await refreshSelectedVersionArtifacts(completedJob);
+        setWorkflowMessage(workflowCompletionMessage(completedJob.kind));
+      } else if (completedJob.status === "cancelled") {
+        setWorkflowMessage("Workflow job cancelled.");
+      } else {
+        setWorkflowMessage(completedJob.message || "Workflow job failed.");
+      }
+    } catch (error) {
+      if (followedJobIdRef.current === job.job_id) {
+        setWorkflowBusy(false);
+        setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+      }
+    } finally {
+      if (followedJobIdRef.current === job.job_id) {
+        followedJobIdRef.current = null;
+      }
+    }
+  }
+
+  async function syncActiveWorkflowJob(message: string) {
+    const activeJob = await getActiveJob();
+    if (activeJob === null || activeJob.status !== "running") {
+      return;
+    }
+    void followWorkflowJob(activeJob, message);
   }
 
   useEffect(() => {
@@ -469,6 +566,35 @@ function App() {
     };
   }, [selectedExperiment]);
 
+  useEffect(() => {
+    if (selectedExperiment === null) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadActiveJob() {
+      try {
+        if (cancelled) {
+          return;
+        }
+        await syncActiveWorkflowJob("Resumed active workflow job.");
+      } catch (error) {
+        if (!cancelled) {
+          setWorkflowMessage(
+            error instanceof Error ? error.message : "Could not load active job."
+          );
+        }
+      }
+    }
+
+    void loadActiveJob();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedExperiment]);
+
   const subtitle = useMemo(() => {
     if (state.status !== "loaded") {
       return "Loading local experiment manifests";
@@ -479,6 +605,10 @@ function App() {
 
   async function handleRunVersion() {
     if (selectedExperiment === null || detailState.status !== "loaded") {
+      return;
+    }
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
       return;
     }
 
@@ -518,6 +648,15 @@ function App() {
       setHumanNotesDirty(false);
 
       job = await followJobEvents(job.job_id, job, isCurrentRequest);
+      if (job.status === "cancelled") {
+        if (isCurrentRequest()) {
+          setWorkflowMessage("Workflow job cancelled.");
+        }
+        return;
+      }
+      if (job.status === "failed") {
+        throw new Error(job.message || "Run failed.");
+      }
 
       const runs = await getVersionRuns(experimentId, version);
       if (!isCurrentRequest()) {
@@ -539,6 +678,20 @@ function App() {
         status: "error",
         message: error instanceof Error ? error.message : "Unknown error"
       });
+    }
+  }
+
+  async function handleCancelWorkflowJob() {
+    if (jobStatus?.status !== "running") {
+      return;
+    }
+    try {
+      const cancelledJob = await cancelJob(jobStatus.job_id);
+      setJobStatus(cancelledJob);
+      setWorkflowBusy(false);
+      setWorkflowMessage("Workflow job cancelled.");
+    } catch (error) {
+      setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
     }
   }
 
@@ -602,6 +755,10 @@ function App() {
 
   async function handleJudgeVersion() {
     if (selectedExperiment === null) return;
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
     const experimentId = selectedExperiment.id;
     const version = selectedExperiment.active_version;
     const selectionKey = `${experimentId}:${version}`;
@@ -737,6 +894,10 @@ function App() {
 
   async function handleGenerateProposal() {
     if (selectedExperiment === null || reviewState === null) return;
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
     if (decisionsDirty || humanNotesDirty) {
       setWorkflowMessage("Save decisions and human notes before generating a proposal.");
       return;
@@ -811,6 +972,10 @@ function App() {
 
   async function handleCompareVersions() {
     if (selectedExperiment === null) return;
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
     const experimentId = selectedExperiment.id;
     const version = selectedExperiment.active_version;
     const selectionKey = `${experimentId}:${version}`;
@@ -977,10 +1142,11 @@ function App() {
   }, [createdVersion, selectedExperiment, versionSummaries]);
 
   const hasRuns = detailState.status === "loaded" && detailState.runs.runs.length > 0;
+  const workflowLocked = workflowBusy || jobStatus?.status === "running";
   const judgeAction = getJudgeActionState({
     hasReview: reviewState !== null,
     hasRuns,
-    isBusy: workflowBusy
+    isBusy: workflowLocked
   });
 
   return (
@@ -1038,9 +1204,10 @@ function App() {
                     activeVersion={detailState.overview.version}
                     availableVersions={activeVersionOptions}
                     experiment={detailState.overview.experiment}
-                    isVersionSwitching={workflowBusy}
+                    isVersionSwitching={workflowLocked}
                     jobStatus={jobStatus}
                     onActiveVersionChange={handleActiveVersionChange}
+                    onCancelJob={handleCancelWorkflowJob}
                     onWorkflowModeChange={setWorkflowMode}
                     showDryRunControls={SHOW_DRY_RUN_CONTROLS}
                     workflowMessage={workflowMessage}
@@ -1060,13 +1227,13 @@ function App() {
                         <TooltipButton
                           className="primary-action"
                           disabled={
-                            workflowBusy ||
+                            workflowLocked ||
                             reviewState === null ||
                             decisionsDirty ||
                             humanNotesDirty
                           }
                           disabledReason={
-                            workflowBusy
+                            workflowLocked
                               ? "Wait for the current workflow action to finish."
                               : reviewState === null
                                 ? "Judge the active run before generating a proposal."
@@ -1077,15 +1244,15 @@ function App() {
                         >
                           {getProposalActionLabel({
                             hasProposal: proposalResponse !== null,
-                            isBusy: workflowBusy
+                            isBusy: workflowLocked
                           })}
                         </TooltipButton>
                       ) : activeTab === "compare" ? (
                         <TooltipButton
                           className="primary-action"
-                          disabled={workflowBusy || baselineVersion === candidateVersion}
+                          disabled={workflowLocked || baselineVersion === candidateVersion}
                           disabledReason={
-                            workflowBusy
+                            workflowLocked
                               ? "Wait for the current workflow action to finish."
                               : "Choose two different versions before comparing."
                           }
@@ -1094,13 +1261,13 @@ function App() {
                         >
                           {getCompareActionLabel({
                             hasComparison: comparison !== null,
-                            isBusy: workflowBusy
+                            isBusy: workflowLocked
                           })}
                         </TooltipButton>
                       ) : activeTab === "runs" ? (
                         <TooltipButton
                           className="primary-action"
-                          disabled={workflowBusy || jobStatus?.status === "running"}
+                          disabled={workflowLocked}
                           disabledReason="Wait for the current run to finish."
                           onClick={handleRunVersion}
                           type="button"
@@ -1180,7 +1347,7 @@ function App() {
                       <ReviewView
                         hasUnsavedDecisionChanges={decisionsDirty}
                         hasUnsavedHumanNotesChanges={humanNotesDirty}
-                        isBusy={workflowBusy}
+                        isBusy={workflowLocked}
                         judgeDisabled={judgeAction.disabled}
                         judgeDisabledReason={judgeAction.disabledReason}
                         onDecisionChange={handleDecisionChange}
@@ -1196,7 +1363,7 @@ function App() {
                       <ProposalView
                         createdVersion={createdVersion}
                         hasUnsavedReviewChanges={decisionsDirty || humanNotesDirty}
-                        isBusy={workflowBusy}
+                        isBusy={workflowLocked}
                         onCreateVersion={handleCreateVersion}
                         onGenerateProposal={handleGenerateProposal}
                         proposalResponse={proposalResponse}
@@ -1209,7 +1376,7 @@ function App() {
                         baselineVersion={baselineVersion}
                         candidateVersion={candidateVersion}
                         comparison={comparison}
-                        isBusy={workflowBusy}
+                        isBusy={workflowLocked}
                         knownVersions={knownVersions}
                         onBaselineVersionChange={handleBaselineVersionChange}
                         onCandidateVersionChange={handleCandidateVersionChange}
