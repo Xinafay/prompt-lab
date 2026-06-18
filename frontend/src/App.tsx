@@ -48,7 +48,12 @@ import {
   parseExperimentRoute,
   type WorkbenchTab
 } from "./urlState";
-import { getJudgeActionState } from "./workflowActions";
+import {
+  getCompareActionLabel,
+  getJudgeActionState,
+  getProposalActionLabel,
+  getRunActionLabel
+} from "./workflowActions";
 
 type LoadState =
   | { status: "loading" }
@@ -972,7 +977,11 @@ function App() {
   }, [createdVersion, selectedExperiment, versionSummaries]);
 
   const hasRuns = detailState.status === "loaded" && detailState.runs.runs.length > 0;
-  const judgeAction = getJudgeActionState({ hasRuns, isBusy: workflowBusy });
+  const judgeAction = getJudgeActionState({
+    hasReview: reviewState !== null,
+    hasRuns,
+    isBusy: workflowBusy
+  });
 
   return (
     <main className="app-shell">
@@ -1047,16 +1056,6 @@ function App() {
                         >
                           {judgeAction.label}
                         </TooltipButton>
-                      ) : activeTab === "proposal" && proposalResponse !== null ? (
-                        <TooltipButton
-                          className="primary-action"
-                          disabled={workflowBusy}
-                          disabledReason="Wait for the current workflow action to finish."
-                          onClick={handleCreateVersion}
-                          type="button"
-                        >
-                          Create next version
-                        </TooltipButton>
                       ) : activeTab === "proposal" ? (
                         <TooltipButton
                           className="primary-action"
@@ -1076,7 +1075,10 @@ function App() {
                           onClick={handleGenerateProposal}
                           type="button"
                         >
-                          {workflowBusy ? "Generating..." : "Generate proposal"}
+                          {getProposalActionLabel({
+                            hasProposal: proposalResponse !== null,
+                            isBusy: workflowBusy
+                          })}
                         </TooltipButton>
                       ) : activeTab === "compare" ? (
                         <TooltipButton
@@ -1090,7 +1092,10 @@ function App() {
                           onClick={handleCompareVersions}
                           type="button"
                         >
-                          {workflowBusy ? "Comparing..." : "Compare versions"}
+                          {getCompareActionLabel({
+                            hasComparison: comparison !== null,
+                            isBusy: workflowBusy
+                          })}
                         </TooltipButton>
                       ) : activeTab === "runs" ? (
                         <TooltipButton
@@ -1100,9 +1105,10 @@ function App() {
                           onClick={handleRunVersion}
                           type="button"
                         >
-                          {jobStatus?.status === "running"
-                            ? "Running..."
-                            : "Run version"}
+                          {getRunActionLabel({
+                            hasRuns,
+                            isRunning: jobStatus?.status === "running"
+                          })}
                         </TooltipButton>
                       ) : null
                     }

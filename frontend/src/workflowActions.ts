@@ -1,4 +1,5 @@
 interface JudgeActionInput {
+  hasReview?: boolean;
   hasRuns: boolean;
   isBusy: boolean;
 }
@@ -10,6 +11,7 @@ interface ActionState {
 }
 
 export function getJudgeActionState({
+  hasReview = false,
   hasRuns,
   isBusy
 }: JudgeActionInput): ActionState {
@@ -30,6 +32,39 @@ export function getJudgeActionState({
   return {
     disabled: false,
     disabledReason: null,
-    label: "Judge active run"
+    label: hasReview ? "Rejudge active run" : "Judge active run"
   };
+}
+
+export function getRunActionLabel({
+  hasRuns,
+  isRunning
+}: {
+  hasRuns: boolean;
+  isRunning: boolean;
+}): string {
+  if (isRunning) return "Running...";
+  return hasRuns ? "Rerun version" : "Run version";
+}
+
+export function getProposalActionLabel({
+  hasProposal,
+  isBusy
+}: {
+  hasProposal: boolean;
+  isBusy: boolean;
+}): string {
+  if (isBusy) return "Generating...";
+  return hasProposal ? "Regenerate proposal" : "Generate proposal";
+}
+
+export function getCompareActionLabel({
+  hasComparison,
+  isBusy
+}: {
+  hasComparison: boolean;
+  isBusy: boolean;
+}): string {
+  if (isBusy) return "Comparing...";
+  return hasComparison ? "Recompare versions" : "Compare versions";
 }
