@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from threading import Event, Thread
 from tempfile import TemporaryDirectory
 from typing import Any
 
@@ -443,6 +444,76 @@ def test_api_generates_dry_run_proposal_without_live_llm() -> None:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
 
+def test_api_reports_active_proposal_job_and_rejects_second_proposal() -> None:
+    started = Event()
+    release = Event()
+
+    def slow_generate_structured(
+        model: str,
+        prompt: str,
+        response_model: Any,
+        validation_context: dict[str, Any] | None,
+    ) -> FakeGeneratedStructured:
+        del model, prompt, response_model, validation_context
+        started.set()
+        if not release.wait(timeout=5):
+            raise TimeoutError("test timed out waiting to release fake proposal")
+        return FakeGeneratedStructured(
+            ProposalDraft(
+                prompt_md="Improved prompt",
+                model_py=(
+                    "from pydantic import BaseModel\n\n"
+                    "class DemoOutput(BaseModel):\n"
+                    "    answer: str\n"
+                ),
+                rationale_md="Why this proposal helps.",
+            )
+        )
+
+    original_generate_structured = llm_client.generate_structured
+    llm_client.generate_structured = slow_generate_structured  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_review_fixture(root)
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+            client = TestClient(app, raise_server_exceptions=False)
+            responses: list[Any] = []
+
+            def start_proposal() -> None:
+                responses.append(
+                    client.post(
+                        "/api/experiments/demo/versions/v001/reviews/review-001/proposal"
+                    )
+                )
+
+            thread = Thread(target=start_proposal)
+            thread.start()
+            try:
+                assert started.wait(timeout=5)
+
+                active_response = client.get("/api/jobs/active")
+                assert active_response.status_code == 200
+                active_job = active_response.json()["job"]
+                assert active_job["kind"] == "proposal"
+                assert active_job["status"] == "running"
+
+                duplicate_response = client.post(
+                    "/api/experiments/demo/versions/v001/reviews/review-001/proposal"
+                )
+                assert duplicate_response.status_code == 409
+                assert active_job["job_id"] in duplicate_response.json()["detail"]
+            finally:
+                release.set()
+                thread.join(timeout=5)
+
+            assert responses
+            assert responses[0].status_code == 200
+    finally:
+        release.set()
+        llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
+
+
 def test_api_create_version_copies_clean_source_and_replaces_pydantic_files() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -605,6 +676,7 @@ def main() -> int:
         test_api_reads_existing_proposal_artifacts,
         test_api_strips_wrapping_code_fences_from_proposal_files,
         test_api_generates_dry_run_proposal_without_live_llm,
+        test_api_reports_active_proposal_job_and_rejects_second_proposal,
         test_api_create_version_copies_clean_source_and_replaces_pydantic_files,
         test_api_create_version_rejects_mismatched_source_without_creating_version,
         test_api_create_version_cleans_partial_version_when_replacement_fails,

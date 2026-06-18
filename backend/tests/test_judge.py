@@ -5,6 +5,7 @@ import logging
 import os
 from pathlib import Path
 from io import StringIO
+from threading import Event, Thread
 from tempfile import TemporaryDirectory
 from typing import Any
 
@@ -632,6 +633,71 @@ def test_api_selects_latest_run_batch_by_name_not_mtime() -> None:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
 
+def test_api_reports_active_judge_job_and_rejects_second_judgment() -> None:
+    started = Event()
+    release = Event()
+
+    def slow_generate_structured(
+        model: str,
+        prompt: str,
+        response_model: Any,
+        validation_context: dict[str, Any] | None,
+    ) -> FakeGeneratedStructured:
+        del model, prompt, response_model, validation_context
+        started.set()
+        if not release.wait(timeout=5):
+            raise TimeoutError("test timed out waiting to release fake judge")
+        return FakeGeneratedStructured(
+            JudgmentArtifact.model_validate(
+                valid_judgment_payload(
+                    run_batch_ids=["batch-001"], judge_model="openai/judge"
+                )
+            )
+        )
+
+    original_generate_structured = llm_client.generate_structured
+    llm_client.generate_structured = slow_generate_structured  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            version_dir = write_demo_experiment(root)
+            write_run_batch(version_dir, "batch-001")
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+            client = TestClient(app, raise_server_exceptions=False)
+            responses: list[Any] = []
+
+            def start_judge() -> None:
+                responses.append(
+                    client.post("/api/experiments/demo/versions/v001/judgments")
+                )
+
+            thread = Thread(target=start_judge)
+            thread.start()
+            try:
+                assert started.wait(timeout=5)
+
+                active_response = client.get("/api/jobs/active")
+                assert active_response.status_code == 200
+                active_job = active_response.json()["job"]
+                assert active_job["kind"] == "judge"
+                assert active_job["status"] == "running"
+
+                duplicate_response = client.post(
+                    "/api/experiments/demo/versions/v001/judgments"
+                )
+                assert duplicate_response.status_code == 409
+                assert active_job["job_id"] in duplicate_response.json()["detail"]
+            finally:
+                release.set()
+                thread.join(timeout=5)
+
+            assert responses
+            assert responses[0].status_code == 200
+    finally:
+        release.set()
+        llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
+
+
 def test_api_uses_latest_named_run_batch_when_older_batch_mtime_is_newer() -> None:
     captured: dict[str, Any] = {}
 
@@ -940,6 +1006,7 @@ def main() -> int:
         test_api_creates_dry_run_judgment_without_live_llm,
         test_api_judgment_replaces_existing_reviews_and_proposals,
         test_api_selects_latest_run_batch_by_name_not_mtime,
+        test_api_reports_active_judge_job_and_rejects_second_judgment,
         test_api_uses_latest_named_run_batch_when_older_batch_mtime_is_newer,
         test_api_rejects_run_artifact_version_mismatch_without_judging,
         test_api_rejects_missing_run_coverage_without_judging,

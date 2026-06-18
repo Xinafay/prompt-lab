@@ -679,6 +679,37 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     job_manager = JobManager()
     app = FastAPI(title="Prompt Lab")
 
+    def start_workflow_job(
+        *, kind: str, experiment_id: str, version: str, total_units: int = 1
+    ) -> str:
+        try:
+            job = job_manager.start_job(
+                kind=kind,
+                experiment_id=experiment_id,
+                version=version,
+                total_units=total_units,
+            )
+        except JobAlreadyRunningError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return job.job_id
+
+    def fail_workflow_job_if_running(job_id: str | None, message: str) -> None:
+        if job_id is None:
+            return
+        job = job_manager.get(job_id)
+        if job.status not in {"completed", "failed", "cancelled"}:
+            job_manager.fail(job_id, message=message)
+
+    def raise_if_workflow_job_cancelled(job_id: str | None) -> None:
+        if job_id is not None and job_manager.get(job_id).status == "cancelled":
+            raise HTTPException(status_code=409, detail="Workflow job was cancelled")
+
+    def complete_workflow_job(job_id: str | None, message: str) -> None:
+        if job_id is None:
+            return
+        raise_if_workflow_job_cancelled(job_id)
+        job_manager.complete(job_id, message=message)
+
     @app.exception_handler(NotFoundError)
     def handle_not_found_error(
         request: object, exc: NotFoundError
@@ -950,9 +981,18 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     ) -> dict[str, object]:
         selected_run_batch_id: str | None = None
         run_batch_dir: Path | None = None
+        job_id: str | None = None
         try:
             dry_run = request.dry_run if request is not None else False
             experiment = store.load_experiment(experiment_id)
+            job_id = start_workflow_job(
+                kind="judge", experiment_id=experiment_id, version=version
+            )
+            job_manager.update(
+                job_id,
+                completed_units=0,
+                message="Judging active run",
+            )
             version_dir = store.version_dir(experiment_id, version)
             runs_dir = version_dir / "runs"
             experiment_dir = store.experiment_dir(experiment_id)
@@ -1038,6 +1078,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                     JudgmentArtifact,
                     None,
                 )
+            raise_if_workflow_job_cancelled(job_id)
             output = generated.output
             judgment = (
                 output
@@ -1062,6 +1103,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             )
             (review_dir / "rubric_snapshot.md").write_text(rubric, encoding="utf-8")
             _write_json(review_dir / "decisions.json", decisions.model_dump(mode="json"))
+            complete_workflow_job(job_id, "Judgment completed")
             return {
                 "review_id": review_id,
                 "run_batch_id": selected_run_batch_id,
@@ -1069,6 +1111,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             }
         except ValidationError as exc:
             detail = f"Judge response failed validation: {_validation_error_summary(exc)}"
+            fail_workflow_job_if_running(job_id, detail)
             _log_judge_rejection(
                 experiment_id=experiment_id,
                 version=version,
@@ -1079,6 +1122,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             )
             raise HTTPException(status_code=400, detail=detail) from exc
         except HTTPException as exc:
+            fail_workflow_job_if_running(job_id, str(exc.detail))
             if exc.status_code == 400:
                 _log_judge_rejection(
                     experiment_id=experiment_id,
@@ -1090,6 +1134,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             raise
         except Exception as exc:
             detail = f"Judge request failed: {type(exc).__name__}: {exc}"
+            fail_workflow_job_if_running(job_id, detail)
             _log_judge_rejection(
                 experiment_id=experiment_id,
                 version=version,
@@ -1142,10 +1187,19 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         candidate_prompt_template = store.read_text(
             experiment_id, candidate_version, experiment.template.path
         )
-        comparison_id, comparison_dir = _next_comparison_location(
-            candidate_version_dir
+        job_id = start_workflow_job(
+            kind="compare", experiment_id=experiment_id, version=candidate_version
         )
+        job_manager.update(
+            job_id,
+            completed_units=0,
+            message="Comparing versions",
+        )
+        comparison_dir: Path | None = None
         try:
+            comparison_id, comparison_dir = _next_comparison_location(
+                candidate_version_dir
+            )
             comparison_prompt = build_comparison_prompt(
                 experiment_id=experiment_id,
                 baseline_version=baseline_version,
@@ -1183,6 +1237,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                     ComparisonArtifact,
                     None,
                 )
+            raise_if_workflow_job_cancelled(job_id)
             output = generated.output
             comparison = (
                 output
@@ -1208,8 +1263,11 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             (comparison_dir / "rubric_snapshot.md").write_text(
                 rubric, encoding="utf-8"
             )
-        except Exception:
-            _cleanup_reserved_comparison_dir(comparison_dir)
+            complete_workflow_job(job_id, "Comparison completed")
+        except Exception as exc:
+            if comparison_dir is not None:
+                _cleanup_reserved_comparison_dir(comparison_dir)
+            fail_workflow_job_if_running(job_id, str(exc) or type(exc).__name__)
             raise
         return {
             "comparison_id": comparison_id,
@@ -1273,114 +1331,133 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         review_id: str,
         request: DryRunRequest | None = None,
     ) -> dict[str, object]:
-        dry_run = request.dry_run if request is not None else False
-        experiment = store.load_experiment(experiment_id)
-        version_dir = store.version_dir(experiment_id, version)
-        review_dir = _resolve_existing_review_dir(version_dir, review_id)
-        judgment = JudgmentArtifact.model_validate(_read_json(review_dir / "judgment.json"))
-        decisions_path = review_dir / "decisions.json"
-        if not decisions_path.is_file():
-            raise HTTPException(status_code=404, detail="Review decisions not found")
-        decisions = FindingDecisionSet.model_validate(_read_json(decisions_path))
-        _validate_decision_keys_match_judgment(
-            judgment=judgment,
-            decisions=decisions,
-        )
-
-        prompt_template = store.read_text(
-            experiment_id, version, experiment.template.path
-        )
-        rubric_snapshot_path = review_dir / "rubric_snapshot.md"
-        rubric_snapshot = (
-            rubric_snapshot_path.read_text(encoding="utf-8")
-            if rubric_snapshot_path.is_file()
-            else ""
-        )
-        human_notes_path = review_dir / "human_notes.md"
-        human_notes = (
-            human_notes_path.read_text(encoding="utf-8")
-            if human_notes_path.is_file()
-            else ""
-        )
-        model_source = None
-        if experiment.output.type == "pydantic":
-            model_file = experiment.output.model_file
-            assert model_file is not None
-            model_source = store.read_text(experiment_id, version, model_file)
-
-        proposal_prompt = build_proposal_prompt(
-            experiment_id=experiment_id,
-            version=version,
-            current_model=experiment.models.generator_model,
-            output_type=experiment.output.type,
-            prompt_template=prompt_template,
-            model_source=model_source,
-            rubric_snapshot=rubric_snapshot,
-            judgment=judgment,
-            decisions=decisions,
-            human_notes=human_notes,
-        )
-        if dry_run:
-            generated = llm_client.generate_structured_from_fake_response(
-                experiment.models.judge_model,
-                proposal_prompt,
-                ProposalDraft,
-                None,
-                dry_proposal_response_json(
-                    prompt_template=prompt_template,
-                    model_source=model_source,
-                    output_type=experiment.output.type,
-                ),
+        job_id: str | None = None
+        try:
+            dry_run = request.dry_run if request is not None else False
+            experiment = store.load_experiment(experiment_id)
+            job_id = start_workflow_job(
+                kind="proposal", experiment_id=experiment_id, version=version
             )
-        else:
-            generated = llm_client.generate_structured(
-                experiment.models.judge_model,
-                proposal_prompt,
-                ProposalDraft,
-                None,
+            job_manager.update(
+                job_id,
+                completed_units=0,
+                message="Generating proposal",
             )
-        output = generated.output
-        proposal = (
-            output
-            if isinstance(output, ProposalDraft)
-            else ProposalDraft.model_validate(output)
-        )
-        if experiment.output.type == "text" and proposal.model_py is not None:
-            raise HTTPException(
-                status_code=400,
-                detail="Text output proposals cannot include model_py",
+            version_dir = store.version_dir(experiment_id, version)
+            review_dir = _resolve_existing_review_dir(version_dir, review_id)
+            judgment = JudgmentArtifact.model_validate(
+                _read_json(review_dir / "judgment.json")
+            )
+            decisions_path = review_dir / "decisions.json"
+            if not decisions_path.is_file():
+                raise HTTPException(
+                    status_code=404, detail="Review decisions not found"
+                )
+            decisions = FindingDecisionSet.model_validate(_read_json(decisions_path))
+            _validate_decision_keys_match_judgment(
+                judgment=judgment,
+                decisions=decisions,
             )
 
-        proposal_dir = review_dir / "proposal"
-        proposal_dir.mkdir(parents=True, exist_ok=True)
-        (proposal_dir / "prompt.md").write_text(
-            proposal.prompt_md, encoding="utf-8"
-        )
-        model_proposal_path = proposal_dir / "model.py"
-        if proposal.model_py is not None:
-            model_proposal_path.write_text(proposal.model_py, encoding="utf-8")
-        elif model_proposal_path.exists():
-            model_proposal_path.unlink()
-        (proposal_dir / "rationale.md").write_text(
-            proposal.rationale_md, encoding="utf-8"
-        )
-        source = {
-            "experiment_id": experiment_id,
-            "source_version": version,
-            "review_id": review_id,
-            "judgment_id": judgment.judgment_id,
-            "decision_summary": _decision_summary(decisions),
-            "decisions_path": "decisions.json",
-            "human_notes_present": bool(human_notes.strip()),
-            "generated_by_model": experiment.models.judge_model,
-            "output_type": experiment.output.type,
-        }
-        _write_json(proposal_dir / "source.json", source)
-        return {
-            "proposal_dir": str(proposal_dir),
-            "proposal": proposal.model_dump(mode="json"),
-            "source": source,
-        }
+            prompt_template = store.read_text(
+                experiment_id, version, experiment.template.path
+            )
+            rubric_snapshot_path = review_dir / "rubric_snapshot.md"
+            rubric_snapshot = (
+                rubric_snapshot_path.read_text(encoding="utf-8")
+                if rubric_snapshot_path.is_file()
+                else ""
+            )
+            human_notes_path = review_dir / "human_notes.md"
+            human_notes = (
+                human_notes_path.read_text(encoding="utf-8")
+                if human_notes_path.is_file()
+                else ""
+            )
+            model_source = None
+            if experiment.output.type == "pydantic":
+                model_file = experiment.output.model_file
+                assert model_file is not None
+                model_source = store.read_text(experiment_id, version, model_file)
+
+            proposal_prompt = build_proposal_prompt(
+                experiment_id=experiment_id,
+                version=version,
+                current_model=experiment.models.generator_model,
+                output_type=experiment.output.type,
+                prompt_template=prompt_template,
+                model_source=model_source,
+                rubric_snapshot=rubric_snapshot,
+                judgment=judgment,
+                decisions=decisions,
+                human_notes=human_notes,
+            )
+            if dry_run:
+                generated = llm_client.generate_structured_from_fake_response(
+                    experiment.models.judge_model,
+                    proposal_prompt,
+                    ProposalDraft,
+                    None,
+                    dry_proposal_response_json(
+                        prompt_template=prompt_template,
+                        model_source=model_source,
+                        output_type=experiment.output.type,
+                    ),
+                )
+            else:
+                generated = llm_client.generate_structured(
+                    experiment.models.judge_model,
+                    proposal_prompt,
+                    ProposalDraft,
+                    None,
+                )
+            raise_if_workflow_job_cancelled(job_id)
+            output = generated.output
+            proposal = (
+                output
+                if isinstance(output, ProposalDraft)
+                else ProposalDraft.model_validate(output)
+            )
+            if experiment.output.type == "text" and proposal.model_py is not None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Text output proposals cannot include model_py",
+                )
+
+            proposal_dir = review_dir / "proposal"
+            proposal_dir.mkdir(parents=True, exist_ok=True)
+            (proposal_dir / "prompt.md").write_text(
+                proposal.prompt_md, encoding="utf-8"
+            )
+            model_proposal_path = proposal_dir / "model.py"
+            if proposal.model_py is not None:
+                model_proposal_path.write_text(proposal.model_py, encoding="utf-8")
+            elif model_proposal_path.exists():
+                model_proposal_path.unlink()
+            (proposal_dir / "rationale.md").write_text(
+                proposal.rationale_md, encoding="utf-8"
+            )
+            source = {
+                "experiment_id": experiment_id,
+                "source_version": version,
+                "review_id": review_id,
+                "judgment_id": judgment.judgment_id,
+                "decision_summary": _decision_summary(decisions),
+                "decisions_path": "decisions.json",
+                "human_notes_present": bool(human_notes.strip()),
+                "generated_by_model": experiment.models.judge_model,
+                "output_type": experiment.output.type,
+            }
+            _write_json(proposal_dir / "source.json", source)
+            complete_workflow_job(job_id, "Proposal completed")
+            return {
+                "proposal_dir": str(proposal_dir),
+                "proposal": proposal.model_dump(mode="json"),
+                "source": source,
+            }
+        except Exception as exc:
+            fail_workflow_job_if_running(job_id, str(exc) or type(exc).__name__)
+            raise
 
     @app.post(
         "/api/experiments/{experiment_id}/versions/{version}/reviews/{review_id}/proposal/create-version"

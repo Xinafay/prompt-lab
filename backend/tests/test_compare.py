@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from threading import Event, Thread
 from tempfile import TemporaryDirectory
 from typing import Any
 
@@ -447,6 +448,85 @@ def test_api_creates_dry_run_comparison_without_live_llm() -> None:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
 
+def test_api_reports_active_compare_job_and_rejects_second_comparison() -> None:
+    started = Event()
+    release = Event()
+
+    def slow_generate_structured(
+        model: str,
+        prompt: str,
+        response_model: Any,
+        validation_context: dict[str, Any] | None,
+    ) -> FakeGeneratedStructured:
+        del model, prompt, response_model, validation_context
+        started.set()
+        if not release.wait(timeout=5):
+            raise TimeoutError("test timed out waiting to release fake comparison")
+        return FakeGeneratedStructured(
+            ComparisonArtifact.model_validate(valid_comparison_payload())
+        )
+
+    original_generate_structured = llm_client.generate_structured
+    llm_client.generate_structured = slow_generate_structured  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline_dir, candidate_dir = write_demo_experiment(root)
+            write_run_batch(
+                baseline_dir,
+                "baseline-batch",
+                version="v001",
+                answer_prefix="baseline",
+            )
+            write_run_batch(
+                candidate_dir,
+                "candidate-batch",
+                version="v002",
+                answer_prefix="candidate",
+            )
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+            client = TestClient(app, raise_server_exceptions=False)
+            responses: list[Any] = []
+
+            def start_comparison() -> None:
+                responses.append(
+                    client.post(
+                        "/api/experiments/demo/comparisons",
+                        json={
+                            "baseline_version": "v001",
+                            "candidate_version": "v002",
+                        },
+                    )
+                )
+
+            thread = Thread(target=start_comparison)
+            thread.start()
+            try:
+                assert started.wait(timeout=5)
+
+                active_response = client.get("/api/jobs/active")
+                assert active_response.status_code == 200
+                active_job = active_response.json()["job"]
+                assert active_job["kind"] == "compare"
+                assert active_job["status"] == "running"
+
+                duplicate_response = client.post(
+                    "/api/experiments/demo/comparisons",
+                    json={"baseline_version": "v001", "candidate_version": "v002"},
+                )
+                assert duplicate_response.status_code == 409
+                assert active_job["job_id"] in duplicate_response.json()["detail"]
+            finally:
+                release.set()
+                thread.join(timeout=5)
+
+            assert responses
+            assert responses[0].status_code == 200
+    finally:
+        release.set()
+        llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
+
+
 def test_api_allocates_next_comparison_without_overwriting() -> None:
     def fake_generate_structured(
         model: str,
@@ -694,6 +774,7 @@ def main() -> int:
         test_comparison_prompt_template_file_is_used,
         test_api_creates_comparison_under_candidate_version,
         test_api_creates_dry_run_comparison_without_live_llm,
+        test_api_reports_active_compare_job_and_rejects_second_comparison,
         test_api_allocates_next_comparison_without_overwriting,
         test_api_comparison_uses_shared_experiment_cases,
         test_api_selects_latest_run_batches_for_both_versions_by_name,
