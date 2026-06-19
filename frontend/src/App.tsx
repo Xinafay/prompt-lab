@@ -1169,7 +1169,7 @@ function App() {
       ) {
         return;
       }
-      setComparison(response.comparison);
+      setComparison(response);
       setWorkflowMessage(
         dryRun
           ? "Dry-run comparison loaded."

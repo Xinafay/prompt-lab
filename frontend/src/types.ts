@@ -160,15 +160,40 @@ export type ValidationVerdict = "yes" | "no" | "unknown";
 
 export type ValidationResultStatus = "ok" | "error";
 
-export interface ValidatorCheck {
+export interface LlmValidatorCheck {
   check_id: string;
   title: string;
-  question?: string;
-  description?: string;
-  rule?: Record<string, unknown>;
+  question: string;
+  description: string;
 }
 
-export interface ValidatorDefinition {
+export interface CountComparison {
+  op: "lt" | "lte" | "gt" | "gte" | "eq" | "between";
+  value?: number | null;
+  min_value?: number | null;
+  max_value?: number | null;
+}
+
+export interface AutomaticRule {
+  kind:
+    | "word_count"
+    | "sentence_count"
+    | "character_count"
+    | "json_path_count"
+    | "json_path_exists";
+  source: "output_text" | "raw_output" | "output_json";
+  path?: string | null;
+  comparison?: CountComparison | null;
+}
+
+export interface AutomaticValidatorCheck {
+  check_id: string;
+  title: string;
+  description: string;
+  rule: AutomaticRule;
+}
+
+interface BaseValidatorDefinition {
   schema_version: "prompt_lab.validator/v1";
   validator_id: string;
   type: ValidatorType;
@@ -176,8 +201,22 @@ export interface ValidatorDefinition {
   description: string;
   enabled: boolean;
   input_scope: InputScope;
-  checks: ValidatorCheck[];
 }
+
+export interface LlmQuestionnaireValidatorDefinition
+  extends BaseValidatorDefinition {
+  type: "llm_questionnaire";
+  checks: LlmValidatorCheck[];
+}
+
+export interface AutomaticValidatorDefinition extends BaseValidatorDefinition {
+  type: "automatic";
+  checks: AutomaticValidatorCheck[];
+}
+
+export type ValidatorDefinition =
+  | LlmQuestionnaireValidatorDefinition
+  | AutomaticValidatorDefinition;
 
 export interface ValidationBatch {
   schema_version: "prompt_lab.validation_batch/v1";
@@ -304,6 +343,7 @@ export interface ReviewState {
 export interface JudgmentResponse {
   review_id: string;
   run_batch_id: string;
+  validation_batch_id: string;
   judgment: JudgmentArtifact;
 }
 

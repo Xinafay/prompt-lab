@@ -138,8 +138,8 @@ export function validateVersion(
   experimentId: string,
   version: string,
   dryRun = false
-): Promise<JobStatus> {
-  return apiPost<JobStatus>(
+): Promise<ValidationState> {
+  return apiPost<ValidationState>(
     `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
       version
     )}/validations`,
