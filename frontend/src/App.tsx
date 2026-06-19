@@ -8,6 +8,7 @@ import {
   generateProposal,
   getActiveJob,
   getExperimentVersions,
+  getGlobalSettings,
   getJob,
   getLatestReviewState,
   getReviewProposal,
@@ -18,6 +19,7 @@ import {
   jobEventsStreamUrl,
   runVersion,
   updateExperiment,
+  updateGlobalSettings,
   updateHumanNotes,
   updateReviewDecisions
 } from "./api";
@@ -25,6 +27,7 @@ import { CaseBrowser } from "./components/CaseBrowser";
 import { ComparisonView } from "./components/ComparisonView";
 import { ExperimentSettings } from "./components/ExperimentSettings";
 import { ExperimentsList } from "./components/ExperimentsList";
+import { GlobalSettings } from "./components/GlobalSettings";
 import { ProposalView } from "./components/ProposalView";
 import { ReviewView } from "./components/ReviewView";
 import { RunsView } from "./components/RunsView";
@@ -36,6 +39,7 @@ import type {
   CreatedVersionResponse,
   Experiment,
   FindingDecisionValue,
+  GlobalSettings as GlobalSettingsModel,
   JobEvent,
   JobStatus,
   ProposalResponse,
@@ -46,7 +50,9 @@ import type {
   WorkflowMode
 } from "./types";
 import {
+  buildGlobalSettingsPath,
   buildExperimentPath,
+  isGlobalSettingsRoute,
   parseExperimentRoute,
   type WorkbenchTab
 } from "./urlState";
@@ -68,10 +74,17 @@ type DetailState =
   | { status: "loaded"; overview: VersionOverview; runs: RunsResponse }
   | { status: "error"; message: string };
 
+type GlobalSettingsState =
+  | { status: "loading" }
+  | { status: "loaded"; settings: GlobalSettingsModel }
+  | { status: "error"; message: string };
+
 type HistoryMode = "push" | "replace";
+type AppView = "experiment" | "globalSettings";
 
 type PendingNavigation =
   | { kind: "experiment"; experiment: Experiment | null }
+  | { kind: "globalSettings" }
   | { kind: "route"; route: ReturnType<typeof currentExperimentRoute> }
   | { kind: "tab"; tab: WorkbenchTab }
   | { kind: "version"; version: string };
@@ -93,9 +106,16 @@ function workflowCompletionMessage(kind: string): string {
 
 function App() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const [appView, setAppView] = useState<AppView>(() =>
+    isGlobalSettingsRoute(new URL(window.location.href))
+      ? "globalSettings"
+      : "experiment"
+  );
   const [selectedExperiment, setSelectedExperiment] =
     useState<Experiment | null>(null);
   const [detailState, setDetailState] = useState<DetailState>({ status: "idle" });
+  const [globalSettingsState, setGlobalSettingsState] =
+    useState<GlobalSettingsState>({ status: "loading" });
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
   const [reviewState, setReviewState] = useState<ReviewState | null>(null);
   const [proposalResponse, setProposalResponse] =
@@ -116,6 +136,12 @@ function App() {
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<Experiment | null>(null);
+  const [globalSettingsBusy, setGlobalSettingsBusy] = useState(false);
+  const [globalSettingsMessage, setGlobalSettingsMessage] =
+    useState<string | null>(null);
+  const [globalSettingsDirty, setGlobalSettingsDirty] = useState(false);
+  const [globalSettingsDraft, setGlobalSettingsDraft] =
+    useState<GlobalSettingsModel | null>(null);
   const [pendingNavigation, setPendingNavigation] =
     useState<PendingNavigation | null>(null);
   const [navigationError, setNavigationError] = useState<string | null>(null);
@@ -139,6 +165,24 @@ function App() {
     url.search = "";
     const method = historyMode === "push" ? "pushState" : "replaceState";
     window.history[method](window.history.state, "", url);
+  }
+
+  function writeGlobalSettingsRoute(historyMode: HistoryMode) {
+    const url = new URL(window.location.href);
+    url.pathname = buildGlobalSettingsPath();
+    url.search = "";
+    const method = historyMode === "push" ? "pushState" : "replaceState";
+    window.history[method](window.history.state, "", url);
+  }
+
+  function writeCurrentRoute(historyMode: HistoryMode) {
+    if (appView === "globalSettings") {
+      writeGlobalSettingsRoute(historyMode);
+      return;
+    }
+    if (selectedExperiment !== null) {
+      writeExperimentRoute(selectedExperiment.id, activeTab, historyMode);
+    }
   }
 
   function activateTab(tab: WorkbenchTab, historyMode: HistoryMode = "replace") {
@@ -178,6 +222,7 @@ function App() {
     setNavigationSaving(false);
     setDecisionsDirty(false);
     setHumanNotesDirty(false);
+    setAppView("experiment");
     setActiveTab(nextTab);
     if (experiment !== null) {
       if (options?.updateUrl !== false) {
@@ -194,8 +239,43 @@ function App() {
     }
   }
 
+  function selectGlobalSettings(options?: { historyMode?: HistoryMode }) {
+    selectedKeyRef.current = null;
+    runRequestIdRef.current += 1;
+    workflowRequestIdRef.current += 1;
+    setAppView("globalSettings");
+    setSelectedExperiment(null);
+    setDetailState({ status: "idle" });
+    setJobStatus(null);
+    setReviewState(null);
+    setProposalResponse(null);
+    setCreatedVersion(null);
+    setComparison(null);
+    setVersionSummaries([]);
+    setWorkflowMessage(null);
+    setWorkflowBusy(false);
+    setSettingsMessage(null);
+    setSettingsBusy(false);
+    setSettingsDirty(false);
+    setSettingsDraft(null);
+    setPendingNavigation(null);
+    setNavigationError(null);
+    setNavigationSaving(false);
+    setDecisionsDirty(false);
+    setHumanNotesDirty(false);
+    writeGlobalSettingsRoute(options?.historyMode ?? "replace");
+  }
+
   function shouldBlockSettingsNavigation(): boolean {
-    return activeTab === "settings" && settingsDirty && !settingsBusy;
+    return (
+      (appView === "experiment" &&
+        activeTab === "settings" &&
+        settingsDirty &&
+        !settingsBusy) ||
+      (appView === "globalSettings" &&
+        globalSettingsDirty &&
+        !globalSettingsBusy)
+    );
   }
 
   function experimentForRoute(route: ReturnType<typeof currentExperimentRoute>) {
@@ -217,6 +297,10 @@ function App() {
       selectExperiment(navigation.experiment, { historyMode: "push" });
       return;
     }
+    if (navigation.kind === "globalSettings") {
+      selectGlobalSettings({ historyMode: "push" });
+      return;
+    }
     if (navigation.kind === "route") {
       selectExperiment(experimentForRoute(navigation.route), {
         historyMode: "push",
@@ -232,7 +316,7 @@ function App() {
   }
 
   function requestExperimentSelection(experiment: Experiment | null) {
-    if (experiment?.id === selectedExperiment?.id) {
+    if (appView === "experiment" && experiment?.id === selectedExperiment?.id) {
       return;
     }
     if (shouldBlockSettingsNavigation()) {
@@ -241,6 +325,18 @@ function App() {
       return;
     }
     selectExperiment(experiment, { historyMode: "push" });
+  }
+
+  function requestGlobalSettingsSelection() {
+    if (appView === "globalSettings") {
+      return;
+    }
+    if (shouldBlockSettingsNavigation()) {
+      setNavigationError(null);
+      setPendingNavigation({ kind: "globalSettings" });
+      return;
+    }
+    selectGlobalSettings({ historyMode: "push" });
   }
 
   function requestTabChange(tab: WorkbenchTab) {
@@ -273,16 +369,28 @@ function App() {
   }
 
   async function handleSaveSettingsAndContinue() {
-    if (pendingNavigation === null || settingsDraft === null) {
+    if (pendingNavigation === null) {
       return;
     }
     const navigation = pendingNavigation;
     setNavigationSaving(true);
     setNavigationError(null);
     try {
-      await handleSaveExperimentSettings(settingsDraft);
-      setSettingsDirty(false);
-      setSettingsDraft(null);
+      if (appView === "globalSettings") {
+        if (globalSettingsDraft === null) {
+          return;
+        }
+        await handleSaveGlobalSettings(globalSettingsDraft);
+        setGlobalSettingsDirty(false);
+        setGlobalSettingsDraft(null);
+      } else {
+        if (settingsDraft === null) {
+          return;
+        }
+        await handleSaveExperimentSettings(settingsDraft);
+        setSettingsDirty(false);
+        setSettingsDraft(null);
+      }
       setPendingNavigation(null);
       performPendingNavigation(navigation);
     } catch (error) {
@@ -408,16 +516,20 @@ function App() {
           setState({ status: "loaded", experiments });
           if (selectedKeyRef.current === null) {
             const requestedRoute = currentExperimentRoute();
-            const requestedExperiment =
-              requestedRoute.experimentId === null
-                ? null
-                : experiments.find(
-                    (experiment) => experiment.id === requestedRoute.experimentId
-                  ) ?? null;
-            selectExperiment(requestedExperiment ?? experiments[0] ?? null, {
-              historyMode: "replace",
-              tab: requestedRoute.tab
-            });
+            if (isGlobalSettingsRoute(new URL(window.location.href))) {
+              selectGlobalSettings({ historyMode: "replace" });
+            } else {
+              const requestedExperiment =
+                requestedRoute.experimentId === null
+                  ? null
+                  : experiments.find(
+                      (experiment) => experiment.id === requestedRoute.experimentId
+                    ) ?? null;
+              selectExperiment(requestedExperiment ?? experiments[0] ?? null, {
+                historyMode: "replace",
+                tab: requestedRoute.tab
+              });
+            }
           }
         }
       } catch (error) {
@@ -438,19 +550,52 @@ function App() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadSettings() {
+      try {
+        const settings = await getGlobalSettings();
+        if (!cancelled) {
+          setGlobalSettingsState({ status: "loaded", settings });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setGlobalSettingsState({
+            status: "error",
+            message: error instanceof Error ? error.message : "Unknown error"
+          });
+        }
+      }
+    }
+
+    void loadSettings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (state.status !== "loaded") {
       return;
     }
     const loadedExperiments = state.experiments;
 
     function handlePopState() {
+      const url = new URL(window.location.href);
       const requestedRoute = currentExperimentRoute();
       if (shouldBlockSettingsNavigation()) {
-        if (selectedExperiment !== null) {
-          writeExperimentRoute(selectedExperiment.id, activeTab, "replace");
-        }
+        writeCurrentRoute("replace");
         setNavigationError(null);
-        setPendingNavigation({ kind: "route", route: requestedRoute });
+        setPendingNavigation(
+          isGlobalSettingsRoute(url)
+            ? { kind: "globalSettings" }
+            : { kind: "route", route: requestedRoute }
+        );
+        return;
+      }
+      if (isGlobalSettingsRoute(url)) {
+        selectGlobalSettings({ historyMode: "replace" });
         return;
       }
       const requestedExperiment =
@@ -469,10 +614,19 @@ function App() {
     return () => {
       window.removeEventListener("popstate", handlePopState);
     };
-  }, [activeTab, selectedExperiment, settingsBusy, settingsDirty, state]);
+  }, [
+    activeTab,
+    appView,
+    globalSettingsBusy,
+    globalSettingsDirty,
+    selectedExperiment,
+    settingsBusy,
+    settingsDirty,
+    state
+  ]);
 
   useEffect(() => {
-    if (!settingsDirty) {
+    if (!settingsDirty && !globalSettingsDirty) {
       return;
     }
 
@@ -485,7 +639,7 @@ function App() {
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, [settingsDirty]);
+  }, [globalSettingsDirty, settingsDirty]);
 
   useEffect(() => {
     if (selectedExperiment === null) {
@@ -596,12 +750,15 @@ function App() {
   }, [selectedExperiment]);
 
   const subtitle = useMemo(() => {
+    if (appView === "globalSettings") {
+      return "Application-level configuration";
+    }
     if (state.status !== "loaded") {
       return "Loading local experiment manifests";
     }
     const count = state.experiments.length;
     return `${count} experiment${count === 1 ? "" : "s"} available`;
-  }, [state]);
+  }, [appView, state]);
 
   async function handleRunVersion() {
     if (selectedExperiment === null || detailState.status !== "loaded") {
@@ -1086,6 +1243,30 @@ function App() {
     setSettingsMessage(null);
   }
 
+  async function handleSaveGlobalSettings(settings: GlobalSettingsModel) {
+    setGlobalSettingsBusy(true);
+    setGlobalSettingsMessage(null);
+    try {
+      const savedSettings = await updateGlobalSettings(settings);
+      setGlobalSettingsState({ status: "loaded", settings: savedSettings });
+      setGlobalSettingsMessage("Global settings saved.");
+      setGlobalSettingsDirty(false);
+      setGlobalSettingsDraft(null);
+      writeGlobalSettingsRoute("replace");
+    } catch (error) {
+      setGlobalSettingsMessage(
+        error instanceof Error ? error.message : "Unknown error"
+      );
+      throw error;
+    } finally {
+      setGlobalSettingsBusy(false);
+    }
+  }
+
+  function handleResetGlobalSettings() {
+    setGlobalSettingsMessage(null);
+  }
+
   async function handleActiveVersionChange(version: string) {
     if (shouldBlockSettingsNavigation()) {
       setNavigationError(null);
@@ -1185,35 +1366,62 @@ function App() {
           </div>
         ) : null}
 
-        {state.status === "loaded" && state.experiments.length === 0 ? (
-          <div className="empty-state">No experiments found.</div>
-        ) : null}
-
-        {state.status === "loaded" && state.experiments.length > 0 ? (
+        {state.status === "loaded" ? (
           <div className="tool-layout">
             <ExperimentsList
               experiments={state.experiments}
+              isGlobalSettingsSelected={appView === "globalSettings"}
+              onGlobalSettingsSelect={requestGlobalSettingsSelection}
               onSelect={requestExperimentSelection}
-              selectedExperimentId={selectedExperiment?.id ?? null}
+              selectedExperimentId={
+                appView === "experiment" ? selectedExperiment?.id ?? null : null
+              }
             />
 
             <div className="detail-panel">
-              {detailState.status === "idle" ? (
+              {appView === "globalSettings" ? (
+                globalSettingsState.status === "loading" ? (
+                  <div className="empty-state">Loading global settings...</div>
+                ) : globalSettingsState.status === "error" ? (
+                  <div className="error-state">
+                    <h2>Could not load global settings</h2>
+                    <p>{globalSettingsState.message}</p>
+                  </div>
+                ) : (
+                  <GlobalSettings
+                    isBusy={globalSettingsBusy}
+                    message={globalSettingsMessage}
+                    onDirtyChange={setGlobalSettingsDirty}
+                    onDraftChange={setGlobalSettingsDraft}
+                    onReset={handleResetGlobalSettings}
+                    onSave={handleSaveGlobalSettings}
+                    settings={globalSettingsState.settings}
+                  />
+                )
+              ) : null}
+
+              {appView === "experiment" && state.experiments.length === 0 ? (
+                <div className="empty-state">No experiments found.</div>
+              ) : null}
+
+              {appView === "experiment" &&
+              state.experiments.length > 0 &&
+              detailState.status === "idle" ? (
                 <div className="empty-state">Select an experiment.</div>
               ) : null}
 
-              {detailState.status === "loading" ? (
+              {appView === "experiment" && detailState.status === "loading" ? (
                 <div className="empty-state">Loading experiment details...</div>
               ) : null}
 
-              {detailState.status === "error" ? (
+              {appView === "experiment" && detailState.status === "error" ? (
                 <div className="error-state">
                   <h2>Could not load experiment details</h2>
                   <p>{detailState.message}</p>
                 </div>
               ) : null}
 
-              {detailState.status === "loaded" ? (
+              {appView === "experiment" && detailState.status === "loaded" ? (
                 <>
                   <WorkflowToolbar
                     activeVersion={detailState.overview.version}
@@ -1411,8 +1619,8 @@ function App() {
             <div>
               <h2 id="settings-navigation-title">Unsaved settings changes</h2>
               <p>
-                Save the current experiment settings before leaving this view, or
-                discard the draft changes.
+                Save the current settings before leaving this view, or discard the
+                draft changes.
               </p>
             </div>
             {navigationError !== null ? (
@@ -1437,7 +1645,12 @@ function App() {
               </button>
               <button
                 className="primary-action"
-                disabled={navigationSaving || settingsDraft === null}
+                disabled={
+                  navigationSaving ||
+                  (appView === "globalSettings"
+                    ? globalSettingsDraft === null
+                    : settingsDraft === null)
+                }
                 onClick={() => void handleSaveSettingsAndContinue()}
                 type="button"
               >

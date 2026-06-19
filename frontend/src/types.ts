@@ -133,6 +133,13 @@ export interface RunVersionRequest {
   dry_run?: boolean;
 }
 
+export interface GlobalSettings {
+  schema_version: "prompt_lab.settings/v1";
+  default_generator_model: string;
+  default_judge_model: string;
+  default_repeat_count: number;
+}
+
 export type FindingSeverity =
   | "recommended"
   | "optional"

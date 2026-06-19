@@ -3,6 +3,7 @@ import type {
   CreatedVersionResponse,
   Experiment,
   FindingDecisionSet,
+  GlobalSettings,
   JobEvent,
   JobStatus,
   JudgmentResponse,
@@ -87,6 +88,16 @@ export function updateExperiment(
     `/api/experiments/${encodeURIComponent(experimentId)}`,
     experiment
   );
+}
+
+export function getGlobalSettings(): Promise<GlobalSettings> {
+  return apiGet<GlobalSettings>("/api/settings");
+}
+
+export function updateGlobalSettings(
+  settings: GlobalSettings
+): Promise<GlobalSettings> {
+  return apiPut<GlobalSettings>("/api/settings", settings);
 }
 
 export function getExperimentVersions(

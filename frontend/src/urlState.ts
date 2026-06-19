@@ -1,4 +1,5 @@
 const EXPERIMENT_PARAM = "experiment";
+const GLOBAL_SETTINGS_SEGMENT = "global-settings";
 
 export const workbenchTabs = [
   "overview",
@@ -43,6 +44,18 @@ export function parseExperimentRoute(url: URL): ExperimentRoute {
   const experimentId = decodePathSegment(segments[0]) ?? parseExperimentId(url.search);
   const tab = isWorkbenchTab(segments[1]) ? segments[1] : DEFAULT_TAB;
   return { experimentId, tab };
+}
+
+export function isGlobalSettingsRoute(url: URL): boolean {
+  const firstSegment = url.pathname
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter((segment) => segment !== "")[0];
+  return firstSegment === GLOBAL_SETTINGS_SEGMENT;
+}
+
+export function buildGlobalSettingsPath(): string {
+  return `/${GLOBAL_SETTINGS_SEGMENT}`;
 }
 
 export function buildExperimentPath(
