@@ -1352,6 +1352,17 @@ function App() {
           <h1>Prompt Lab</h1>
           <p>{subtitle}</p>
         </div>
+        <button
+          className={
+            appView === "globalSettings"
+              ? "header-settings-button is-active"
+              : "header-settings-button"
+          }
+          onClick={requestGlobalSettingsSelection}
+          type="button"
+        >
+          Global settings
+        </button>
       </header>
 
       <section className="workspace" aria-live="polite">
@@ -1370,8 +1381,6 @@ function App() {
           <div className="tool-layout">
             <ExperimentsList
               experiments={state.experiments}
-              isGlobalSettingsSelected={appView === "globalSettings"}
-              onGlobalSettingsSelect={requestGlobalSettingsSelection}
               onSelect={requestExperimentSelection}
               selectedExperimentId={
                 appView === "experiment" ? selectedExperiment?.id ?? null : null

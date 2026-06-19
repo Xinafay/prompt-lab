@@ -56,6 +56,32 @@ select {
   line-height: 1.5;
 }
 
+.header-settings-button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.header-settings-button:hover {
+  border-color: #98a2b3;
+  background: #f8fafc;
+  color: #111827;
+}
+
+.header-settings-button.is-active {
+  border-color: #bfdbfe;
+  background: #eaf2ff;
+  color: #1d4ed8;
+}
+
 .workspace {
   border: 1px solid #d9dde3;
   border-radius: 8px;
@@ -121,6 +147,7 @@ select {
 }
 
 .experiment-nav-item:focus-visible,
+.header-settings-button:focus-visible,
 .workbench-tab:focus-visible,
 .proposal-tab:focus-visible,
 .primary-action:focus-visible,
