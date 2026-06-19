@@ -1,0 +1,19 @@
+{
+  "schema_version": "prompt_lab.run/v1",
+  "run_id": "run-000001-support-reply-repeat-001",
+  "run_batch_id": "run-000001",
+  "version": "v001",
+  "case_id": "support-reply",
+  "repeat_index": 1,
+  "generator_model": "local/demo-generator",
+  "status": "ok",
+  "rendered_prompt": "Reply to the customer ticket about finding the export button.",
+  "raw_output": "Check the dashboard.",
+  "output_type": "text",
+  "output_text": "Check the dashboard.",
+  "usage": {
+    "prompt_tokens": 44,
+    "completion_tokens": 4,
+    "total_tokens": 48
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "validation_batch_id": "validation-000002",
+  "run_batch_id": "run-000002",
+  "evidence": [
+    {
+      "validator_id": "reply-quality",
+      "check_id": "answers-question",
+      "verdict": "yes",
+      "comment": "The reply names the dashboard header, Download icon, and Export CSV action."
+    },
+    {
+      "validator_id": "reply-stats",
+      "check_id": "sentence-count",
+      "verdict": "yes",
+      "comment": "The output contains 3 sentences."
+    }
+  ]
+}

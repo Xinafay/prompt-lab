@@ -1,0 +1,23 @@
+{
+  "schema_version": "prompt_lab.validator/v1",
+  "validator_id": "reply-quality",
+  "type": "llm_questionnaire",
+  "title": "Reply quality",
+  "description": "Checks support-tone qualities for plain text output.",
+  "enabled": true,
+  "input_scope": "output_prompt_and_case",
+  "checks": [
+    {
+      "check_id": "answers-question",
+      "title": "Answers question",
+      "question": "Does the reply answer where the export button is?",
+      "description": "The reply should include a concrete location or next step."
+    },
+    {
+      "check_id": "calm-tone",
+      "title": "Calm tone",
+      "question": "Is the reply calm and customer friendly?",
+      "description": "The answer should avoid blame and frustration."
+    }
+  ]
+}

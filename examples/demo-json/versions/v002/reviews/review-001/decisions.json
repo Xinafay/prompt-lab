@@ -1,0 +1,9 @@
+{
+  "schema_version": "prompt_lab.decisions/v1",
+  "finding_decisions": {
+    "tighten-launch-ready": {
+      "decision": "accepted",
+      "reason": "Useful for demonstrating decision editing and proposal generation."
+    }
+  }
+}

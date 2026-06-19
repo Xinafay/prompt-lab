@@ -1,0 +1,31 @@
+{
+  "schema_version": "prompt_lab.run/v1",
+  "run_id": "run-000002-product-brief-repeat-001",
+  "run_batch_id": "run-000002",
+  "version": "v002",
+  "case_id": "product-brief",
+  "repeat_index": 1,
+  "generator_model": "local/demo-generator",
+  "status": "ok",
+  "rendered_prompt": "Create a concise launch-readiness report with exactly three tags and concrete launch risks for the Atlas Desk Lamp.",
+  "raw_output": "{\"summary\":\"Atlas Desk Lamp targets remote designers with focused lighting and ergonomic positioning for home studios.\",\"tags\":[\"lighting\",\"remote-work\",\"design-tools\"],\"risks\":[\"No price anchor is provided for launch messaging.\",\"The brief does not specify battery or power details.\"],\"launch_ready\":false}",
+  "output_type": "pydantic",
+  "output_json": {
+    "summary": "Atlas Desk Lamp targets remote designers with focused lighting and ergonomic positioning for home studios.",
+    "tags": [
+      "lighting",
+      "remote-work",
+      "design-tools"
+    ],
+    "risks": [
+      "No price anchor is provided for launch messaging.",
+      "The brief does not specify battery or power details."
+    ],
+    "launch_ready": false
+  },
+  "usage": {
+    "prompt_tokens": 152,
+    "completion_tokens": 70,
+    "total_tokens": 222
+  }
+}

@@ -26,8 +26,19 @@ The exporter reports created, existing, and skipped files to stderr.
 
 Examples:
 
+- `demo-string`: plain text UI QA fixture with precomputed runs,
+  validations, review, and proposal artifacts.
+- `demo-json`: Pydantic structured-output UI QA fixture with precomputed runs,
+  validations, review, and proposal artifacts.
 - `split-scenes`: Pydantic structured output using `model.SceneList`.
 - `summarize-chapter`: plain text output.
+
+Use `demo-string` and `demo-json` for manual browser testing and UI regression
+checks. They are intentionally small, deterministic, and include enough
+committed runtime artifacts to exercise Overview, Settings, Cases, Runs,
+Validation, Review, Proposal, and Compare without spending real LLM tokens.
+`split-scenes` and `summarize-chapter` are realistic starter examples, not the
+primary UI QA fixtures.
 
 Each experiment chooses its tested generator model, validation model, and judge
 model in `experiment.json`:
@@ -58,6 +69,12 @@ The running app does not write into `examples/`. At backend startup, examples ar
 copied into `experiments/` only when the runtime workspace is missing or has no
 experiment manifests. Edit and run experiments from `experiments/`; update
 `examples/` only when changing the golden starter templates.
+
+Examples that contain committed runtime artifacts under version directories
+(`runs/`, `validations/`, `reviews/`, or `comparisons/`) are copied exactly so
+their saved artifacts stay consistent with their manifest. Global default models
+and repeat count are applied only to starter examples without committed runtime
+artifacts.
 
 Existing runtime experiments are not migrated when committed examples change.
 Delete or move `experiments/` only when you intentionally want to reseed from the

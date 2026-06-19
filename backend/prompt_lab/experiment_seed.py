@@ -48,7 +48,7 @@ def seed_experiments_from_examples(
             continue
         destination = experiments_root / example_dir.name
         shutil.copytree(example_dir, destination)
-        if settings is not None:
+        if settings is not None and not _has_committed_runtime_artifacts(example_dir):
             _apply_settings_to_copied_manifest(
                 destination / "experiment.json",
                 settings,
@@ -56,6 +56,19 @@ def seed_experiments_from_examples(
         copied.append(example_dir.name)
 
     return SeedResult(seeded=bool(copied), copied_experiment_ids=copied)
+
+
+def _has_committed_runtime_artifacts(example_dir: Path) -> bool:
+    versions_dir = example_dir / "versions"
+    if not versions_dir.is_dir():
+        return False
+    runtime_dirs = {"runs", "validations", "reviews", "comparisons"}
+    return any(
+        child.is_dir() and child.name in runtime_dirs
+        for version_dir in versions_dir.iterdir()
+        if version_dir.is_dir()
+        for child in version_dir.iterdir()
+    )
 
 
 def _apply_settings_to_copied_manifest(

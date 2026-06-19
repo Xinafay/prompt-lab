@@ -1,0 +1,16 @@
+{
+  "schema_version": "prompt_lab.validation_batch/v1",
+  "validation_batch_id": "validation-000001",
+  "run_batch_id": "run-000001",
+  "version": "v001",
+  "status": "completed",
+  "started_at": "2026-06-19T10:00:00Z",
+  "finished_at": "2026-06-19T10:00:05Z",
+  "total_results": 2,
+  "completed_results": 2,
+  "validator_model": "openai/demo-validator",
+  "validator_ids": [
+    "report-quality",
+    "report-shape"
+  ]
+}

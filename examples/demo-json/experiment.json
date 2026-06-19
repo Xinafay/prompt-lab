@@ -1,0 +1,26 @@
+{
+  "schema_version": "prompt_lab.experiment/v1",
+  "id": "demo-json",
+  "title": "Demo JSON",
+  "description": "Offline structured-output demo with precomputed runs and validation artifacts for UI testing.",
+  "active_version": "v002",
+  "output": {
+    "type": "pydantic",
+    "model_file": "model.py",
+    "model_entrypoint": "model.DemoReport"
+  },
+  "template": {
+    "engine": "jinjax",
+    "path": "prompt.md"
+  },
+  "models": {
+    "generator_model": "local/demo-generator",
+    "validator_model": "openai/demo-validator",
+    "judge_model": "openai/demo-judge"
+  },
+  "run_defaults": {
+    "repeat_count": 1,
+    "llm_cache": "disabled",
+    "case_order": "case-major"
+  }
+}
