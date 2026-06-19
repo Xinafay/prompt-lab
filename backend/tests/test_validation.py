@@ -4,7 +4,15 @@ from typing import Any
 
 from prompt_lab.models.artifacts import CaseArtifact, RunArtifact
 from prompt_lab.models.validators import LlmQuestionnaireValidatorDefinition
-from prompt_lab.validation import build_llm_validator_prompt, validate_llm_check_ids
+from prompt_lab.models.validators import (
+    ValidationInclusionUpdate,
+    ValidationResultArtifact,
+)
+from prompt_lab.validation import (
+    apply_inclusion_update,
+    build_llm_validator_prompt,
+    validate_llm_check_ids,
+)
 
 
 def _validator(**overrides: object) -> LlmQuestionnaireValidatorDefinition:
@@ -58,6 +66,35 @@ def _case_artifact() -> CaseArtifact:
     )
 
 
+def _validation_result(**overrides: object) -> ValidationResultArtifact:
+    payload: dict[str, object] = {
+        "schema_version": "prompt_lab.validation_result/v1",
+        "validation_result_id": "validation-001-case-a-repeat-001-quality",
+        "validation_batch_id": "validation-001",
+        "run_batch_id": "run-001",
+        "run_id": "run-001-case-a-repeat-001",
+        "case_id": "case-a",
+        "repeat_index": 1,
+        "validator_id": "quality",
+        "validator_type": "llm_questionnaire",
+        "status": "ok",
+        "included_in_judge": True,
+        "check_results": [
+            {
+                "check_id": "has-answer",
+                "verdict": "yes",
+                "comment": "ok",
+                "included_in_judge": True,
+                "metrics": {},
+            }
+        ],
+        "usage": {},
+        "execution_error": None,
+    }
+    payload.update(overrides)
+    return ValidationResultArtifact.model_validate(payload)
+
+
 def test_build_llm_validator_prompt_respects_output_only_input_scope() -> None:
     prompt = build_llm_validator_prompt(
         experiment_id="demo",
@@ -85,10 +122,108 @@ def test_validate_llm_check_ids_rejects_missing_check_ids() -> None:
         raise AssertionError("Expected missing check ids to be rejected")
 
 
+def test_apply_inclusion_update_rejects_unknown_result_id() -> None:
+    update = ValidationInclusionUpdate.model_validate(
+        {
+            "results": [
+                {
+                    "validation_result_id": "missing-result",
+                    "included_in_judge": False,
+                    "check_results": [],
+                }
+            ]
+        }
+    )
+
+    try:
+        apply_inclusion_update([_validation_result()], update)
+    except ValueError as exc:
+        assert "unknown validation_result_id: missing-result" in str(exc)
+    else:
+        raise AssertionError("Expected unknown validation_result_id to be rejected")
+
+
+def test_apply_inclusion_update_rejects_unknown_check_id() -> None:
+    update = ValidationInclusionUpdate.model_validate(
+        {
+            "results": [
+                {
+                    "validation_result_id": "validation-001-case-a-repeat-001-quality",
+                    "included_in_judge": True,
+                    "check_results": [
+                        {"check_id": "missing-check", "included_in_judge": False}
+                    ],
+                }
+            ]
+        }
+    )
+
+    try:
+        apply_inclusion_update([_validation_result()], update)
+    except ValueError as exc:
+        assert "unknown check_id: missing-check" in str(exc)
+    else:
+        raise AssertionError("Expected unknown check_id to be rejected")
+
+
+def test_apply_inclusion_update_rejects_duplicate_ids() -> None:
+    update = ValidationInclusionUpdate.model_validate(
+        {
+            "results": [
+                {
+                    "validation_result_id": "validation-001-case-a-repeat-001-quality",
+                    "included_in_judge": True,
+                    "check_results": [],
+                },
+                {
+                    "validation_result_id": "validation-001-case-a-repeat-001-quality",
+                    "included_in_judge": False,
+                    "check_results": [],
+                },
+            ]
+        }
+    )
+
+    try:
+        apply_inclusion_update([_validation_result()], update)
+    except ValueError as exc:
+        assert (
+            "duplicate validation_result_id: validation-001-case-a-repeat-001-quality"
+            in str(exc)
+        )
+    else:
+        raise AssertionError("Expected duplicate validation_result_id to be rejected")
+
+    check_update = ValidationInclusionUpdate.model_validate(
+        {
+            "results": [
+                {
+                    "validation_result_id": "validation-001-case-a-repeat-001-quality",
+                    "included_in_judge": True,
+                    "check_results": [
+                        {"check_id": "has-answer", "included_in_judge": False},
+                        {"check_id": "has-answer", "included_in_judge": True},
+                    ],
+                }
+            ]
+        }
+    )
+
+    try:
+        apply_inclusion_update([_validation_result()], check_update)
+    except ValueError as exc:
+        assert "duplicate check_id: has-answer" in str(exc)
+    else:
+        raise AssertionError("Expected duplicate check_id to be rejected")
+
+
 def main() -> int:
     tests = [
         test_build_llm_validator_prompt_respects_output_only_input_scope,
         test_validate_llm_check_ids_rejects_missing_check_ids,
+        test_apply_inclusion_update_rejects_unknown_result_id,
+        test_apply_inclusion_update_rejects_unknown_check_id,
+        test_apply_inclusion_update_rejects_duplicate_ids,
     ]
     for test in tests:
         test()

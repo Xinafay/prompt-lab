@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from prompt_lab import llm_client
 from prompt_lab.api import create_app
 from prompt_lab.config import PromptLabConfig
+from prompt_lab.models.validators import LlmQuestionnaireResponse
 from prompt_lab.settings import PromptLabSettings, save_settings
 
 
@@ -106,6 +107,30 @@ def write_demo_pydantic_experiment(root: Path) -> None:
     )
     (example / "cases" / "a.json").write_text(
         json.dumps(demo_case_payload(), ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def write_quality_validator(root: Path, *, validator_id: str = "quality") -> None:
+    validator_dir = root / "examples" / "demo" / "validators"
+    validator_dir.mkdir(exist_ok=True)
+    (validator_dir / "quality.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "prompt_lab.validator/v1",
+                "validator_id": validator_id,
+                "type": "llm_questionnaire",
+                "title": "Quality",
+                "checks": [
+                    {
+                        "check_id": "has-answer",
+                        "title": "Has answer",
+                        "question": "Does the output contain an answer?",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
         encoding="utf-8",
     )
 
@@ -815,27 +840,7 @@ def test_api_dry_run_validation_for_pydantic_experiment() -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             write_demo_pydantic_experiment(root)
-            validator_dir = root / "examples" / "demo" / "validators"
-            validator_dir.mkdir()
-            (validator_dir / "quality.json").write_text(
-                json.dumps(
-                    {
-                        "schema_version": "prompt_lab.validator/v1",
-                        "validator_id": "quality",
-                        "type": "llm_questionnaire",
-                        "title": "Quality",
-                        "checks": [
-                            {
-                                "check_id": "has-answer",
-                                "title": "Has answer",
-                                "question": "Does the output contain an answer?",
-                            }
-                        ],
-                    },
-                    ensure_ascii=False,
-                ),
-                encoding="utf-8",
-            )
+            write_quality_validator(root)
             app = create_app(PromptLabConfig.from_env(project_root=root))
             client = TestClient(app, raise_server_exceptions=False)
 
@@ -858,6 +863,215 @@ def test_api_dry_run_validation_for_pydantic_experiment() -> None:
             assert body["results"][0]["validator_id"] == "quality"
             assert isinstance(body["results"][0]["check_results"][0]["check_id"], str)
             assert body["results"][0]["check_results"][0]["check_id"]
+    finally:
+        llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
+
+
+def test_api_rejects_unsafe_validator_id_before_writing_artifacts() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_demo_pydantic_experiment(root)
+        write_quality_validator(root, validator_id="../bad")
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        client = TestClient(app, raise_server_exceptions=False)
+
+        run_response = client.post(
+            "/api/experiments/demo/versions/v001/runs",
+            json={"dry_run": True},
+        )
+        response = client.post(
+            "/api/experiments/demo/versions/v001/validations",
+            json={"dry_run": True},
+        )
+
+        assert run_response.status_code == 200
+        assert response.status_code == 400
+        assert "Unsafe validator id" in response.json()["detail"]
+        runtime_version_dir = root / "experiments" / "demo" / "versions" / "v001"
+        assert not (runtime_version_dir / "bad.json").exists()
+        assert not (runtime_version_dir / "validations").exists()
+
+
+def test_api_validation_inclusion_rejects_unknown_ids() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_demo_pydantic_experiment(root)
+        write_quality_validator(root)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        client = TestClient(app, raise_server_exceptions=False)
+
+        run_response = client.post(
+            "/api/experiments/demo/versions/v001/runs",
+            json={"dry_run": True},
+        )
+        validation_response = client.post(
+            "/api/experiments/demo/versions/v001/validations",
+            json={"dry_run": True},
+        )
+        body = validation_response.json()
+        validation_batch_id = body["validation_batch"]["validation_batch_id"]
+        result_id = body["results"][0]["validation_result_id"]
+
+        unknown_result_response = client.put(
+            (
+                "/api/experiments/demo/versions/v001/validations/"
+                f"{validation_batch_id}/inclusion"
+            ),
+            json={
+                "results": [
+                    {
+                        "validation_result_id": "missing-result",
+                        "included_in_judge": False,
+                        "check_results": [],
+                    }
+                ]
+            },
+        )
+        unknown_check_response = client.put(
+            (
+                "/api/experiments/demo/versions/v001/validations/"
+                f"{validation_batch_id}/inclusion"
+            ),
+            json={
+                "results": [
+                    {
+                        "validation_result_id": result_id,
+                        "included_in_judge": True,
+                        "check_results": [
+                            {
+                                "check_id": "missing-check",
+                                "included_in_judge": False,
+                            }
+                        ],
+                    }
+                ]
+            },
+        )
+
+        assert run_response.status_code == 200
+        assert validation_response.status_code == 200
+        assert unknown_result_response.status_code == 400
+        assert "unknown validation_result_id: missing-result" in (
+            unknown_result_response.json()["detail"]
+        )
+        assert unknown_check_response.status_code == 400
+        assert "unknown check_id: missing-check" in (
+            unknown_check_response.json()["detail"]
+        )
+
+
+def test_api_latest_validation_ignores_non_completed_batches() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_demo_pydantic_experiment(root)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        validations_dir = (
+            root / "experiments" / "demo" / "versions" / "v001" / "validations"
+        )
+        for batch_id, status in [
+            ("validation-001", "completed"),
+            ("validation-999", "running"),
+        ]:
+            batch_dir = validations_dir / batch_id
+            batch_dir.mkdir(parents=True)
+            (batch_dir / "batch.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "prompt_lab.validation_batch/v1",
+                        "validation_batch_id": batch_id,
+                        "run_batch_id": "run-001",
+                        "version": "v001",
+                        "status": status,
+                        "started_at": "2026-06-19T10:00:00Z",
+                        "finished_at": (
+                            "2026-06-19T10:01:00Z"
+                            if status == "completed"
+                            else None
+                        ),
+                        "total_results": 0,
+                        "completed_results": 0,
+                        "validator_model": "openai/b",
+                        "validator_ids": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+        response = TestClient(app, raise_server_exceptions=False).get(
+            "/api/experiments/demo/versions/v001/validations/latest"
+        )
+
+        assert response.status_code == 200
+        assert response.json()["validation_batch"]["validation_batch_id"] == (
+            "validation-001"
+        )
+
+
+def test_api_failed_validation_batch_is_terminal_and_not_latest() -> None:
+    class FakeGeneratedStructured:
+        usage: dict[str, Any] = {"fake": True}
+
+        def __init__(self) -> None:
+            self.output = LlmQuestionnaireResponse.model_validate(
+                {
+                    "check_results": [
+                        {
+                            "check_id": "wrong-check",
+                            "verdict": "yes",
+                            "comment": "bad id",
+                        }
+                    ]
+                }
+            )
+
+    def fake_generate_structured(
+        model: str,
+        prompt: str,
+        response_model: Any,
+        validation_context: dict[str, Any] | None,
+    ) -> FakeGeneratedStructured:
+        return FakeGeneratedStructured()
+
+    original_generate_structured = llm_client.generate_structured
+    llm_client.generate_structured = fake_generate_structured  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_demo_pydantic_experiment(root)
+            write_quality_validator(root)
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+            client = TestClient(app, raise_server_exceptions=False)
+
+            run_response = client.post(
+                "/api/experiments/demo/versions/v001/runs",
+                json={"dry_run": True},
+            )
+            validation_response = client.post(
+                "/api/experiments/demo/versions/v001/validations"
+            )
+            latest_response = client.get(
+                "/api/experiments/demo/versions/v001/validations/latest"
+            )
+            batch_paths = sorted(
+                (
+                    root
+                    / "experiments"
+                    / "demo"
+                    / "versions"
+                    / "v001"
+                    / "validations"
+                ).glob("*/batch.json")
+            )
+
+            assert run_response.status_code == 200
+            assert validation_response.status_code == 400
+            assert "unknown: wrong-check" in validation_response.json()["detail"]
+            assert latest_response.status_code == 404
+            assert len(batch_paths) == 1
+            batch = json.loads(batch_paths[0].read_text(encoding="utf-8"))
+            assert batch["status"] == "failed"
+            assert batch["finished_at"] is not None
+            assert batch["completed_results"] == 0
     finally:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
@@ -967,6 +1181,10 @@ def main() -> int:
         test_api_runs_pydantic_version,
         test_api_dry_run_pydantic_version_avoids_live_llm,
         test_api_dry_run_validation_for_pydantic_experiment,
+        test_api_rejects_unsafe_validator_id_before_writing_artifacts,
+        test_api_validation_inclusion_rejects_unknown_ids,
+        test_api_latest_validation_ignores_non_completed_batches,
+        test_api_failed_validation_batch_is_terminal_and_not_latest,
         test_api_rejects_empty_cases_without_calling_llm,
         test_api_rejects_unsafe_case_id_without_calling_llm,
     ]

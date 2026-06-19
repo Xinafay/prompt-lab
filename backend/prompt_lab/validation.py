@@ -177,9 +177,60 @@ def apply_inclusion_update(
     results: list[ValidationResultArtifact],
     update: ValidationInclusionUpdate,
 ) -> list[ValidationResultArtifact]:
-    updates_by_result_id = {
-        item.validation_result_id: item for item in update.results
-    }
+    results_by_id = {result.validation_result_id: result for result in results}
+    seen_result_ids: set[str] = set()
+    duplicate_result_ids: list[str] = []
+    unknown_result_ids: list[str] = []
+    for item in update.results:
+        if item.validation_result_id in seen_result_ids:
+            duplicate_result_ids.append(item.validation_result_id)
+        seen_result_ids.add(item.validation_result_id)
+        if item.validation_result_id not in results_by_id:
+            unknown_result_ids.append(item.validation_result_id)
+
+    if duplicate_result_ids or unknown_result_ids:
+        detail_parts = ["Validation inclusion update contains invalid result ids"]
+        if unknown_result_ids:
+            detail_parts.append(
+                f"unknown validation_result_id: {', '.join(sorted(unknown_result_ids))}"
+            )
+        if duplicate_result_ids:
+            detail_parts.append(
+                f"duplicate validation_result_id: "
+                f"{', '.join(sorted(set(duplicate_result_ids)))}"
+            )
+        raise ValueError("; ".join(detail_parts))
+
+    for item in update.results:
+        result = results_by_id[item.validation_result_id]
+        expected_check_ids = {check.check_id for check in result.check_results}
+        seen_check_ids: set[str] = set()
+        duplicate_check_ids: list[str] = []
+        unknown_check_ids: list[str] = []
+        for check in item.check_results:
+            if check.check_id in seen_check_ids:
+                duplicate_check_ids.append(check.check_id)
+            seen_check_ids.add(check.check_id)
+            if check.check_id not in expected_check_ids:
+                unknown_check_ids.append(check.check_id)
+
+        if duplicate_check_ids or unknown_check_ids:
+            detail_parts = [
+                f"Validation inclusion update contains invalid check ids for "
+                f"{item.validation_result_id}"
+            ]
+            if unknown_check_ids:
+                detail_parts.append(
+                    f"unknown check_id: {', '.join(sorted(unknown_check_ids))}"
+                )
+            if duplicate_check_ids:
+                detail_parts.append(
+                    f"duplicate check_id: "
+                    f"{', '.join(sorted(set(duplicate_check_ids)))}"
+                )
+            raise ValueError("; ".join(detail_parts))
+
+    updates_by_result_id = {item.validation_result_id: item for item in update.results}
     updated_results: list[ValidationResultArtifact] = []
     for result in results:
         result_update = updates_by_result_id.get(result.validation_result_id)

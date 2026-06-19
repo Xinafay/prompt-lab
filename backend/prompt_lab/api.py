@@ -144,6 +144,20 @@ def _validate_validation_batch_id_path_segment(validation_batch_id: str) -> None
         raise HTTPException(status_code=400, detail="Unsafe validation batch id")
 
 
+def _validate_validator_id_path_segment(validator_id: str) -> None:
+    windows_path = PureWindowsPath(validator_id)
+    if (
+        not validator_id
+        or Path(validator_id).is_absolute()
+        or windows_path.is_absolute()
+        or windows_path.drive
+        or "/" in validator_id
+        or "\\" in validator_id
+        or validator_id in {".", ".."}
+    ):
+        raise HTTPException(status_code=400, detail="Unsafe validator id")
+
+
 def _read_json(path: Path) -> dict[str, object]:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -524,11 +538,17 @@ def _select_latest_validation_dir(version_dir: Path) -> Path | None:
     validations_dir = version_dir / "validations"
     if not validations_dir.is_dir():
         return None
-    validation_dirs = [
-        path
-        for path in validations_dir.iterdir()
-        if path.is_dir() and (path / "batch.json").is_file()
-    ]
+    validation_dirs = []
+    for path in validations_dir.iterdir():
+        batch_path = path / "batch.json"
+        if not path.is_dir() or not batch_path.is_file():
+            continue
+        try:
+            batch = ValidationBatchArtifact.model_validate(_read_json(batch_path))
+        except (json.JSONDecodeError, ValidationError):
+            continue
+        if batch.status == "completed":
+            validation_dirs.append(path)
     if not validation_dirs:
         return None
     return max(validation_dirs, key=lambda path: path.name)
@@ -1156,6 +1176,33 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         request: DryRunRequest | None = None,
     ) -> dict[str, object]:
         job_id: str | None = None
+        batch: ValidationBatchArtifact | None = None
+        completed_results = 0
+
+        def persist_terminal_validation_batch(status: str, message: str) -> None:
+            nonlocal batch
+            if job_id is None or batch is None:
+                return
+            current_job = job_manager.get(job_id)
+            if current_job.status not in {"completed", "failed", "cancelled"}:
+                if status == "cancelled":
+                    current_job = job_manager.cancel(job_id, message=message)
+                else:
+                    current_job = job_manager.fail(job_id, message=message)
+            batch = batch.model_copy(
+                update={
+                    "status": status,
+                    "finished_at": current_job.finished_at,
+                    "completed_results": completed_results,
+                }
+            )
+            store.write_validation_artifact(
+                experiment_id,
+                version,
+                f"validations/{job_id}/batch.json",
+                batch.model_dump(mode="json"),
+            )
+
         try:
             dry_run = request.dry_run if request is not None else False
             experiment = store.load_experiment(experiment_id)
@@ -1176,6 +1223,8 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                     status_code=400,
                     detail="Experiment has no enabled validators",
                 )
+            for validator in active_validators:
+                _validate_validator_id_path_segment(validator.validator_id)
 
             job_id = start_workflow_job(
                 kind="validation",
@@ -1218,7 +1267,6 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
 
             _remove_runtime_children(version_dir, ["reviews", "comparisons"])
             results: list[ValidationResultArtifact] = []
-            completed_results = 0
             for run in sorted(
                 run_artifacts,
                 key=lambda item: (item.case_id, item.repeat_index),
@@ -1322,14 +1370,24 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 "results": [result.model_dump(mode="json") for result in results],
             }
         except ValueError as exc:
-            fail_workflow_job_if_running(job_id, str(exc))
+            persist_terminal_validation_batch("failed", str(exc))
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except llm_client.PromptLabLlmCancelled as exc:
+            persist_terminal_validation_batch("cancelled", "Workflow job was cancelled")
             raise HTTPException(
                 status_code=409, detail="Workflow job was cancelled"
             ) from exc
+        except HTTPException as exc:
+            if exc.status_code == 409 and str(exc.detail) == "Workflow job was cancelled":
+                persist_terminal_validation_batch("cancelled", str(exc.detail))
+            else:
+                persist_terminal_validation_batch("failed", str(exc.detail))
+            raise
         except Exception as exc:
-            fail_workflow_job_if_running(job_id, str(exc) or type(exc).__name__)
+            persist_terminal_validation_batch(
+                "failed",
+                str(exc) or type(exc).__name__,
+            )
             raise
 
     @app.get("/api/experiments/{experiment_id}/versions/{version}/validations/latest")
@@ -1363,7 +1421,10 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             version,
             validation_batch_id,
         )
-        updated_results = apply_inclusion_update(results, update)
+        try:
+            updated_results = apply_inclusion_update(results, update)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         for result in updated_results:
             store.write_validation_artifact(
                 experiment_id,
