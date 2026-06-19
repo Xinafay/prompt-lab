@@ -1,0 +1,24 @@
+{
+  "schema_version": "prompt_lab.validator/v1",
+  "validator_id": "summary-length",
+  "type": "automatic",
+  "title": "Summary length",
+  "description": "Checks that summary length stays compact.",
+  "enabled": true,
+  "input_scope": "output_only",
+  "checks": [
+    {
+      "check_id": "word-count",
+      "title": "Word count",
+      "description": "Summary is at most 180 words.",
+      "rule": {
+        "kind": "word_count",
+        "source": "output_text",
+        "comparison": {
+          "op": "lte",
+          "value": 180
+        }
+      }
+    }
+  ]
+}

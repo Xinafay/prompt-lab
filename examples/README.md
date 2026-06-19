@@ -43,11 +43,22 @@ model in `experiment.json`:
 ```
 
 `generator_model` is the model being evaluated. `validator_model` is used for
-validation. `judge_model` is used for judgment, proposal generation, and
-comparison. These values use the
+LLM questionnaire validation. `judge_model` is used for judgment and proposal
+generation. Comparison uses deterministic validation results and does not call
+an LLM. These values use the
 `<server>/<model>` format, where `<server>` must be configured in `.servers.jsonc`.
+
+Each example can include a top-level `validators/` directory. Validator
+definition files use `prompt_lab.validator/v1` and are seeded into runtime
+experiments with the rest of the starter template. LLM questionnaire validators
+ask explicit yes/no/unknown checks over configured input scope. Automatic
+validators run local rules such as word counts or JSON-path counts.
 
 The running app does not write into `examples/`. At backend startup, examples are
 copied into `experiments/` only when the runtime workspace is missing or has no
 experiment manifests. Edit and run experiments from `experiments/`; update
 `examples/` only when changing the golden starter templates.
+
+Existing runtime experiments are not migrated when committed examples change.
+Delete or move `experiments/` only when you intentionally want to reseed from the
+current examples.

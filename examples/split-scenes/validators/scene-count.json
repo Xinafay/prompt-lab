@@ -1,0 +1,25 @@
+{
+  "schema_version": "prompt_lab.validator/v1",
+  "validator_id": "scene-count",
+  "type": "automatic",
+  "title": "Scene count",
+  "description": "Checks that structured output includes at least one scene.",
+  "enabled": true,
+  "input_scope": "output_only",
+  "checks": [
+    {
+      "check_id": "has-scenes",
+      "title": "Has scenes",
+      "description": "Scene list contains at least one item.",
+      "rule": {
+        "kind": "json_path_count",
+        "source": "output_json",
+        "path": "scenes",
+        "comparison": {
+          "op": "gte",
+          "value": 1
+        }
+      }
+    }
+  ]
+}

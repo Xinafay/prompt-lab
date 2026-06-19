@@ -8,10 +8,12 @@ Prompt Lab is a standalone local web application for iterative prompt and struct
 
 1. Run a prompt against several representative cases and several uncached repeats.
 2. Inspect the generated text or Pydantic-validated JSON.
-3. Ask a stronger judge model to identify recurring quality problems, one-off deviations, validation/schema issues, and useful changes.
-4. Let the user accept or reject individual judge findings and add human notes.
-5. Ask a stronger proposal model to create a new candidate prompt and optionally a new Pydantic model.
-6. Compare versions before deciding whether to use the new prompt/model in the source project.
+3. Validate the active run with explicit automatic and LLM questionnaire validators.
+4. Review validation results and optionally exclude weak evidence before judging.
+5. Ask a stronger judge model to identify recurring quality problems, one-off deviations, validation/schema issues, and useful changes.
+6. Let the user accept or reject individual judge findings and add human notes.
+7. Ask a stronger proposal model to create a new candidate prompt and optionally a new Pydantic model.
+8. Compare versions with deterministic validation-result matrices before deciding whether to use the new prompt/model in the source project.
 
 Prompt Lab must be independent from Carmilla workflow runtime. Carmilla can export examples into Prompt Lab's neutral format, but Prompt Lab must not import `workflow_runtime`, `WorkflowState`, Story Parser workflow classes, or flat-file context objects.
 
@@ -37,7 +39,7 @@ MVP does not include:
 - user accounts, multi-user authorization, or deployment;
 - numeric scorecards as the primary judgment model;
 - golden expected outputs;
-- automatic rubric editing by the proposal model;
+- automatic validator definition editing by the proposal model;
 - sandboxing untrusted Pydantic code;
 - preserving compatibility with old Prompt Lab experiment formats, because no such format exists yet.
 
@@ -81,7 +83,7 @@ Backend:
 - Python.
 - FastAPI or Starlette.
 - Filesystem store as the canonical source of truth.
-- Simple in-process job manager for runs, judgments, comparisons, and proposals.
+- Simple in-process job manager for runs, validation, judgments, comparisons, and proposals.
 - SSE for progress events.
 - Copied Carmilla `shared/llm` for OpenAI and OpenAI-compatible local model routing.
 
@@ -100,9 +102,13 @@ Data:
 
 ### Experiment
 
-An experiment is a prompt-testing workspace. It contains metadata, one manually edited rubric, and one or more versions.
+An experiment is a prompt-testing workspace. It contains metadata, validator
+definitions, shared cases, and one or more versions.
 
-An experiment does not know which project created it. It only knows prompt templates, prompt invocation cases, optional Pydantic models, model configuration, runs, judgments, user decisions, notes, proposals, and comparisons.
+An experiment does not know which project created it. It only knows prompt
+templates, prompt invocation cases, optional Pydantic models, model
+configuration, validators, validation results, judgments, user decisions, notes,
+proposals, and comparisons.
 
 ### Version
 
@@ -110,8 +116,8 @@ A version is an immutable test candidate once runs are created for it. It contai
 
 - prompt template;
 - optional Pydantic model;
-- cases;
 - run artifacts;
+- validation artifacts;
 - reviews;
 - comparisons.
 
@@ -121,15 +127,23 @@ Creating a proposal does not mutate the current version. Accepting a proposal cr
 
 A case is a JSON file describing one concrete prompt invocation. It contains serialized source stores and bindings that materialize into the prompt/validation context. The case format is universal and simple. It is not a workflow fixture.
 
-### Rubric
+### Validators
 
-The rubric is a Markdown file manually edited by the user. It states what a good answer should do and which tradeoffs matter.
+Validators are experiment-level JSON definitions under `validators/`. They state
+what should be checked after a run. Enabled validators run in the explicit
+`Validate active run` stage before judging.
 
-Rubric changes are allowed over time. Each judgment and proposal stores a snapshot of the rubric text it used, so historical results remain understandable.
+LLM questionnaire validators ask `validator_model` to answer concrete
+yes/no/unknown checks over configured input scope. Automatic validators run local
+rules such as word counts or JSON-path counts without calling an LLM. Each
+validation batch stores validator snapshots, so historical validation results
+remain understandable even if validator definitions change later.
 
 ### Judgment
 
-A judgment is a structured analysis produced by the judge model. It is qualitative by default and must cite evidence from cases/runs.
+A judgment is a structured analysis produced by the judge model. It is
+qualitative by default and must cite selected validation evidence from
+cases/runs.
 
 The judge should distinguish:
 
@@ -165,13 +179,14 @@ Recommended experiment layout:
 ```text
 experiments/<experiment-id>/
   experiment.json
-  rubric.md
+  validators/
+    <validator-id>.json
+  cases/
+    <case-id>.json
   versions/
     v001/
       prompt.md
       model.py                 # only for pydantic output
-      cases/
-        <case-id>.json
       runs/
         <run-batch-id>/
           job.json
@@ -179,11 +194,18 @@ experiments/<experiment-id>/
             repeat-001.json
             repeat-002.json
             repeat-003.json
+      validations/
+        <validation-batch-id>/
+          batch.json
+          validators_snapshot/
+            <validator-id>.json
+          <case-id>/
+            repeat-001/
+              <validator-id>.json
       reviews/
         review-001/
           judgment.json
           judgment.md
-          rubric_snapshot.md
           decisions.json
           human_notes.md
           proposal/
@@ -193,9 +215,7 @@ experiments/<experiment-id>/
             source.json
       comparisons/
         comparison-001/
-          comparison.json
-          comparison.md
-          rubric_snapshot.md
+          compare_matrix.json
 ```
 
 ### `experiment.json`
@@ -220,6 +240,7 @@ Example for Pydantic output:
   },
   "models": {
     "generator_model": "local/example-small-model",
+    "validator_model": "openai/example-large-model",
     "judge_model": "openai/example-large-model"
   },
   "run_defaults": {
@@ -248,6 +269,7 @@ Example for text output:
   },
   "models": {
     "generator_model": "local/example-small-model",
+    "validator_model": "openai/example-large-model",
     "judge_model": "openai/example-large-model"
   },
   "run_defaults": {
@@ -255,6 +277,57 @@ Example for text output:
     "llm_cache": "disabled",
     "case_order": "case-major"
   }
+}
+```
+
+### Validator JSON
+
+LLM questionnaire validator:
+
+```json
+{
+  "schema_version": "prompt_lab.validator/v1",
+  "validator_id": "scene-quality",
+  "type": "llm_questionnaire",
+  "title": "Scene quality",
+  "description": "Checks whether structured scenes preserve source content and useful boundaries.",
+  "enabled": true,
+  "input_scope": "output_and_case",
+  "checks": [
+    {
+      "check_id": "coverage",
+      "title": "Coverage",
+      "question": "Does the scene list cover every important source event without omission?"
+    }
+  ]
+}
+```
+
+Automatic validator:
+
+```json
+{
+  "schema_version": "prompt_lab.validator/v1",
+  "validator_id": "scene-count",
+  "type": "automatic",
+  "title": "Scene count",
+  "enabled": true,
+  "input_scope": "output_only",
+  "checks": [
+    {
+      "check_id": "has-scenes",
+      "title": "Has scenes",
+      "rule": {
+        "kind": "json_path_count",
+        "source": "output_json",
+        "path": "scenes",
+        "comparison": {
+          "op": "gte",
+          "value": 1
+        }
+      }
+    }
+  ]
 }
 ```
 
@@ -350,6 +423,34 @@ Run artifact:
 
 Validation and parse failures are normal run results, not whole-experiment failures. They must be saved and passed to the judge because they often indicate prompt/schema problems.
 
+### Validation Batch
+
+Validation runs after a run batch and before judgment. It executes every enabled
+validator against every run artifact and saves one result per
+case/repeat/validator.
+
+`batch.json`:
+
+```json
+{
+  "schema_version": "prompt_lab.validation_batch/v1",
+  "validation_batch_id": "validation-20260606-103500",
+  "run_batch_id": "run-20260606-102000",
+  "version": "v001",
+  "status": "completed",
+  "started_at": "2026-06-06T10:35:00+02:00",
+  "finished_at": "2026-06-06T10:39:00+02:00",
+  "total_results": 18,
+  "completed_results": 18,
+  "validator_model": "openai/example-large-model",
+  "validator_ids": ["scene-quality", "scene-count"]
+}
+```
+
+Validation results include check verdicts and `included_in_judge` flags. Users
+can exclude a whole validator result or individual checks before the judge prompt
+is built.
+
 ### Judgment JSON
 
 The judge output should be structured. Suggested contract:
@@ -428,38 +529,50 @@ Proposal generation rules:
 - deferred findings are ignored in the current proposal unless human notes mention them;
 - human notes override all judge findings.
 
-### Comparison JSON
+### Compare Matrix JSON
 
-Comparison is separate from single-version judgment.
+Comparison is separate from single-version judgment. It is deterministic and
+uses validation results, not an LLM prompt.
 
 ```json
 {
-  "schema_version": "prompt_lab.comparison/v1",
+  "schema_version": "prompt_lab.compare_matrix/v1",
   "comparison_id": "comparison-20260606-110000",
-  "baseline_version": "v001",
-  "candidate_version": "v002",
-  "baseline_run_batch_ids": ["run-20260606-102000"],
-  "candidate_run_batch_ids": ["run-20260606-105000"],
-  "judge_model": "openai/example-large-model",
-  "summary": "...",
-  "improvements": [],
-  "regressions": [],
-  "unchanged_problems": [],
-  "new_problems": [],
-  "stability_changes": [],
-  "recommendation": "revise_new_version",
-  "decision_points": []
+  "versions": ["v001", "v002"],
+  "validators": [
+    {
+      "validator_id": "scene-quality",
+      "title": "Scene quality",
+      "checks": [
+        {
+          "check_id": "coverage",
+          "title": "Coverage",
+          "cells": {
+            "v001": {
+              "status": "mixed",
+              "yes": 7,
+              "no": 2,
+              "unknown": 0,
+              "total": 9
+            },
+            "v002": {
+              "status": "pass",
+              "yes": 9,
+              "no": 0,
+              "unknown": 0,
+              "total": 9
+            }
+          }
+        }
+      ]
+    }
+  ]
 }
 ```
 
-Allowed recommendations:
-
-- `keep_new_version`;
-- `revise_new_version`;
-- `revert_to_baseline`;
-- `inconclusive`.
-
-Comparisons should evaluate semantic quality, not literal equality. For extraction prompts, different generated IDs are not a problem by themselves unless they collide, are invalid, are misleading, or violate the rubric.
+Each compare cell aggregates included validation evidence from the latest
+validation batch for that version. Status values are `pass`, `fail`, `mixed`,
+or `empty`. No `judge_model` is used.
 
 ## Backend Behavior
 
@@ -515,33 +628,52 @@ Job status:
 }
 ```
 
-Expose progress through SSE. After application restart, an in-memory job may be lost; already written artifacts remain valid and the previous job can be shown as interrupted.
+Validation jobs report the same current case/repeat shape plus the active
+validator. Expose progress through SSE. After application restart, an in-memory
+job may be lost; already written artifacts remain valid and the previous job can
+be shown as interrupted.
+
+### Validation
+
+Validation input:
+
+- experiment metadata;
+- validator definitions;
+- latest active run batch;
+- cases;
+- run artifacts, including Pydantic validation and execution errors.
+
+LLM questionnaire validation uses `validator_model`. Automatic validation uses
+local rule evaluation. Unknown or malformed LLM check IDs are saved as validation
+errors so the batch remains inspectable.
 
 ### Judge
 
 Single-version judgment input:
 
 - experiment metadata;
-- rubric snapshot;
 - prompt;
 - Pydantic model or text-output declaration;
 - cases;
-- run artifacts, including validation and execution errors.
+- validation batch metadata;
+- included validation results;
+- run artifacts referenced by validation evidence, including generator
+  validation and execution errors.
 
 Judge output must be structured and also rendered as Markdown for human reading.
 
 The judge must identify recurring problems before one-off stochastic deviations. It must not assume a single run is authoritative.
 
-### Comparison Judge
+### Deterministic Comparison
 
 Comparison input:
 
-- baseline prompt/model/runs/judgment if available;
-- candidate prompt/model/runs/judgment if available;
-- rubric snapshot;
-- user-selected baseline/candidate versions.
+- selected versions;
+- latest validation batch for each selected version;
+- validator snapshots and included validation results.
 
-Comparison output must identify improvements, regressions, unchanged problems, new problems, stability changes, and a recommendation.
+Comparison output is a grouped matrix by validator and check. It is intended for
+human comparison of pass/fail/unknown rates across versions.
 
 ### Proposal Generator
 
@@ -549,10 +681,10 @@ Proposal input:
 
 - current prompt;
 - current model if present;
-- rubric snapshot;
 - accepted findings;
 - rejected findings as constraints;
 - human notes;
+- included validation evidence used by judge;
 - relevant run evidence.
 
 Proposal output:
@@ -572,11 +704,13 @@ REST endpoints:
 GET    /api/experiments
 POST   /api/experiments/import
 GET    /api/experiments/{experiment_id}
-PUT    /api/experiments/{experiment_id}/rubric
 GET    /api/experiments/{experiment_id}/versions/{version}
 PUT    /api/experiments/{experiment_id}/versions/{version}/prompt
 PUT    /api/experiments/{experiment_id}/versions/{version}/model
 POST   /api/experiments/{experiment_id}/versions/{version}/runs
+POST   /api/experiments/{experiment_id}/versions/{version}/validations
+GET    /api/experiments/{experiment_id}/versions/{version}/validations/latest
+PUT    /api/experiments/{experiment_id}/versions/{version}/validations/{validation_batch_id}/inclusion
 POST   /api/experiments/{experiment_id}/versions/{version}/judgments
 PUT    /api/experiments/{experiment_id}/versions/{version}/reviews/{review_id}/decisions
 PUT    /api/experiments/{experiment_id}/versions/{version}/reviews/{review_id}/human-notes
@@ -593,9 +727,11 @@ SSE event names:
 - `job_progress`;
 - `run_started`;
 - `run_saved`;
+- `validation_started`;
+- `validation_saved`;
 - `judgment_started`;
 - `judgment_saved`;
-- `comparison_saved`;
+- `compare_matrix_saved`;
 - `proposal_saved`;
 - `job_failed`;
 - `job_completed`.
@@ -607,9 +743,10 @@ Main views:
 1. Experiments list
 2. Experiment overview
 3. Runs
-4. Judgment/review
-5. Proposal
-6. Comparison
+4. Validation
+5. Judgment/review
+6. Proposal
+7. Comparison
 
 ### Experiments List
 
@@ -629,9 +766,9 @@ Show:
 - active version selector;
 - prompt editor;
 - Pydantic model editor or text-output notice;
-- rubric editor;
+- validator list and validation status;
 - cases list;
-- buttons: `Run version`, `Judge runs`, `Compare with previous version`, `Create proposal`.
+- buttons: `Run version`, `Validate active run`, `Judge validated run`, `Compare with previous version`, `Create proposal`.
 
 ### Runs
 
@@ -640,7 +777,6 @@ Show a table:
 - case;
 - repeat;
 - status;
-- validation status;
 - model;
 - elapsed time;
 - short output preview.
@@ -655,6 +791,12 @@ Run detail:
 - validation error;
 - execution error;
 - usage.
+
+### Validation
+
+Show grouped validation results by case, repeat, validator, and check. Allow the
+user to exclude a whole validation result or individual checks from judge input.
+Judge is disabled until a validation batch exists.
 
 ### Judgment / Review
 
@@ -684,12 +826,8 @@ Show:
 
 - baseline version selector;
 - candidate version selector;
-- comparison report;
-- improvements;
-- regressions;
-- unchanged problems;
-- stability changes;
-- recommendation.
+- deterministic validation matrix grouped by validator/check;
+- per-version counts and status for yes/no/unknown evidence.
 
 ## Carmilla Export Boundary
 
@@ -723,13 +861,14 @@ Output:
 ```text
 <eval-name>/
   experiment.json
-  rubric.md
+  validators/
+    <validator-id>.json
+  cases/
+    <case-name>.json
   versions/
     v001/
       prompt.md
       model.py
-      cases/
-        <case-name>.json
 ```
 
 The exporter is allowed to understand Carmilla workflow steps. Prompt Lab is not.
@@ -763,10 +902,13 @@ Each example should include the three cases currently saved in Carmilla:
 Backend tests:
 
 - load experiment metadata;
+- load validator definitions;
 - render prompt with materialized case context;
 - load Pydantic model by entrypoint;
 - validate a successful structured output;
 - store validation errors as run artifacts;
+- create validation batches and validation results;
+- aggregate deterministic compare matrices from validation results;
 - run repeat order case-major;
 - create default accepted decisions for judge findings;
 - ensure rejected findings are included as constraints in proposal input;
@@ -777,6 +919,7 @@ Frontend tests:
 - experiments list renders;
 - run progress updates from mocked SSE;
 - run detail shows JSON output and validation errors;
+- validation results can be reviewed and excluded from judge input;
 - finding decisions default to accepted and can be changed;
 - human notes are saved;
 - proposal view can create next version.
@@ -787,12 +930,14 @@ Manual smoke tests:
 2. Run 3 repeats on 3 cases.
 3. Confirm progress displays current case/repeat.
 4. Confirm structured JSON and validation errors are visible.
-5. Judge current version.
-6. Reject one finding and add human notes.
-7. Generate proposal.
-8. Create `v002`.
-9. Run `v002`.
-10. Compare `v002` with `v001`.
+5. Validate the active run.
+6. Review validation results and optionally exclude weak evidence.
+7. Judge the validated run.
+8. Reject one finding and add human notes.
+9. Generate proposal.
+10. Create `v002`.
+11. Run and validate `v002`.
+12. Compare validation results between `v002` and `v001`.
 
 ## Open Decisions For Implementation
 
@@ -819,5 +964,5 @@ Recommended order:
 9. Implement single-version judgment.
 10. Implement review decisions and human notes.
 11. Implement proposal generation and create-next-version.
-12. Implement comparison judgment.
+12. Implement deterministic validation-result comparison.
 13. Add Carmilla exporter script after Prompt Lab import format is stable.

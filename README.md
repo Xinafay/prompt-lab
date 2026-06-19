@@ -1,6 +1,8 @@
 # Prompt Lab
 
-Prompt Lab is a standalone local app for improving prompts through repeated model runs, qualitative LLM judgment, human review, proposal generation, and version comparison.
+Prompt Lab is a standalone local app for improving prompts through repeated
+model runs, explicit validation, qualitative LLM judgment, human review,
+proposal generation, and deterministic version comparison.
 
 Prompt Lab stores experiments as filesystem artifacts. Carmilla or another external tool may export neutral experiment bundles into this repository, but Prompt Lab does not import Carmilla workflow runtime, workflow state, or workflow classes.
 
@@ -44,6 +46,10 @@ Lab copies examples into `experiments/`. Runtime reads, generated artifacts, and
 future GUI edits use `experiments/` only. The `experiments/` directory is ignored
 by git.
 
+Existing runtime experiments are not migrated when committed examples change.
+Delete or move `experiments/` only when you intentionally want to reseed from
+the current examples.
+
 Carmilla can export a complete Prompt Lab experiment directly from saved workflow
 eval fixtures. From the Carmilla repository root, run:
 
@@ -54,19 +60,25 @@ python -m python.workflow_runtime.eval_runner \
   --export-prompt-lab /Users/karol/Projects/sinafai/prompt-lab/examples/split-scenes
 ```
 
-The export command writes the experiment manifest, rubric, shared `cases/`, and
-initial version files. It prints created, existing, and skipped file events to
-stderr so callers can see what changed without parsing the generated files.
+The export command writes the experiment manifest, validator definitions, shared
+`cases/`, and initial version files. It prints created, existing, and skipped
+file events to stderr so callers can see what changed without parsing the
+generated files.
 
 Each experiment version keeps one active workflow chain:
 
 - Running a version replaces the previous active run artifacts for that version
-  and clears downstream reviews, proposals, and comparisons.
-- Judging the active run replaces the previous active review and clears its
-  proposal.
+  and clears downstream validations, reviews, proposals, and comparisons.
+- Validating the active run replaces the previous active validation batch for
+  that version. Validation results can be reviewed and excluded from judge input
+  before judging.
+- Judging the validated active run replaces the previous active review and
+  clears its proposal.
 - Generating a proposal writes it under the active review, so refreshes reload
   the current review and proposal instead of exposing a list of historical
   review IDs.
+- Comparing versions reads their latest validation batches and returns a
+  deterministic validation matrix. Compare does not call an LLM.
 
 Technical artifact IDs such as run batch IDs and review IDs may still appear in
 API responses and filesystem paths for debugging, but the UI treats them as the
@@ -135,13 +147,13 @@ pnpm build
 3. Open `summarize-chapter` or use `?experiment=summarize-chapter`.
 4. Optionally enable `Dry-run` in the workflow toolbar to generate deterministic artifacts without calling model providers.
 5. Run the active version.
-6. Confirm progress shows the current case/repeat and the active run appears in the `Runs` tab.
-7. Judge the active run.
-8. Reject or defer at least one finding and add human notes.
-9. Generate a proposal.
-10. Create the next version.
-11. Switch to the new version with the toolbar `Version` selector.
-12. Compare the new version with `v001`.
+6. Validate the active run.
+7. Review validation results and optionally exclude weak evidence.
+8. Judge the validated run.
+9. Reject or defer at least one finding and add human notes.
+10. Generate a proposal.
+11. Create the next version.
+12. Compare validation results between versions.
 
 Live smoke requires configured model servers and may make real LLM calls:
 
