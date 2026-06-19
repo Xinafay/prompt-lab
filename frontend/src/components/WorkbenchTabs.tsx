@@ -10,6 +10,7 @@ const tabLabels: Record<WorkbenchTab, string> = {
   settings: "Settings",
   cases: "Cases",
   runs: "Runs",
+  validation: "Validation",
   review: "Review",
   proposal: "Proposal",
   compare: "Compare"

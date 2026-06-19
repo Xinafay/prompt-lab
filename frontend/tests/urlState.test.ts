@@ -34,6 +34,13 @@ test("defaults invalid tabs to overview", () => {
   );
 });
 
+test("parses validation tab routes", () => {
+  assert.deepEqual(
+    parseExperimentRoute(new URL("http://localhost:5173/demo/validation")),
+    { experimentId: "demo", tab: "validation" }
+  );
+});
+
 test("builds encoded canonical paths", () => {
   assert.equal(
     buildExperimentPath("summarize chapter", "cases"),
@@ -59,6 +66,7 @@ test("exports the supported workbench tabs", () => {
     "settings",
     "cases",
     "runs",
+    "validation",
     "review",
     "proposal",
     "compare"

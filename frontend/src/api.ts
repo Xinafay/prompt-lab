@@ -1,5 +1,5 @@
 import type {
-  ComparisonResponse,
+  CompareMatrixResponse,
   CreatedVersionResponse,
   Experiment,
   FindingDecisionSet,
@@ -11,6 +11,8 @@ import type {
   ReviewState,
   RunVersionRequest,
   RunsResponse,
+  ValidationInclusionUpdate,
+  ValidationState,
   VersionOverview,
   VersionsResponse
 } from "./types";
@@ -132,6 +134,19 @@ export function runVersion(
   );
 }
 
+export function validateVersion(
+  experimentId: string,
+  version: string,
+  dryRun = false
+): Promise<JobStatus> {
+  return apiPost<JobStatus>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
+      version
+    )}/validations`,
+    dryRun ? { dry_run: true } : undefined
+  );
+}
+
 export function getJob(jobId: string): Promise<JobStatus> {
   return apiGet<JobStatus>(`/api/jobs/${encodeURIComponent(jobId)}`);
 }
@@ -190,6 +205,34 @@ export async function getLatestReviewState(
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(await readErrorMessage(response));
   return response.json() as Promise<ReviewState>;
+}
+
+export async function getLatestValidationState(
+  experimentId: string,
+  version: string
+): Promise<ValidationState | null> {
+  const response = await fetch(
+    `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
+      version
+    )}/validations/latest`
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(await readErrorMessage(response));
+  return response.json() as Promise<ValidationState>;
+}
+
+export function updateValidationInclusion(
+  experimentId: string,
+  version: string,
+  validationBatchId: string,
+  update: ValidationInclusionUpdate
+): Promise<ValidationState> {
+  return apiPut<ValidationState>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
+      version
+    )}/validations/${encodeURIComponent(validationBatchId)}/inclusion`,
+    update
+  );
 }
 
 export function updateReviewDecisions(
@@ -266,8 +309,8 @@ export function compareVersions(
   baselineVersion: string,
   candidateVersion: string,
   dryRun = false
-): Promise<ComparisonResponse> {
-  return apiPost<ComparisonResponse>(
+): Promise<CompareMatrixResponse> {
+  return apiPost<CompareMatrixResponse>(
     `/api/experiments/${encodeURIComponent(experimentId)}/comparisons`,
     {
       baseline_version: baselineVersion,

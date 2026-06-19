@@ -6,42 +6,106 @@ import {
   getCompareActionState,
   getJudgeActionState,
   getProposalActionLabel,
+  getValidateActionState,
   getRunActionLabel
 } from "../src/workflowActions.ts";
 
 test("judge action is disabled until a run exists", () => {
-  assert.deepEqual(getJudgeActionState({ hasRuns: false, isBusy: false }), {
-    disabled: true,
-    disabledReason: "Create a run before judging the active run.",
-    label: "Judge active run"
-  });
+  assert.deepEqual(
+    getJudgeActionState({ hasRuns: false, hasValidation: false, isBusy: false }),
+    {
+      disabled: true,
+      disabledReason: "Create a run before judging the active run.",
+      label: "Judge active run"
+    }
+  );
 });
 
-test("judge action is enabled after a run exists", () => {
-  assert.deepEqual(getJudgeActionState({ hasRuns: true, isBusy: false }), {
-    disabled: false,
-    disabledReason: null,
-    label: "Judge active run"
-  });
+test("validate action is disabled until a run exists", () => {
+  assert.deepEqual(
+    getValidateActionState({ hasRuns: false, hasValidation: false, isBusy: false }),
+    {
+      disabled: true,
+      disabledReason: "Create a run before validating.",
+      label: "Validate active run"
+    }
+  );
+});
+
+test("validate action explains busy state", () => {
+  assert.deepEqual(
+    getValidateActionState({ hasRuns: true, hasValidation: false, isBusy: true }),
+    {
+      disabled: true,
+      disabledReason: "Wait for the current workflow action to finish.",
+      label: "Validating..."
+    }
+  );
+});
+
+test("validate action label changes when validation already exists", () => {
+  assert.deepEqual(
+    getValidateActionState({ hasRuns: true, hasValidation: true, isBusy: false }),
+    {
+      disabled: false,
+      disabledReason: null,
+      label: "Revalidate active run"
+    }
+  );
+});
+
+test("judge action is disabled until validation exists", () => {
+  assert.deepEqual(
+    getJudgeActionState({ hasRuns: true, hasValidation: false, isBusy: false }),
+    {
+      disabled: true,
+      disabledReason: "Validate the active run before judging.",
+      label: "Judge validated run"
+    }
+  );
+});
+
+test("judge action is enabled after validation exists", () => {
+  assert.deepEqual(
+    getJudgeActionState({ hasRuns: true, hasValidation: true, isBusy: false }),
+    {
+      disabled: false,
+      disabledReason: null,
+      label: "Judge validated run"
+    }
+  );
 });
 
 test("judge action label changes when a review already exists", () => {
   assert.deepEqual(
-    getJudgeActionState({ hasReview: true, hasRuns: true, isBusy: false }),
+    getJudgeActionState({
+      hasReview: true,
+      hasRuns: true,
+      hasValidation: true,
+      isBusy: false
+    }),
     {
       disabled: false,
       disabledReason: null,
-      label: "Rejudge active run"
+      label: "Rejudge validated run"
     }
   );
 });
 
 test("judge action explains busy state", () => {
-  assert.deepEqual(getJudgeActionState({ hasReview: true, hasRuns: true, isBusy: true }), {
-    disabled: true,
-    disabledReason: "Wait for the current workflow action to finish.",
-    label: "Judging..."
-  });
+  assert.deepEqual(
+    getJudgeActionState({
+      hasReview: true,
+      hasRuns: true,
+      hasValidation: false,
+      isBusy: true
+    }),
+    {
+      disabled: true,
+      disabledReason: "Wait for the current workflow action to finish.",
+      label: "Judging..."
+    }
+  );
 });
 
 test("run action label changes when runs already exist", () => {

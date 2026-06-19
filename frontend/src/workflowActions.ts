@@ -1,6 +1,7 @@
 interface JudgeActionInput {
   hasReview?: boolean;
   hasRuns: boolean;
+  hasValidation?: boolean;
   isBusy: boolean;
 }
 
@@ -18,6 +19,7 @@ interface CompareActionState extends ActionState {
 export function getJudgeActionState({
   hasReview = false,
   hasRuns,
+  hasValidation = false,
   isBusy
 }: JudgeActionInput): ActionState {
   if (isBusy) {
@@ -34,10 +36,47 @@ export function getJudgeActionState({
       label: "Judge active run"
     };
   }
+  if (!hasValidation) {
+    return {
+      disabled: true,
+      disabledReason: "Validate the active run before judging.",
+      label: "Judge validated run"
+    };
+  }
   return {
     disabled: false,
     disabledReason: null,
-    label: hasReview ? "Rejudge active run" : "Judge active run"
+    label: hasReview ? "Rejudge validated run" : "Judge validated run"
+  };
+}
+
+export function getValidateActionState({
+  hasRuns,
+  hasValidation,
+  isBusy
+}: {
+  hasRuns: boolean;
+  hasValidation: boolean;
+  isBusy: boolean;
+}): ActionState {
+  if (isBusy) {
+    return {
+      disabled: true,
+      disabledReason: "Wait for the current workflow action to finish.",
+      label: "Validating..."
+    };
+  }
+  if (!hasRuns) {
+    return {
+      disabled: true,
+      disabledReason: "Create a run before validating.",
+      label: "Validate active run"
+    };
+  }
+  return {
+    disabled: false,
+    disabledReason: null,
+    label: hasValidation ? "Revalidate active run" : "Validate active run"
   };
 }
 

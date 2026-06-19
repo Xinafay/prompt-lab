@@ -6,6 +6,7 @@ export const workbenchTabs = [
   "settings",
   "cases",
   "runs",
+  "validation",
   "review",
   "proposal",
   "compare"
