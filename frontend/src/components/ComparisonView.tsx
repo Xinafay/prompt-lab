@@ -14,23 +14,6 @@ interface ComparisonViewProps {
   onCompare: () => void;
 }
 
-function ComparisonList({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div className="comparison-list">
-      <h4>{title}</h4>
-      {items.length === 0 ? (
-        <p className="muted-copy">None.</p>
-      ) : (
-        <ul>
-          {items.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 export function ComparisonView({
   knownVersions,
   baselineVersion,
@@ -105,25 +88,15 @@ export function ComparisonView({
       ) : (
         <div className="comparison-report">
           <div className="review-summary">
-            <h4>Recommendation</h4>
+            <h4>Compare matrix</h4>
             <p>
-              <span className="recommendation-pill">
-                {comparison.recommendation}
-              </span>
+              Compared {comparison.versions.length} version
+              {comparison.versions.length === 1 ? "" : "s"} across{" "}
+              {comparison.rows.length} validation check
+              {comparison.rows.length === 1 ? "" : "s"}.
             </p>
-            <p>{comparison.summary}</p>
+            <p className="muted-copy">{comparison.versions.join(" vs ")}</p>
           </div>
-          <ComparisonList title="Improvements" items={comparison.improvements} />
-          <ComparisonList title="Regressions" items={comparison.regressions} />
-          <ComparisonList
-            title="Unchanged problems"
-            items={comparison.unchanged_problems}
-          />
-          <ComparisonList title="New problems" items={comparison.new_problems} />
-          <ComparisonList
-            title="Stability changes"
-            items={comparison.stability_changes}
-          />
         </div>
       )}
     </section>

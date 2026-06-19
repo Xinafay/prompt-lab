@@ -21,6 +21,7 @@ function prepareForSave(settings: GlobalSettingsModel): GlobalSettingsModel {
   return {
     schema_version: "prompt_lab.settings/v1",
     default_generator_model: settings.default_generator_model.trim(),
+    default_validator_model: settings.default_validator_model.trim(),
     default_judge_model: settings.default_judge_model.trim(),
     default_repeat_count: settings.default_repeat_count
   };
@@ -70,6 +71,10 @@ export function GlobalSettings({
     setError(null);
     if (preparedDraft.default_generator_model.length === 0) {
       setError("Default generator model is required.");
+      return;
+    }
+    if (preparedDraft.default_validator_model.length === 0) {
+      setError("Default validator model is required.");
       return;
     }
     if (preparedDraft.default_judge_model.length === 0) {
