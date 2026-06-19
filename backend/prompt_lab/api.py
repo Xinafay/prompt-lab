@@ -645,6 +645,7 @@ def _validate_validation_results_for_compare(
     validation_batch: ValidationBatchArtifact,
     validation_results: list[ValidationResultArtifact],
     validator_snapshots: list[ValidatorDefinition],
+    run_artifacts: list[RunArtifact],
 ) -> None:
     if validation_batch.version != version:
         raise HTTPException(
@@ -699,6 +700,15 @@ def _validate_validation_results_for_compare(
 
     seen_result_ids: set[str] = set()
     seen_logical_results: set[tuple[str, int, str]] = set()
+    run_lookup = {
+        (run.case_id, run.repeat_index): run.run_id
+        for run in run_artifacts
+    }
+    expected_logical_results = {
+        (run.case_id, run.repeat_index, validator_id)
+        for run in run_artifacts
+        for validator_id in snapshot_ids
+    }
     for result in validation_results:
         if result.validation_result_id in seen_result_ids:
             raise HTTPException(
@@ -736,6 +746,23 @@ def _validate_validation_results_for_compare(
                     f"{validation_batch.run_batch_id}"
                 ),
             )
+        expected_run_id = run_lookup.get((result.case_id, result.repeat_index))
+        if expected_run_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} references "
+                    f"unknown run case {result.case_id} repeat {result.repeat_index}"
+                ),
+            )
+        if result.run_id != expected_run_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} has run_id "
+                    f"{result.run_id}, expected {expected_run_id}"
+                ),
+            )
         check_ids = validator_checks.get(result.validator_id)
         if check_ids is None:
             raise HTTPException(
@@ -766,6 +793,28 @@ def _validate_validation_results_for_compare(
                         f"check_ids {sorted(check_ids)}"
                     ),
                 )
+
+    missing_logical_results = sorted(expected_logical_results - seen_logical_results)
+    if missing_logical_results:
+        case_id, repeat_index, validator_id = missing_logical_results[0]
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"missing validation result for case {case_id} "
+                f"repeat {repeat_index} validator {validator_id}"
+            ),
+        )
+
+    unexpected_logical_results = sorted(seen_logical_results - expected_logical_results)
+    if unexpected_logical_results:
+        case_id, repeat_index, validator_id = unexpected_logical_results[0]
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"unexpected validation result for case {case_id} "
+                f"repeat {repeat_index} validator {validator_id}"
+            ),
+        )
 
 
 def _run_errors_from_artifacts(
@@ -968,6 +1017,30 @@ def _load_latest_validated_run_batch(
         repeat_count=repeat_count,
     )
     return selected_run_batch_id, run_artifacts
+
+
+def _load_validated_run_batch_by_id(
+    *,
+    version_dir: Path,
+    run_batch_id: str,
+    version: str,
+    cases: set[str],
+    repeat_count: int,
+) -> list[RunArtifact]:
+    run_batch_dir = version_dir / "runs" / run_batch_id
+    if not run_batch_dir.is_dir():
+        raise HTTPException(status_code=400, detail=f"Run batch {run_batch_id} not found")
+    run_artifacts = _load_run_artifacts_from_batch_dir(run_batch_dir)
+    if not run_artifacts:
+        raise HTTPException(status_code=400, detail="Run batch has no artifacts")
+    _validate_run_artifacts(
+        run_artifacts=run_artifacts,
+        selected_run_batch_id=run_batch_id,
+        version=version,
+        case_ids=cases,
+        repeat_count=repeat_count,
+    )
+    return run_artifacts
 
 
 def create_app(config: PromptLabConfig | None = None) -> FastAPI:
@@ -1832,7 +1905,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     def compare_experiment_versions(
         experiment_id: str, request: ComparisonRequest
     ) -> CompareMatrixResponse:
-        store.load_experiment(experiment_id)
+        experiment = store.load_experiment(experiment_id)
         baseline_version = request.baseline_version
         candidate_version = request.candidate_version
         baseline_version_dir = store.version_dir(experiment_id, baseline_version)
@@ -1871,17 +1944,40 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             candidate_version,
             candidate_validation_batch.validation_batch_id,
         )
+        cases = store.load_cases(experiment_id)
+        if not cases:
+            raise HTTPException(status_code=400, detail="Experiment has no cases")
+        for case in cases:
+            _validate_case_id_path_segment(case.id)
+        case_ids = {case.id for case in cases}
+        repeat_count = experiment.run_defaults.repeat_count
+        baseline_run_artifacts = _load_validated_run_batch_by_id(
+            version_dir=baseline_version_dir,
+            run_batch_id=baseline_validation_batch.run_batch_id,
+            version=baseline_version,
+            cases=case_ids,
+            repeat_count=repeat_count,
+        )
+        candidate_run_artifacts = _load_validated_run_batch_by_id(
+            version_dir=candidate_version_dir,
+            run_batch_id=candidate_validation_batch.run_batch_id,
+            version=candidate_version,
+            cases=case_ids,
+            repeat_count=repeat_count,
+        )
         _validate_validation_results_for_compare(
             version=baseline_version,
             validation_batch=baseline_validation_batch,
             validation_results=baseline_validation_results,
             validator_snapshots=baseline_validator_snapshots,
+            run_artifacts=baseline_run_artifacts,
         )
         _validate_validation_results_for_compare(
             version=candidate_version,
             validation_batch=candidate_validation_batch,
             validation_results=candidate_validation_results,
             validator_snapshots=candidate_validator_snapshots,
+            run_artifacts=candidate_run_artifacts,
         )
         job_id = start_workflow_job(
             kind="compare", experiment_id=experiment_id, version=candidate_version

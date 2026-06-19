@@ -290,6 +290,21 @@ def update_validation_batch_counts(
     write_json(batch_path, batch)
 
 
+def corrupt_validation_result(
+    version_dir: Path,
+    *,
+    validation_batch_id: str,
+    updates: dict[str, Any],
+) -> None:
+    path = validation_result_path(
+        version_dir,
+        validation_batch_id=validation_batch_id,
+    )
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload.update(updates)
+    write_json(path, payload)
+
+
 def test_compare_matrix_marks_any_no_as_fail() -> None:
     matrix = build_compare_matrix(
         experiment_id="demo",
@@ -800,6 +815,145 @@ def test_api_rejects_compare_ok_result_missing_snapshot_check() -> None:
         assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
 
 
+def test_api_rejects_compare_result_with_unknown_run_case_repeat() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        baseline_dir, candidate_dir = write_demo_experiment(root)
+        write_run_batch(baseline_dir, "baseline-run-001", version="v001")
+        write_run_batch(candidate_dir, "candidate-run-001", version="v002")
+        write_validation_batch(
+            baseline_dir,
+            validation_batch_id="validation-001",
+            run_batch_id="baseline-run-001",
+            version="v001",
+            verdict="yes",
+        )
+        write_validation_batch(
+            candidate_dir,
+            validation_batch_id="validation-002",
+            run_batch_id="candidate-run-001",
+            version="v002",
+            verdict="yes",
+        )
+        corrupt_validation_result(
+            candidate_dir,
+            validation_batch_id="validation-002",
+            updates={
+                "case_id": "missing-case",
+                "run_id": "candidate-run-001-missing-case-repeat-001",
+            },
+        )
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/api/experiments/demo/comparisons",
+            json={"baseline_version": "v001", "candidate_version": "v002"},
+        )
+
+        assert response.status_code == 400
+        assert "references unknown run case missing-case repeat 1" in (
+            response.json()["detail"]
+        )
+        assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
+
+
+def test_api_rejects_compare_result_with_mismatched_run_id() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        baseline_dir, candidate_dir = write_demo_experiment(root)
+        write_run_batch(baseline_dir, "baseline-run-001", version="v001")
+        write_run_batch(candidate_dir, "candidate-run-001", version="v002")
+        write_validation_batch(
+            baseline_dir,
+            validation_batch_id="validation-001",
+            run_batch_id="baseline-run-001",
+            version="v001",
+            verdict="yes",
+        )
+        write_validation_batch(
+            candidate_dir,
+            validation_batch_id="validation-002",
+            run_batch_id="candidate-run-001",
+            version="v002",
+            verdict="yes",
+        )
+        corrupt_validation_result(
+            candidate_dir,
+            validation_batch_id="validation-002",
+            updates={"run_id": "wrong-run-id"},
+        )
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/api/experiments/demo/comparisons",
+            json={"baseline_version": "v001", "candidate_version": "v002"},
+        )
+
+        assert response.status_code == 400
+        assert "has run_id wrong-run-id, expected candidate-run-001-case-a-repeat-001" in (
+            response.json()["detail"]
+        )
+        assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
+
+
+def test_api_rejects_compare_missing_expected_logical_result() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        baseline_dir, candidate_dir = write_demo_experiment(root, repeat_count=1)
+        write_json(
+            root / "examples" / "demo" / "cases" / "case-b.json",
+            valid_case_payload(case_id="case-b", title="Case B", value="goodbye"),
+        )
+        write_run_batch(baseline_dir, "baseline-run-001", version="v001")
+        write_run_batch(candidate_dir, "candidate-run-001", version="v002")
+        write_json(
+            baseline_dir / "runs" / "baseline-run-001" / "case-b" / "repeat-001.json",
+            valid_run_payload(
+                run_id="baseline-run-001-case-b-repeat-001",
+                run_batch_id="baseline-run-001",
+                version="v001",
+                case_id="case-b",
+                repeat_index=1,
+            ),
+        )
+        write_json(
+            candidate_dir / "runs" / "candidate-run-001" / "case-b" / "repeat-001.json",
+            valid_run_payload(
+                run_id="candidate-run-001-case-b-repeat-001",
+                run_batch_id="candidate-run-001",
+                version="v002",
+                case_id="case-b",
+                repeat_index=1,
+            ),
+        )
+        write_validation_batch(
+            baseline_dir,
+            validation_batch_id="validation-001",
+            run_batch_id="baseline-run-001",
+            version="v001",
+            verdict="yes",
+        )
+        write_validation_batch(
+            candidate_dir,
+            validation_batch_id="validation-002",
+            run_batch_id="candidate-run-001",
+            version="v002",
+            verdict="yes",
+        )
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/api/experiments/demo/comparisons",
+            json={"baseline_version": "v001", "candidate_version": "v002"},
+        )
+
+        assert response.status_code == 400
+        assert "missing validation result for case case-b repeat 1 validator quality" in (
+            response.json()["detail"]
+        )
+        assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
+
+
 def main() -> int:
     tests = [
         test_compare_matrix_marks_any_no_as_fail,
@@ -816,6 +970,9 @@ def main() -> int:
         test_api_rejects_compare_with_duplicate_validation_result_id,
         test_api_rejects_compare_with_duplicate_logical_validation_result,
         test_api_rejects_compare_ok_result_missing_snapshot_check,
+        test_api_rejects_compare_result_with_unknown_run_case_repeat,
+        test_api_rejects_compare_result_with_mismatched_run_id,
+        test_api_rejects_compare_missing_expected_logical_result,
     ]
     for test in tests:
         test()
