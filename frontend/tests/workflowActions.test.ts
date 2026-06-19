@@ -182,6 +182,26 @@ test("compare action asks for validation before comparing different versions", (
   );
 });
 
+test("compare action asks to save validation inclusion before comparing", () => {
+  assert.deepEqual(
+    getCompareActionState({
+      hasComparison: false,
+      hasUnsavedValidationChanges: true,
+      hasValidation: true,
+      isBusy: false,
+      sameVersion: false,
+      versionCount: 2
+    }),
+    {
+      disabled: true,
+      disabledReason: "Save validation inclusion before comparing.",
+      emptyMessage: "No comparison report. Save validation inclusion before comparing.",
+      note: null,
+      label: "Compare versions"
+    }
+  );
+});
+
 test("compare action invites comparison when prerequisites are ready", () => {
   assert.deepEqual(
     getCompareActionState({

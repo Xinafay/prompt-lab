@@ -885,7 +885,10 @@ function App() {
       setJobStatus(job);
       setValidationState(null);
       setValidationDirty(false);
-      setCompareValidationByVersion({});
+      setCompareValidationByVersion((current) => ({
+        ...current,
+        [version]: false
+      }));
       setReviewState(null);
       setProposalResponse(null);
       setCreatedVersion(null);
@@ -1346,6 +1349,10 @@ function App() {
       );
       return;
     }
+    if (hasUnsavedCompareValidationChanges) {
+      setWorkflowMessage("Save validation inclusion before comparing.");
+      return;
+    }
     if (!hasComparedValidation) {
       setWorkflowMessage("Validate both versions before comparing.");
       return;
@@ -1543,6 +1550,11 @@ function App() {
     baselineVersion !== candidateVersion &&
     Boolean(compareValidationByVersion[baselineVersion]) &&
     Boolean(compareValidationByVersion[candidateVersion]);
+  const activeVersion = selectedExperiment?.active_version ?? null;
+  const hasUnsavedCompareValidationChanges =
+    validationDirty &&
+    activeVersion !== null &&
+    (baselineVersion === activeVersion || candidateVersion === activeVersion);
   const workflowLocked = workflowBusy || jobStatus?.status === "running";
   const judgeAction = getJudgeActionState({
     hasReview: reviewState !== null,
@@ -1557,6 +1569,7 @@ function App() {
   });
   const compareAction = getCompareActionState({
     hasComparison: comparison !== null,
+    hasUnsavedValidationChanges: hasUnsavedCompareValidationChanges,
     hasValidation: hasComparedValidation,
     isBusy: workflowLocked,
     sameVersion: baselineVersion === candidateVersion,

@@ -115,12 +115,14 @@ export function getCompareActionLabel({
 
 export function getCompareActionState({
   hasComparison,
+  hasUnsavedValidationChanges = false,
   hasValidation,
   isBusy,
   sameVersion,
   versionCount
 }: {
   hasComparison: boolean;
+  hasUnsavedValidationChanges?: boolean;
   hasValidation: boolean;
   isBusy: boolean;
   sameVersion: boolean;
@@ -151,6 +153,15 @@ export function getCompareActionState({
       disabledReason: "Choose two different versions before comparing.",
       emptyMessage: "No comparison report. Choose two different versions before comparing.",
       note: "Choose two different versions before comparing.",
+      label
+    };
+  }
+  if (hasUnsavedValidationChanges) {
+    return {
+      disabled: true,
+      disabledReason: "Save validation inclusion before comparing.",
+      emptyMessage: "No comparison report. Save validation inclusion before comparing.",
+      note: null,
       label
     };
   }
