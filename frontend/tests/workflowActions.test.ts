@@ -117,3 +117,22 @@ test("compare action asks for runs before comparing different versions", () => {
     }
   );
 });
+
+test("compare action invites comparison when prerequisites are ready", () => {
+  assert.deepEqual(
+    getCompareActionState({
+      hasComparison: false,
+      hasRuns: true,
+      isBusy: false,
+      sameVersion: false,
+      versionCount: 2
+    }),
+    {
+      disabled: false,
+      disabledReason: null,
+      emptyMessage: "No comparison report. Compare these versions to create one.",
+      note: null,
+      label: "Compare versions"
+    }
+  );
+});

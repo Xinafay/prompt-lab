@@ -127,7 +127,7 @@ export function getCompareActionState({
   return {
     disabled: false,
     disabledReason: null,
-    emptyMessage: "No comparison report. Run both versions before comparing.",
+    emptyMessage: "No comparison report. Compare these versions to create one.",
     note: null,
     label
   };
