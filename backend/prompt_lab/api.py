@@ -639,6 +639,66 @@ def _validate_validation_results_for_judge(
             )
 
 
+def _validate_validation_results_for_compare(
+    *,
+    version: str,
+    validation_batch: ValidationBatchArtifact,
+    validation_results: list[ValidationResultArtifact],
+    validator_snapshots: list[ValidatorDefinition],
+) -> None:
+    if validation_batch.version != version:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Validation batch {validation_batch.validation_batch_id} has "
+                f"version {validation_batch.version}, expected {version}"
+            ),
+        )
+
+    validator_checks = {
+        validator.validator_id: {check.check_id for check in validator.checks}
+        for validator in validator_snapshots
+    }
+    for result in validation_results:
+        if result.validation_batch_id != validation_batch.validation_batch_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} has "
+                    f"validation_batch_id {result.validation_batch_id}, expected "
+                    f"{validation_batch.validation_batch_id}"
+                ),
+            )
+        if result.run_batch_id != validation_batch.run_batch_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} has "
+                    f"run_batch_id {result.run_batch_id}, expected "
+                    f"{validation_batch.run_batch_id}"
+                ),
+            )
+        check_ids = validator_checks.get(result.validator_id)
+        if check_ids is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} uses unknown "
+                    f"validator_id {result.validator_id}"
+                ),
+            )
+        for check in result.check_results:
+            if check.check_id not in check_ids:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Validation result {result.validation_result_id} references "
+                        f"unknown check_id {check.check_id} for validator_id "
+                        f"{result.validator_id}"
+                    ),
+                )
+
+
 def _run_errors_from_artifacts(
     run_artifacts: list[RunArtifact],
 ) -> list[dict[str, object]]:
@@ -1741,6 +1801,18 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             experiment_id,
             candidate_version,
             candidate_validation_batch.validation_batch_id,
+        )
+        _validate_validation_results_for_compare(
+            version=baseline_version,
+            validation_batch=baseline_validation_batch,
+            validation_results=baseline_validation_results,
+            validator_snapshots=baseline_validator_snapshots,
+        )
+        _validate_validation_results_for_compare(
+            version=candidate_version,
+            validation_batch=candidate_validation_batch,
+            validation_results=candidate_validation_results,
+            validator_snapshots=candidate_validator_snapshots,
         )
         job_id = start_workflow_job(
             kind="compare", experiment_id=experiment_id, version=candidate_version

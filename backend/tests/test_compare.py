@@ -254,6 +254,21 @@ def runtime_version_dir(root: Path, version: str) -> Path:
     return root / "experiments" / "demo" / "versions" / version
 
 
+def validation_result_path(
+    version_dir: Path,
+    *,
+    validation_batch_id: str,
+) -> Path:
+    return (
+        version_dir
+        / "validations"
+        / validation_batch_id
+        / "case-a"
+        / "repeat-001"
+        / "quality.json"
+    )
+
+
 def test_compare_matrix_marks_any_no_as_fail() -> None:
     matrix = build_compare_matrix(
         experiment_id="demo",
@@ -435,6 +450,167 @@ def test_api_rejects_compare_without_completed_validation_batch() -> None:
         assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
 
 
+def test_api_rejects_compare_result_with_mismatched_batch_metadata() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        baseline_dir, candidate_dir = write_demo_experiment(root)
+        write_run_batch(baseline_dir, "baseline-run-001", version="v001")
+        write_run_batch(candidate_dir, "candidate-run-001", version="v002")
+        write_validation_batch(
+            baseline_dir,
+            validation_batch_id="validation-001",
+            run_batch_id="baseline-run-001",
+            version="v001",
+            verdict="yes",
+        )
+        write_validation_batch(
+            candidate_dir,
+            validation_batch_id="validation-002",
+            run_batch_id="candidate-run-001",
+            version="v002",
+            verdict="yes",
+        )
+        corrupted_path = validation_result_path(
+            candidate_dir,
+            validation_batch_id="validation-002",
+        )
+        corrupted = json.loads(corrupted_path.read_text(encoding="utf-8"))
+        corrupted["validation_batch_id"] = "other-validation"
+        write_json(corrupted_path, corrupted)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/api/experiments/demo/comparisons",
+            json={"baseline_version": "v001", "candidate_version": "v002"},
+        )
+
+        assert response.status_code == 400
+        assert "validation_batch_id other-validation, expected validation-002" in (
+            response.json()["detail"]
+        )
+        assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
+
+
+def test_api_rejects_compare_result_with_unknown_snapshot_check_id() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        baseline_dir, candidate_dir = write_demo_experiment(root)
+        write_run_batch(baseline_dir, "baseline-run-001", version="v001")
+        write_run_batch(candidate_dir, "candidate-run-001", version="v002")
+        write_validation_batch(
+            baseline_dir,
+            validation_batch_id="validation-001",
+            run_batch_id="baseline-run-001",
+            version="v001",
+            verdict="yes",
+        )
+        write_validation_batch(
+            candidate_dir,
+            validation_batch_id="validation-002",
+            run_batch_id="candidate-run-001",
+            version="v002",
+            verdict="yes",
+        )
+        corrupted_path = validation_result_path(
+            candidate_dir,
+            validation_batch_id="validation-002",
+        )
+        corrupted = json.loads(corrupted_path.read_text(encoding="utf-8"))
+        corrupted["check_results"][0]["check_id"] = "missing-check"
+        corrupted["check_results"][0]["included_in_judge"] = False
+        write_json(corrupted_path, corrupted)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/api/experiments/demo/comparisons",
+            json={"baseline_version": "v001", "candidate_version": "v002"},
+        )
+
+        assert response.status_code == 400
+        assert "unknown check_id missing-check" in response.json()["detail"]
+        assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
+
+
+def test_api_rejects_compare_result_with_mismatched_run_batch_id() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        baseline_dir, candidate_dir = write_demo_experiment(root)
+        write_run_batch(baseline_dir, "baseline-run-001", version="v001")
+        write_run_batch(candidate_dir, "candidate-run-001", version="v002")
+        write_validation_batch(
+            baseline_dir,
+            validation_batch_id="validation-001",
+            run_batch_id="baseline-run-001",
+            version="v001",
+            verdict="yes",
+        )
+        write_validation_batch(
+            candidate_dir,
+            validation_batch_id="validation-002",
+            run_batch_id="candidate-run-001",
+            version="v002",
+            verdict="yes",
+        )
+        corrupted_path = validation_result_path(
+            candidate_dir,
+            validation_batch_id="validation-002",
+        )
+        corrupted = json.loads(corrupted_path.read_text(encoding="utf-8"))
+        corrupted["run_batch_id"] = "other-run"
+        write_json(corrupted_path, corrupted)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/api/experiments/demo/comparisons",
+            json={"baseline_version": "v001", "candidate_version": "v002"},
+        )
+
+        assert response.status_code == 400
+        assert "run_batch_id other-run, expected candidate-run-001" in (
+            response.json()["detail"]
+        )
+        assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
+
+
+def test_api_rejects_compare_result_with_unknown_snapshot_validator_id() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        baseline_dir, candidate_dir = write_demo_experiment(root)
+        write_run_batch(baseline_dir, "baseline-run-001", version="v001")
+        write_run_batch(candidate_dir, "candidate-run-001", version="v002")
+        write_validation_batch(
+            baseline_dir,
+            validation_batch_id="validation-001",
+            run_batch_id="baseline-run-001",
+            version="v001",
+            verdict="yes",
+        )
+        write_validation_batch(
+            candidate_dir,
+            validation_batch_id="validation-002",
+            run_batch_id="candidate-run-001",
+            version="v002",
+            verdict="yes",
+        )
+        corrupted_path = validation_result_path(
+            candidate_dir,
+            validation_batch_id="validation-002",
+        )
+        corrupted = json.loads(corrupted_path.read_text(encoding="utf-8"))
+        corrupted["validator_id"] = "missing-validator"
+        write_json(corrupted_path, corrupted)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/api/experiments/demo/comparisons",
+            json={"baseline_version": "v001", "candidate_version": "v002"},
+        )
+
+        assert response.status_code == 400
+        assert "unknown validator_id missing-validator" in response.json()["detail"]
+        assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
+
+
 def main() -> int:
     tests = [
         test_compare_matrix_marks_any_no_as_fail,
@@ -443,6 +619,10 @@ def main() -> int:
         test_compare_matrix_uses_snapshot_rows_across_versions,
         test_api_returns_compare_matrix_from_latest_completed_validation_batches,
         test_api_rejects_compare_without_completed_validation_batch,
+        test_api_rejects_compare_result_with_mismatched_batch_metadata,
+        test_api_rejects_compare_result_with_unknown_snapshot_check_id,
+        test_api_rejects_compare_result_with_mismatched_run_batch_id,
+        test_api_rejects_compare_result_with_unknown_snapshot_validator_id,
     ]
     for test in tests:
         test()
