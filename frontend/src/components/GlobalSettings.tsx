@@ -153,6 +153,19 @@ export function GlobalSettings({
           />
         </label>
         <label className="settings-field">
+          <span>Default validator model</span>
+          <input
+            required
+            value={draft.default_validator_model}
+            onChange={(event) =>
+              updateDraft((current) => ({
+                ...current,
+                default_validator_model: event.target.value
+              }))
+            }
+          />
+        </label>
+        <label className="settings-field">
           <span>Default judge model</span>
           <input
             required

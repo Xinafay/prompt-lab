@@ -157,6 +157,7 @@ select {
 .case-browser-header input:focus-visible,
 .case-browser-item:focus-visible,
 .comparison-controls select:focus-visible,
+.validation-include-control input:focus-visible,
 .reason-input:focus-visible,
 .notes-input:focus-visible {
   outline: 2px solid #2563eb;
@@ -683,6 +684,7 @@ select {
 .workbench-body > .runs-panel,
 .workbench-body > .review-panel,
 .workbench-body > .proposal-panel,
+.workbench-body > .validation-panel,
 .workbench-body > .comparison-panel,
 .workbench-body > .case-browser {
   margin-top: 0;
@@ -1266,6 +1268,7 @@ select {
 }
 
 .review-panel,
+.validation-panel,
 .proposal-panel,
 .comparison-panel {
   margin-top: 16px;
@@ -1349,11 +1352,19 @@ select {
 }
 
 .review-content,
+.validation-content,
 .proposal-content,
 .comparison-report {
   display: grid;
   gap: 16px;
   padding: 16px;
+}
+
+.section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .review-summary,
@@ -1417,6 +1428,195 @@ select {
   color: #b54708;
   font-size: 13px;
   font-weight: 700;
+}
+
+.validation-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #e4e7ec;
+}
+
+.validation-summary div {
+  min-width: 0;
+  padding: 11px 12px;
+  background: #ffffff;
+}
+
+.validation-summary span {
+  display: block;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.validation-summary strong {
+  display: block;
+  margin-top: 5px;
+  color: #111827;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.validation-unsaved {
+  padding: 10px 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.validation-results,
+.validation-checks,
+.validation-check-body {
+  display: grid;
+  gap: 10px;
+}
+
+.validation-card,
+.validation-check {
+  min-width: 0;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.validation-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.validation-check {
+  display: grid;
+  grid-template-columns: minmax(132px, 0.2fr) minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.validation-card-header,
+.validation-check-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.validation-card-title {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.validation-card-title strong,
+.validation-check-heading strong {
+  display: block;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.validation-card-title span,
+.validation-empty-checks,
+.validation-check-description,
+.validation-check-comment {
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.validation-empty-checks,
+.validation-error {
+  padding: 10px 12px;
+  border-radius: 6px;
+}
+
+.validation-error {
+  border: 1px solid #fecaca;
+  background: #fff1f0;
+  color: #b42318;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.validation-empty-checks {
+  background: #f8fafc;
+}
+
+.validation-include-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.validation-include-control input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+}
+
+.validation-check-description,
+.validation-check-comment {
+  margin: 0;
+}
+
+.validation-check-comment {
+  color: #344054;
+}
+
+.verdict-pill,
+.validation-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.verdict-yes,
+.validation-status-ok,
+.compare-cell-pass {
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.verdict-no,
+.validation-status-error,
+.compare-cell-fail {
+  background: #fff1f0;
+  color: #b42318;
+}
+
+.verdict-unknown,
+.compare-cell-mixed {
+  background: #fff8e6;
+  color: #b54708;
+}
+
+.compare-cell-empty {
+  background: #f8fafc;
+  color: #667085;
 }
 
 .review-card,
@@ -1583,6 +1783,117 @@ select {
   color: #c2410c;
   font-size: 13px;
   font-weight: 700;
+}
+
+.compare-matrix-wrap {
+  overflow-x: auto;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+}
+
+.compare-matrix {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: collapse;
+}
+
+.compare-matrix th,
+.compare-matrix td {
+  padding: 12px;
+  border-bottom: 1px solid #e4e7ec;
+  border-right: 1px solid #e4e7ec;
+  text-align: left;
+  vertical-align: top;
+}
+
+.compare-matrix tr:last-child th,
+.compare-matrix tr:last-child td {
+  border-bottom: 0;
+}
+
+.compare-matrix th:last-child,
+.compare-matrix td:last-child {
+  border-right: 0;
+}
+
+.compare-matrix thead th {
+  background: #f9fafb;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.compare-matrix tbody th {
+  width: 260px;
+  background: #ffffff;
+}
+
+.compare-matrix tbody th strong,
+.compare-cell > strong {
+  display: block;
+  color: #111827;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.compare-matrix tbody th span,
+.compare-cell > span {
+  display: block;
+  margin-top: 4px;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.compare-matrix tbody th p,
+.compare-cell-detail p {
+  margin: 6px 0 0;
+  color: #475467;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.compare-cell details {
+  margin-top: 8px;
+}
+
+.compare-cell summary {
+  color: #344054;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.compare-cell-details {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.compare-cell-detail {
+  padding: 8px;
+  border: 1px solid #e4e7ec;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 0.72);
+}
+
+.compare-cell-detail strong,
+.compare-cell-detail span {
+  display: block;
+  color: #344054;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.compare-cell-detail strong {
+  color: #111827;
+  text-transform: uppercase;
 }
 
 .recommendation-pill {
@@ -1764,8 +2075,23 @@ select {
   .case-browser,
   .bindings-row,
   .runs-drilldown,
-  .run-detail-meta {
+  .run-detail-meta,
+  .validation-summary,
+  .validation-check,
+  .comparison-controls {
     grid-template-columns: 1fr;
+  }
+
+  .validation-card-header,
+  .section-heading {
+    align-items: stretch;
+    display: grid;
+  }
+
+  .section-actions,
+  .section-actions .disabled-tooltip-wrapper,
+  .section-actions .secondary-action {
+    width: 100%;
   }
 
   .case-browser-sidebar {

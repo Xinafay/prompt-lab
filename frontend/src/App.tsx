@@ -19,10 +19,12 @@ import {
   judgeVersion,
   jobEventsStreamUrl,
   runVersion,
+  validateVersion,
   updateExperiment,
   updateGlobalSettings,
   updateHumanNotes,
-  updateReviewDecisions
+  updateReviewDecisions,
+  updateValidationInclusion
 } from "./api";
 import { CaseBrowser } from "./components/CaseBrowser";
 import { ComparisonView } from "./components/ComparisonView";
@@ -33,6 +35,10 @@ import { ProposalView } from "./components/ProposalView";
 import { ReviewView } from "./components/ReviewView";
 import { RunsView } from "./components/RunsView";
 import { TooltipButton } from "./components/TooltipButton";
+import {
+  buildValidationInclusionUpdate,
+  ValidationView
+} from "./components/ValidationView";
 import { WorkbenchTabs } from "./components/WorkbenchTabs";
 import { WorkflowToolbar } from "./components/WorkflowToolbar";
 import type {
@@ -62,7 +68,8 @@ import {
   getCompareActionState,
   getJudgeActionState,
   getProposalActionLabel,
-  getRunActionLabel
+  getRunActionLabel,
+  getValidateActionState
 } from "./workflowActions";
 
 type LoadState =
@@ -127,6 +134,7 @@ function App() {
   const [validationState, setValidationState] = useState<ValidationState | null>(
     null
   );
+  const [validationDirty, setValidationDirty] = useState(false);
   const [compareValidationByVersion, setCompareValidationByVersion] = useState<
     Record<string, boolean>
   >({});
@@ -220,6 +228,7 @@ function App() {
     workflowRequestIdRef.current += 1;
     setSelectedExperiment(experiment);
     setValidationState(null);
+    setValidationDirty(false);
     setCompareValidationByVersion({});
     setReviewState(null);
     setProposalResponse(null);
@@ -263,6 +272,7 @@ function App() {
     setDetailState({ status: "idle" });
     setJobStatus(null);
     setValidationState(null);
+    setValidationDirty(false);
     setCompareValidationByVersion({});
     setReviewState(null);
     setProposalResponse(null);
@@ -464,6 +474,7 @@ function App() {
     }
     setDetailState({ status: "loaded", overview, runs });
     setValidationState(latestValidation);
+    setValidationDirty(false);
     setCompareValidationByVersion((current) => ({
       ...current,
       [job.version]: hasCompletedValidation(latestValidation)
@@ -672,6 +683,7 @@ function App() {
     if (selectedExperiment === null) {
       setDetailState({ status: "idle" });
       setValidationState(null);
+      setValidationDirty(false);
       return;
     }
 
@@ -679,6 +691,7 @@ function App() {
     setDetailState({ status: "loading" });
     setJobStatus(null);
     setValidationState(null);
+    setValidationDirty(false);
 
     async function loadDetails(experiment: Experiment) {
       try {
@@ -699,6 +712,7 @@ function App() {
         if (!cancelled) {
           setDetailState({ status: "loaded", overview, runs });
           setValidationState(latestValidation);
+          setValidationDirty(false);
           setReviewState(latestReview);
           setProposalResponse(latestProposal);
           setDecisionsDirty(false);
@@ -870,6 +884,7 @@ function App() {
       }
       setJobStatus(job);
       setValidationState(null);
+      setValidationDirty(false);
       setCompareValidationByVersion({});
       setReviewState(null);
       setProposalResponse(null);
@@ -984,10 +999,115 @@ function App() {
     });
   }
 
+  async function handleValidateVersion() {
+    if (selectedExperiment === null || detailState.status !== "loaded") {
+      return;
+    }
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
+    if (detailState.runs.runs.length === 0) {
+      setWorkflowMessage("Create a run before validating.");
+      return;
+    }
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    const selectionKey = `${experimentId}:${version}`;
+    const dryRun = workflowMode === "dry-run";
+    const requestId = beginWorkflow(
+      selectionKey,
+      dryRun ? "Dry-run validating active run..." : "Validating active run..."
+    );
+    try {
+      const latestValidation = await validateVersion(experimentId, version, dryRun);
+      if (!isWorkflowCurrent(requestId, selectionKey)) return;
+      setValidationState(latestValidation);
+      setValidationDirty(false);
+      setCompareValidationByVersion((current) => ({
+        ...current,
+        [version]: hasCompletedValidation(latestValidation)
+      }));
+      setReviewState(null);
+      setProposalResponse(null);
+      setCreatedVersion(null);
+      setComparison(null);
+      setDecisionsDirty(false);
+      setHumanNotesDirty(false);
+      setWorkflowMessage(
+        dryRun
+          ? "Dry-run validation loaded."
+          : "Validation completed."
+      );
+      activateTab("validation");
+    } catch (error) {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+      }
+    } finally {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowBusy(false);
+      }
+    }
+  }
+
+  function handleValidationStateChange(nextState: ValidationState) {
+    setValidationState(nextState);
+    setValidationDirty(true);
+  }
+
+  async function handleSaveValidationInclusion() {
+    if (selectedExperiment === null || validationState === null) {
+      return;
+    }
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    const selectionKey = `${experimentId}:${version}`;
+    const requestId = beginWorkflow(selectionKey, "Saving validation inclusion...");
+    try {
+      const savedValidation = await updateValidationInclusion(
+        experimentId,
+        version,
+        validationState.validation_batch.validation_batch_id,
+        buildValidationInclusionUpdate(validationState)
+      );
+      if (!isWorkflowCurrent(requestId, selectionKey)) return;
+      setValidationState(savedValidation);
+      setValidationDirty(false);
+      setCompareValidationByVersion((current) => ({
+        ...current,
+        [version]: hasCompletedValidation(savedValidation)
+      }));
+      setReviewState(null);
+      setProposalResponse(null);
+      setCreatedVersion(null);
+      setComparison(null);
+      setDecisionsDirty(false);
+      setHumanNotesDirty(false);
+      setWorkflowMessage("Validation inclusion saved.");
+    } catch (error) {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+      }
+    } finally {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowBusy(false);
+      }
+    }
+  }
+
   async function handleJudgeVersion() {
     if (selectedExperiment === null) return;
     if (workflowLocked) {
       setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
+    if (!hasCompletedValidation(validationState)) {
+      setWorkflowMessage("Validate the active run before judging.");
+      return;
+    }
+    if (validationDirty) {
+      setWorkflowMessage("Save validation inclusion before judging.");
       return;
     }
     const experimentId = selectedExperiment.id;
@@ -1288,6 +1408,7 @@ function App() {
     selectedKeyRef.current = `${savedExperiment.id}:${savedExperiment.active_version}`;
     setDetailState({ status: "loaded", overview, runs });
     setValidationState(latestValidation);
+    setValidationDirty(false);
     setCompareValidationByVersion({});
     setVersionSummaries(versions.versions);
     setCandidateVersion(savedExperiment.active_version);
@@ -1360,6 +1481,7 @@ function App() {
     setWorkflowBusy(true);
     setWorkflowMessage(`Switching to ${version}...`);
     setValidationState(null);
+    setValidationDirty(false);
     setCompareValidationByVersion({});
     setReviewState(null);
     setProposalResponse(null);
@@ -1418,6 +1540,11 @@ function App() {
   const workflowLocked = workflowBusy || jobStatus?.status === "running";
   const judgeAction = getJudgeActionState({
     hasReview: reviewState !== null,
+    hasRuns,
+    hasValidation,
+    isBusy: workflowLocked
+  });
+  const validateAction = getValidateActionState({
     hasRuns,
     hasValidation,
     isBusy: workflowLocked
@@ -1574,6 +1701,16 @@ function App() {
                         >
                           {compareAction.label}
                         </TooltipButton>
+                      ) : activeTab === "validation" ? (
+                        <TooltipButton
+                          className="primary-action"
+                          disabled={validateAction.disabled}
+                          disabledReason={validateAction.disabledReason}
+                          onClick={handleValidateVersion}
+                          type="button"
+                        >
+                          {validateAction.label}
+                        </TooltipButton>
                       ) : activeTab === "runs" ? (
                         <TooltipButton
                           className="primary-action"
@@ -1650,6 +1787,21 @@ function App() {
                         cases={detailState.overview.cases}
                         runBatchId={detailState.runs.run_batch_id}
                         runs={detailState.runs.runs}
+                      />
+                    ) : null}
+
+                    {activeTab === "validation" ? (
+                      <ValidationView
+                        hasRuns={hasRuns}
+                        hasUnsavedChanges={validationDirty}
+                        isBusy={workflowLocked}
+                        onSaveInclusion={handleSaveValidationInclusion}
+                        onStateChange={handleValidationStateChange}
+                        onValidate={handleValidateVersion}
+                        validateDisabled={validateAction.disabled}
+                        validateDisabledReason={validateAction.disabledReason}
+                        validateLabel={validateAction.label}
+                        validationState={validationState}
                       />
                     ) : null}
 
