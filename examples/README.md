@@ -29,20 +29,22 @@ Examples:
 - `split-scenes`: Pydantic structured output using `model.SceneList`.
 - `summarize-chapter`: plain text output.
 
-Each experiment chooses its tested generator model and its judge model in
-`experiment.json`:
+Each experiment chooses its tested generator model, validation model, and judge
+model in `experiment.json`:
 
 ```json
 {
   "models": {
     "generator_model": "local/qwen3-14b",
+    "validator_model": "openai/gpt-5-mini",
     "judge_model": "openai/gpt-5-mini"
   }
 }
 ```
 
-`generator_model` is the model being evaluated. `judge_model` is used for
-judgment, proposal generation, and comparison. Both values use the
+`generator_model` is the model being evaluated. `validator_model` is used for
+validation. `judge_model` is used for judgment, proposal generation, and
+comparison. These values use the
 `<server>/<model>` format, where `<server>` must be configured in `.servers.jsonc`.
 
 The running app does not write into `examples/`. At backend startup, examples are

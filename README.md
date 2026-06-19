@@ -24,12 +24,13 @@ cp config/servers.example.jsonc .servers.jsonc
 cp config/env.example .env
 ```
 
-Server prefixes are configured in `.servers.jsonc`. The tested model and judge
-model are selected per experiment in `experiment.json`:
+Server prefixes are configured in `.servers.jsonc`. The tested, validation, and
+judge models are selected per experiment in `experiment.json`:
 
 ```json
 "models": {
   "generator_model": "local/qwen3-14b",
+  "validator_model": "openai/gpt-5-mini",
   "judge_model": "openai/gpt-5-mini"
 }
 ```

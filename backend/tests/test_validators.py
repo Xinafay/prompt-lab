@@ -4,9 +4,11 @@ from pydantic import ValidationError
 
 from prompt_lab.models.validators import (
     AutomaticValidatorDefinition,
+    CountComparison,
     LlmQuestionnaireValidatorDefinition,
     ValidationBatchArtifact,
     ValidationResultArtifact,
+    ValidationState,
 )
 
 
@@ -92,6 +94,17 @@ def test_automatic_validator_definition_accepts_word_count_rule() -> None:
     assert validator.checks[0].rule.comparison.value == 100
 
 
+def test_count_comparison_rejects_inverted_between_range() -> None:
+    try:
+        CountComparison.model_validate(
+            {"op": "between", "min_value": 10, "max_value": 5}
+        )
+    except ValidationError as exc:
+        assert "min_value cannot exceed max_value" in str(exc)
+    else:
+        raise AssertionError("Expected inverted between range to be rejected")
+
+
 def test_validation_batch_and_result_artifacts_accept_expected_fields() -> None:
     batch = ValidationBatchArtifact.model_validate(
         {
@@ -146,12 +159,50 @@ def test_validation_batch_and_result_artifacts_accept_expected_fields() -> None:
     assert result.check_results[0].metrics == {"word_count": 42}
 
 
+def test_validation_state_rejects_malformed_validator_definitions() -> None:
+    batch = {
+        "schema_version": "prompt_lab.validation_batch/v1",
+        "validation_batch_id": "validation-001",
+        "run_batch_id": "run-001",
+        "version": "v001",
+        "status": "completed",
+        "started_at": "2026-06-19T10:00:00Z",
+        "finished_at": "2026-06-19T10:01:00Z",
+        "total_results": 0,
+        "completed_results": 0,
+        "validator_model": "openai/validator",
+        "validator_ids": ["clarity"],
+    }
+
+    try:
+        ValidationState.model_validate(
+            {
+                "validation_batch": batch,
+                "validators": [
+                    {
+                        "schema_version": "prompt_lab.validator/v1",
+                        "validator_id": "clarity",
+                        "type": "llm_questionnaire",
+                        "title": "Clarity",
+                    }
+                ],
+                "results": [],
+            }
+        )
+    except ValidationError as exc:
+        assert "checks" in str(exc)
+    else:
+        raise AssertionError("Expected malformed validator definition to be rejected")
+
+
 def main() -> int:
     tests = [
         test_llm_questionnaire_validator_definition_accepts_expected_fields,
         test_llm_questionnaire_validator_definition_rejects_duplicate_check_ids,
         test_automatic_validator_definition_accepts_word_count_rule,
+        test_count_comparison_rejects_inverted_between_range,
         test_validation_batch_and_result_artifacts_accept_expected_fields,
+        test_validation_state_rejects_malformed_validator_definitions,
     ]
     for test in tests:
         test()

@@ -43,6 +43,8 @@ class CountComparison(BaseModel):
         if self.op == "between":
             if self.min_value is None or self.max_value is None:
                 raise ValueError("between comparison requires min_value and max_value")
+            if self.min_value > self.max_value:
+                raise ValueError("min_value cannot exceed max_value")
             if self.value is not None:
                 raise ValueError("between comparison cannot include value")
         else:
@@ -245,7 +247,7 @@ class ValidationState(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     validation_batch: ValidationBatchArtifact
-    validators: list[JsonObject]
+    validators: list[ValidatorDefinition]
     results: list[ValidationResultArtifact]
 
 
