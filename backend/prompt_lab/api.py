@@ -513,6 +513,19 @@ def _read_validation_state(
     }
 
 
+def _validate_validation_batch_dir_identity(
+    *, validation_dir: Path, validation_batch: ValidationBatchArtifact
+) -> None:
+    if validation_batch.validation_batch_id != validation_dir.name:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Validation batch file {validation_dir.name} has "
+                f"validation_batch_id {validation_batch.validation_batch_id}"
+            ),
+        )
+
+
 def _validation_snapshot_lookup(
     validators: list[ValidatorDefinition],
 ) -> dict[str, dict[str, object]]:
@@ -1927,6 +1940,14 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         )
         candidate_validation_batch = ValidationBatchArtifact.model_validate(
             _read_json(candidate_validation_dir / "batch.json")
+        )
+        _validate_validation_batch_dir_identity(
+            validation_dir=baseline_validation_dir,
+            validation_batch=baseline_validation_batch,
+        )
+        _validate_validation_batch_dir_identity(
+            validation_dir=candidate_validation_dir,
+            validation_batch=candidate_validation_batch,
         )
         baseline_validator_snapshots = _read_validation_snapshots(
             baseline_validation_dir

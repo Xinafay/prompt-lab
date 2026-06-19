@@ -954,6 +954,55 @@ def test_api_rejects_compare_missing_expected_logical_result() -> None:
         assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
 
 
+def test_api_rejects_compare_validation_batch_id_mismatching_directory_name() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        baseline_dir, candidate_dir = write_demo_experiment(root)
+        write_run_batch(baseline_dir, "baseline-run-001", version="v001")
+        write_run_batch(candidate_dir, "candidate-run-001", version="v002")
+        write_validation_batch(
+            baseline_dir,
+            validation_batch_id="validation-001",
+            run_batch_id="baseline-run-001",
+            version="v001",
+            verdict="yes",
+        )
+        write_validation_batch(
+            candidate_dir,
+            validation_batch_id="validation-001",
+            run_batch_id="candidate-run-001",
+            version="v002",
+            verdict="yes",
+        )
+        write_validation_batch(
+            candidate_dir,
+            validation_batch_id="validation-999",
+            run_batch_id="candidate-run-001",
+            version="v002",
+            verdict="no",
+        )
+        batch_path = validation_batch_path(
+            candidate_dir,
+            validation_batch_id="validation-999",
+        )
+        batch = json.loads(batch_path.read_text(encoding="utf-8"))
+        batch["validation_batch_id"] = "validation-001"
+        write_json(batch_path, batch)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/api/experiments/demo/comparisons",
+            json={"baseline_version": "v001", "candidate_version": "v002"},
+        )
+
+        assert response.status_code == 400
+        assert (
+            "Validation batch file validation-999 has validation_batch_id "
+            "validation-001"
+        ) in response.json()["detail"]
+        assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
+
+
 def main() -> int:
     tests = [
         test_compare_matrix_marks_any_no_as_fail,
@@ -973,6 +1022,7 @@ def main() -> int:
         test_api_rejects_compare_result_with_unknown_run_case_repeat,
         test_api_rejects_compare_result_with_mismatched_run_id,
         test_api_rejects_compare_missing_expected_logical_result,
+        test_api_rejects_compare_validation_batch_id_mismatching_directory_name,
     ]
     for test in tests:
         test()
