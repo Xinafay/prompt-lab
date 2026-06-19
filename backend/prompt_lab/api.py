@@ -636,10 +636,22 @@ def _build_validation_evidence(
             continue
         validator_snapshot = validator_lookup.get(result.validator_id, {})
         check_lookup = validator_snapshot.get("checks", {})
+        if result.status == "error" or result.execution_error is not None:
+            payload: dict[str, object] = {
+                "validator_id": result.validator_id,
+                "case_id": result.case_id,
+                "repeat_index": result.repeat_index,
+                "status": result.status,
+                "execution_error": result.execution_error,
+            }
+            validator_title = validator_snapshot.get("validator_title")
+            if isinstance(validator_title, str):
+                payload["validator_title"] = validator_title
+            evidence.append(payload)
         for check in result.check_results:
             if not check.included_in_judge:
                 continue
-            payload: dict[str, object] = {
+            payload = {
                 "validator_id": result.validator_id,
                 "check_id": check.check_id,
                 "case_id": result.case_id,
@@ -1870,6 +1882,9 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         )
         saved = decisions.model_dump(mode="json")
         _write_json(review_dir / "decisions.json", saved)
+        proposal_dir = review_dir / "proposal"
+        if proposal_dir.exists():
+            shutil.rmtree(proposal_dir)
         return saved
 
     @app.put(
@@ -1884,6 +1899,9 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         version_dir = store.version_dir(experiment_id, version)
         review_dir = _resolve_existing_review_dir(version_dir, review_id)
         (review_dir / "human_notes.md").write_text(request.notes, encoding="utf-8")
+        proposal_dir = review_dir / "proposal"
+        if proposal_dir.exists():
+            shutil.rmtree(proposal_dir)
         return {"human_notes": request.notes}
 
     @app.get(

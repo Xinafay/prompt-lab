@@ -662,6 +662,86 @@ def test_api_creates_judgment_and_default_accepted_decisions() -> None:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
 
+def test_api_includes_validation_result_execution_errors_in_judge_evidence() -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_generate_structured(
+        model: str,
+        prompt: str,
+        response_model: Any,
+        validation_context: dict[str, Any] | None,
+    ) -> FakeGeneratedStructured:
+        captured["prompt"] = prompt
+        return FakeGeneratedStructured(
+            JudgmentArtifact.model_validate(
+                valid_judgment_payload(
+                    run_batch_ids=["batch-001"], judge_model="openai/judge"
+                )
+            )
+        )
+
+    original_generate_structured = llm_client.generate_structured
+    llm_client.generate_structured = fake_generate_structured  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            version_dir = write_demo_experiment(root)
+            write_run_batch(version_dir, "batch-001")
+            write_json(
+                version_dir
+                / "validations"
+                / "validation-batch-001"
+                / "case-a"
+                / "repeat-001"
+                / "quality-error.json",
+                {
+                    "schema_version": "prompt_lab.validation_result/v1",
+                    "validation_result_id": "quality-error-result",
+                    "validation_batch_id": "validation-batch-001",
+                    "run_batch_id": "batch-001",
+                    "run_id": "batch-001-case-a-repeat-001",
+                    "case_id": "case-a",
+                    "repeat_index": 1,
+                    "validator_id": "quality",
+                    "validator_type": "llm_questionnaire",
+                    "status": "error",
+                    "included_in_judge": True,
+                    "check_results": [],
+                    "usage": {},
+                    "execution_error": "validator crashed",
+                },
+            )
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+
+            response = TestClient(app, raise_server_exceptions=False).post(
+                "/api/experiments/demo/versions/v001/judgments"
+            )
+
+            assert response.status_code == 200
+            assert "validator crashed" in captured["prompt"]
+            review_dir = runtime_version_dir(root) / "reviews" / "review-001"
+            validation_context = json.loads(
+                (review_dir / "validation_context.json").read_text(encoding="utf-8")
+            )
+            error_evidence = [
+                item
+                for item in validation_context["validation_evidence"]
+                if item.get("execution_error") == "validator crashed"
+            ]
+            assert error_evidence == [
+                {
+                    "validator_id": "quality",
+                    "validator_title": "Quality checks",
+                    "case_id": "case-a",
+                    "repeat_index": 1,
+                    "status": "error",
+                    "execution_error": "validator crashed",
+                }
+            ]
+    finally:
+        llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
+
+
 def test_api_creates_dry_run_judgment_without_live_llm() -> None:
     def fake_generate_structured(
         model: str,
@@ -1208,6 +1288,7 @@ def main() -> int:
         test_build_judge_prompt_uses_validation_evidence_without_raw_outputs_or_rubric,
         test_judge_prompt_template_file_is_used,
         test_api_creates_judgment_and_default_accepted_decisions,
+        test_api_includes_validation_result_execution_errors_in_judge_evidence,
         test_api_creates_dry_run_judgment_without_live_llm,
         test_api_rejects_judgment_without_completed_validation_batch,
         test_api_judgment_replaces_existing_reviews_and_proposals,

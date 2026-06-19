@@ -610,6 +610,75 @@ def test_api_create_version_copies_clean_source_and_replaces_pydantic_files() ->
         )
 
 
+def test_api_updating_review_decisions_invalidates_existing_proposal() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        review_dir = write_review_fixture(root)
+        proposal_dir = review_dir / "proposal"
+        proposal_dir.mkdir()
+        (proposal_dir / "prompt.md").write_text("Stale prompt", encoding="utf-8")
+        (proposal_dir / "rationale.md").write_text("Stale rationale", encoding="utf-8")
+        write_valid_proposal_source(review_dir)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        client = TestClient(app, raise_server_exceptions=False)
+        runtime_proposal_dir = runtime_review_dir(root) / "proposal"
+
+        update_response = client.put(
+            "/api/experiments/demo/versions/v001/reviews/review-001/decisions",
+            json={
+                "schema_version": "prompt_lab.decisions/v1",
+                "finding_decisions": {
+                    "f-accepted": {"decision": "rejected", "reason": "Changed"},
+                    "f-rejected": {"decision": "rejected", "reason": "Out of scope"},
+                    "f-deferred": {"decision": "deferred", "reason": "Later"},
+                },
+            },
+        )
+        get_response = client.get(
+            "/api/experiments/demo/versions/v001/reviews/review-001/proposal"
+        )
+        create_response = client.post(
+            "/api/experiments/demo/versions/v001/reviews/review-001/proposal/create-version"
+        )
+
+        assert update_response.status_code == 200
+        assert not runtime_proposal_dir.exists()
+        assert get_response.status_code == 404
+        assert create_response.status_code == 404
+        assert create_response.json()["detail"] == "Proposal not found"
+
+
+def test_api_updating_review_human_notes_invalidates_existing_proposal() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        review_dir = write_review_fixture(root)
+        proposal_dir = review_dir / "proposal"
+        proposal_dir.mkdir()
+        (proposal_dir / "prompt.md").write_text("Stale prompt", encoding="utf-8")
+        (proposal_dir / "rationale.md").write_text("Stale rationale", encoding="utf-8")
+        write_valid_proposal_source(review_dir)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        client = TestClient(app, raise_server_exceptions=False)
+        runtime_proposal_dir = runtime_review_dir(root) / "proposal"
+
+        update_response = client.put(
+            "/api/experiments/demo/versions/v001/reviews/review-001/human-notes",
+            json={"notes": "Use the new human instruction."},
+        )
+        get_response = client.get(
+            "/api/experiments/demo/versions/v001/reviews/review-001/proposal"
+        )
+        create_response = client.post(
+            "/api/experiments/demo/versions/v001/reviews/review-001/proposal/create-version"
+        )
+
+        assert update_response.status_code == 200
+        assert not runtime_proposal_dir.exists()
+        assert get_response.status_code == 404
+        assert create_response.status_code == 404
+        assert create_response.json()["detail"] == "Proposal not found"
+
+
 def test_api_create_version_rejects_mismatched_source_without_creating_version() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -723,6 +792,8 @@ def main() -> int:
         test_api_generates_dry_run_proposal_without_live_llm,
         test_api_reports_active_proposal_job_and_rejects_second_proposal,
         test_api_create_version_copies_clean_source_and_replaces_pydantic_files,
+        test_api_updating_review_decisions_invalidates_existing_proposal,
+        test_api_updating_review_human_notes_invalidates_existing_proposal,
         test_api_create_version_rejects_mismatched_source_without_creating_version,
         test_api_create_version_cleans_partial_version_when_replacement_fails,
         test_api_create_version_returns_404_when_proposal_missing,
