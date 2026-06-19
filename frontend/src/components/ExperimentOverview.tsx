@@ -55,15 +55,6 @@ export function ExperimentOverview({
         <pre className="code-block">{overview.prompt}</pre>
       </div>
 
-      <div className="overview-section">
-        <div className="section-heading">
-          <h3>Rubric</h3>
-        </div>
-        <pre className="text-block">
-          {overview.rubric.trim() || "No rubric found."}
-        </pre>
-      </div>
-
       <div className="overview-section overview-section-wide">
         <div className="section-heading">
           <h3>Cases</h3>

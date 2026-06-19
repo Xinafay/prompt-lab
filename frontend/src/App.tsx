@@ -1774,15 +1774,6 @@ function App() {
                           <pre className="code-block">{detailState.overview.prompt}</pre>
                         </div>
 
-                        <div className="overview-section">
-                          <div className="section-heading">
-                            <h3>Rubric</h3>
-                          </div>
-                          <pre className="text-block">
-                            {detailState.overview.rubric.trim() ||
-                              "No rubric found."}
-                          </pre>
-                        </div>
                       </section>
                     ) : null}
 
