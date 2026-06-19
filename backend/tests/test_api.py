@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from prompt_lab import llm_client
 from prompt_lab.api import create_app
 from prompt_lab.config import PromptLabConfig
+from prompt_lab.settings import PromptLabSettings, save_settings
 
 
 def demo_experiment_payload(
@@ -123,6 +124,52 @@ def test_api_lists_experiments() -> None:
 
         assert response.status_code == 200
         assert response.json()[0]["id"] == "demo"
+
+
+def test_api_returns_global_settings() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        settings_path = root / "config" / "settings.json"
+        save_settings(
+            settings_path,
+            PromptLabSettings(
+                default_generator_model="local/configured-generator",
+                default_judge_model="openai/configured-judge",
+                default_repeat_count=6,
+            ),
+        )
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).get("/api/settings")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "schema_version": "prompt_lab.settings/v1",
+            "default_generator_model": "local/configured-generator",
+            "default_judge_model": "openai/configured-judge",
+            "default_repeat_count": 6,
+        }
+
+
+def test_api_updates_global_settings() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        payload = {
+            "schema_version": "prompt_lab.settings/v1",
+            "default_generator_model": "local/new-generator",
+            "default_judge_model": "openai/new-judge",
+            "default_repeat_count": 4,
+        }
+
+        response = TestClient(app).put("/api/settings", json=payload)
+
+        assert response.status_code == 200
+        assert response.json() == payload
+        saved = json.loads(
+            (root / "config" / "settings.json").read_text(encoding="utf-8")
+        )
+        assert saved == payload
 
 
 def test_api_updates_experiment_manifest_under_experiments() -> None:
@@ -832,6 +879,8 @@ def test_api_rejects_unsafe_case_id_without_calling_llm() -> None:
 def main() -> int:
     tests = [
         test_api_lists_experiments,
+        test_api_returns_global_settings,
+        test_api_updates_global_settings,
         test_api_updates_experiment_manifest_under_experiments,
         test_api_rejects_experiment_update_id_mismatch,
         test_api_rejects_experiment_update_missing_active_version,

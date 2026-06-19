@@ -36,6 +36,7 @@ from prompt_lab.models.judgments import (
 from prompt_lab.proposal import ProposalDraft, ProposalSource, build_proposal_prompt
 from prompt_lab.pydantic_loader import load_model_entrypoint
 from prompt_lab.runner import iter_case_major, run_structured_case, run_text_case
+from prompt_lab.settings import PromptLabSettings, load_settings, save_settings
 from prompt_lab.storage import PromptLabStore
 from prompt_lab.errors import NotFoundError
 
@@ -668,9 +669,11 @@ def _load_latest_validated_run_batch(
 
 def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     resolved_config = config or PromptLabConfig.from_env()
+    settings = load_settings(resolved_config.settings_path)
     seed_experiments_from_examples(
         experiments_root=resolved_config.experiments_root,
         examples_root=resolved_config.examples_root,
+        settings=settings,
     )
     store = PromptLabStore(
         experiments_root=resolved_config.experiments_root,
@@ -764,6 +767,15 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     @app.get("/api/experiments")
     def list_experiments() -> list[dict[str, object]]:
         return [item.model_dump(mode="json") for item in store.list_experiments()]
+
+    @app.get("/api/settings")
+    def get_settings() -> dict[str, object]:
+        return load_settings(resolved_config.settings_path).model_dump(mode="json")
+
+    @app.put("/api/settings")
+    def update_settings(settings: PromptLabSettings) -> dict[str, object]:
+        save_settings(resolved_config.settings_path, settings)
+        return settings.model_dump(mode="json")
 
     @app.put("/api/experiments/{experiment_id}")
     def update_experiment(

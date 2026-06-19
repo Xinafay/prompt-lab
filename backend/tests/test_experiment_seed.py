@@ -5,6 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from prompt_lab.experiment_seed import seed_experiments_from_examples
+from prompt_lab.settings import PromptLabSettings
 
 
 MANIFEST = {
@@ -53,6 +54,45 @@ def test_seed_creates_experiments_root_when_missing() -> None:
         assert (
             root / "experiments" / "demo" / "versions" / "v001" / "prompt.md"
         ).read_text(encoding="utf-8") == "Prompt"
+
+
+def test_seed_applies_global_defaults_to_copied_manifest() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_example(root)
+        settings = PromptLabSettings(
+            default_generator_model="local/default-generator",
+            default_judge_model="openai/default-judge",
+            default_repeat_count=7,
+        )
+
+        result = seed_experiments_from_examples(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+            settings=settings,
+        )
+
+        assert result.seeded is True
+        copied_manifest = json.loads(
+            (root / "experiments" / "demo" / "experiment.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert copied_manifest["models"] == {
+            "generator_model": "local/default-generator",
+            "judge_model": "openai/default-judge",
+        }
+        assert copied_manifest["run_defaults"]["repeat_count"] == 7
+        source_manifest = json.loads(
+            (root / "examples" / "demo" / "experiment.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert source_manifest["models"] == {
+            "generator_model": "local/a",
+            "judge_model": "openai/b",
+        }
+        assert source_manifest["run_defaults"]["repeat_count"] == 1
 
 
 def test_seed_copies_when_experiments_root_is_empty() -> None:
@@ -130,6 +170,7 @@ def test_seed_fails_on_conflicting_existing_directory_without_manifest() -> None
 def main() -> int:
     tests = [
         test_seed_creates_experiments_root_when_missing,
+        test_seed_applies_global_defaults_to_copied_manifest,
         test_seed_copies_when_experiments_root_is_empty,
         test_seed_does_nothing_when_any_runtime_manifest_exists,
         test_seed_creates_empty_experiments_when_examples_missing,
