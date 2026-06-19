@@ -1857,6 +1857,9 @@ function App() {
                         baselineVersion={baselineVersion}
                         candidateVersion={candidateVersion}
                         comparison={comparison}
+                        hasUnsavedValidationChanges={
+                          hasUnsavedCompareValidationChanges
+                        }
                         hasValidation={hasComparedValidation}
                         isBusy={workflowLocked}
                         knownVersions={knownVersions}
