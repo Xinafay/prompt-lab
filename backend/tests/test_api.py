@@ -607,6 +607,7 @@ def test_api_starting_run_clears_existing_runtime_chain() -> None:
             runtime_version_dir = root / "experiments" / "demo" / "versions" / "v001"
             for relative_path in [
                 "runs/old-batch/a/repeat-001.json",
+                "validations/validation-001/batch.json",
                 "reviews/review-001/judgment.json",
                 "comparisons/comparison-001/comparison.json",
             ]:
@@ -620,6 +621,7 @@ def test_api_starting_run_clears_existing_runtime_chain() -> None:
 
             assert response.status_code == 200
             assert not (runtime_version_dir / "runs" / "old-batch").exists()
+            assert not (runtime_version_dir / "validations").exists()
             assert not (runtime_version_dir / "reviews").exists()
             assert not (runtime_version_dir / "comparisons").exists()
             assert (
@@ -798,6 +800,68 @@ def test_api_dry_run_pydantic_version_avoids_live_llm() -> None:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
 
+def test_api_dry_run_validation_for_pydantic_experiment() -> None:
+    def fail_live_generate_structured(
+        model: str,
+        prompt: str,
+        response_model: Any,
+        validation_context: dict[str, Any] | None,
+    ) -> object:
+        raise AssertionError("dry_run validation must not call live structured generator")
+
+    original_generate_structured = llm_client.generate_structured
+    llm_client.generate_structured = fail_live_generate_structured  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_demo_pydantic_experiment(root)
+            validator_dir = root / "examples" / "demo" / "validators"
+            validator_dir.mkdir()
+            (validator_dir / "quality.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "prompt_lab.validator/v1",
+                        "validator_id": "quality",
+                        "type": "llm_questionnaire",
+                        "title": "Quality",
+                        "checks": [
+                            {
+                                "check_id": "has-answer",
+                                "title": "Has answer",
+                                "question": "Does the output contain an answer?",
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+            client = TestClient(app, raise_server_exceptions=False)
+
+            run_response = client.post(
+                "/api/experiments/demo/versions/v001/runs",
+                json={"dry_run": True},
+            )
+            response = client.post(
+                "/api/experiments/demo/versions/v001/validations",
+                json={"dry_run": True},
+            )
+
+            assert run_response.status_code == 200
+            assert response.status_code == 200
+            body = response.json()
+            assert (
+                body["validation_batch"]["run_batch_id"]
+                == run_response.json()["job_id"]
+            )
+            assert body["results"][0]["validator_id"] == "quality"
+            assert isinstance(body["results"][0]["check_results"][0]["check_id"], str)
+            assert body["results"][0]["check_results"][0]["check_id"]
+    finally:
+        llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
+
+
 def test_api_rejects_empty_cases_without_calling_llm() -> None:
     calls: list[tuple[str, str]] = []
 
@@ -902,6 +966,7 @@ def main() -> int:
         test_api_dry_run_text_version_avoids_live_llm,
         test_api_runs_pydantic_version,
         test_api_dry_run_pydantic_version_avoids_live_llm,
+        test_api_dry_run_validation_for_pydantic_experiment,
         test_api_rejects_empty_cases_without_calling_llm,
         test_api_rejects_unsafe_case_id_without_calling_llm,
     ]

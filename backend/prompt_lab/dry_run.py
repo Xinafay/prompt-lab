@@ -59,6 +59,22 @@ def dry_judgment_response_json(
     )
 
 
+def dry_validator_response_json(check_ids: list[str]) -> str:
+    return json.dumps(
+        {
+            "check_results": [
+                {
+                    "check_id": check_id,
+                    "verdict": "yes",
+                    "comment": f"dry-run validator response for {check_id}",
+                }
+                for check_id in check_ids
+            ]
+        },
+        ensure_ascii=False,
+    )
+
+
 def dry_proposal_response_json(
     *,
     prompt_template: str,
