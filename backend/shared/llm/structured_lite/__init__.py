@@ -34,6 +34,7 @@ from shared.llm.structured_lite._schema import (
     _schema_dict,
     _looks_like_schema_echo,
     _try_unwrap_schema_shaped_payload,
+    _coerce_schema_echo_values,
 )
 from shared.llm.structured_lite._errors import (
     _STRUCTURAL_ERROR_TYPES,
@@ -81,6 +82,7 @@ __all__ = [
     "REPLACE_SCHEMA_ECHO_WITH_SKELETON",
     "_format_structured_error",
     "_looks_like_schema_echo",
+    "_coerce_schema_echo_values",
     "_generate_skeleton_payload",
     "STRUCTURAL_RATIO_THRESHOLD",
     "STRUCTURAL_HARD_FLOOR",
@@ -106,6 +108,7 @@ def structured_lite(
     stream_callback: StreamCallbacks | None = None,
     fix_prompt: str | None = None,
     fix_retry: int = 1,
+    require_model: bool = True,
 ) -> tuple[StructuredOutputT, dict[str, Any] | None, list[dict[str, Any]], list[dict[str, Any]]]:
     """Structured output with JSON repair and validation-guided repair retries.
 
@@ -117,12 +120,19 @@ def structured_lite(
     metadata on each entry.
 
     Transport retry logic is the responsibility of ``llm_caller``.
+
+    When ``require_model`` is ``True`` (default) the prompt must contain the
+    ``<<MODEL>>`` placeholder, which is replaced with the JSON schema. Set it to
+    ``False`` to allow a prompt without the placeholder — useful for continuation
+    turns where an earlier message in ``messages`` already stated the schema and
+    only fresh input is being supplied. The placeholder is still substituted when
+    present regardless of this flag.
     """
     if fix_retry < 0:
         raise ValueError("fix_retry cannot be negative.")
 
     schema_text = json.dumps(_schema_dict(response_model), ensure_ascii=False, indent=2)
-    rendered_prompt = _render_prompt(prompt, schema_text=schema_text, require_model=True)
+    rendered_prompt = _render_prompt(prompt, schema_text=schema_text, require_model=require_model)
     rendered_fix_template = _render_fix_prompt_template(fix_prompt, schema_text=schema_text)
     base_messages = list(messages)
     callbacks = stream_callback

@@ -9,11 +9,11 @@ Specification of `shared.llm.structured_lite.structured_lite` behavior. This doc
 `structured_lite` accepts:
 
 - `messages` — existing conversation (`base_chat`),
-- `prompt` — user-message template containing the required `<<MODEL>>` placeholder,
+- `prompt` — user-message template containing the `<<MODEL>>` placeholder (required unless `require_model=False`),
 - `response_model` — a Pydantic class or type annotation,
 - `llm_caller` — callable that invokes the LLM,
 - `fix_retry` — repair-attempt budget,
-- optional: `validation_context`, `fix_prompt` (must contain `<<ERROR>>`), `stream_callback`.
+- optional: `validation_context`, `fix_prompt` (must contain `<<ERROR>>`), `stream_callback`, `require_model` (default `True`).
 
 Returns: `(output, usage, final_messages, conversation_log)`.
 
@@ -26,7 +26,7 @@ Goal: obtain a successfully validated instance of `response_model` from an LLM r
 | Term | Meaning |
 |---|---|
 | `base_chat` | Input conversation, never mutated. |
-| `user_prompt1` | `prompt` with `<<MODEL>>` substituted by the model's JSON schema. |
+| `user_prompt1` | `prompt` with `<<MODEL>>` substituted by the model's JSON schema. When `require_model=False` and the prompt omits the placeholder, it is the `prompt` verbatim. |
 | `assistant_raw` | Raw LLM response (text + optional `reasoning_content`). |
 | **Candidate** | A `(payload, transformation)` pair after extraction and `json_repair`, where `payload` is a `dict` or `list`. |
 | **Validation outcome** | Categorization of a `ValidationError`: `ok`, `constraint`, `structural`. |
@@ -62,6 +62,8 @@ Any `type` not listed above is treated as `structural` (conservative — produce
 
 ## 4. Phase A — initial call
 
+> **`<<MODEL>>` placeholder requirement.** By default (`require_model=True`) `prompt` must contain `<<MODEL>>`; if it does not, a `ValueError` is raised before any LLM call. Passing `require_model=False` lifts this requirement, so a prompt without the placeholder is used verbatim — intended for continuation turns where the schema was already stated in an earlier `base_chat` message and only fresh input is being supplied. When the placeholder *is* present it is always substituted, regardless of the flag.
+
 1. `chat = base_chat + [{"role": "user", "content": user_prompt1}]`
 2. `assistant_raw = llm_caller(chat)`
 3. Append to `conversation_log`:
@@ -86,7 +88,7 @@ Every source is passed through `json_repair.loads`. Only results that are `dict`
 
 ### 5.3. Transformations
 
-For each parsed payload we generate up to four variants:
+For each parsed payload we generate up to five variants:
 
 | Variant | Operation |
 |---|---|
@@ -94,8 +96,9 @@ For each parsed payload we generate up to four variants:
 | `sanitized` | Recursively strip JSON Schema metadata keys (`$defs`, `properties`, `type`, `required`, …) wherever they do not match model fields. |
 | `unwrapped` | When the payload looks like an echo of the schema (top level contains `properties` plus metadata only), return `payload["properties"]`. |
 | `sanitized+unwrapped` | First `unwrapped`, then `sanitized` over the result. |
+| `value_extracted` | When the model echoes the schema but tucks the real answer inside each field's schema node (e.g. `{"name": {"type": "string", "value": "Ada"}}`), recursively pull each value out (checked in order: `value`, `const`, `default`), descending into object nodes through their `properties`. Handles the schema-envelope form even when the top-level `"type": "object"` marker was dropped. |
 
-A variant is dropped when its transformation produces no change. Each surviving variant becomes a separate **candidate** with its own `score`.
+A variant is dropped when its transformation produces no change or duplicates an already-queued variant. Variants are tried in the order above; `value_extracted` is the most aggressive, so it is tried last. Each surviving variant becomes a separate **candidate** with its own `score`.
 
 ### 5.4. Branch
 
@@ -346,3 +349,44 @@ Return only corrected JSON that matches this schema:
 - It does not retry the whole operation once `fix_retry` is exhausted — that is the caller's responsibility.
 - It does not write to any global logger. Diagnostics flow exclusively through `conversation_log` and `stream_callback`.
 - It does not redact sensitive data in `conversation_log` — that is the caller's responsibility.
+
+---
+
+## 16. Diagnostic report — `python/tests/test_format_validation_errors.py`
+
+A standalone, **assertion-free** human-review tool. It exercises the validation, error-formatting, and salvage machinery against a curated set of inputs and prints a readable report, so you can eyeball *how* each weird model response is handled without spinning up a real LLM. The companion file `test_structured_lite_units.py` is the hard assertion layer (run with no arguments; every case is checked); this file is for inspection and regression-spotting by eye.
+
+### 16.1. Running
+
+```bash
+python python/tests/test_format_validation_errors.py            # print to stdout
+python python/tests/test_format_validation_errors.py > valerrors.md   # capture a report
+```
+
+No assertions are made and nothing is written outside stdout — it never fails CI. Review the output (or diff `valerrors.md` against a previous run) to decide whether error formatting or salvage behavior changed.
+
+### 16.2. Sections
+
+| Section | Covers |
+|---|---|
+| **A. Structural errors** | `missing`, wrong type, extra keys, literal, nested — how each renders via `_format_structured_error` (the `<<ERROR>>` text the model sees during repair). |
+| **B. Constraint errors** | field/model validators, string and numeric constraints. |
+| **C. Multi-error & nested** | mixed structural+constraint, errors across nesting levels. |
+| **D. Schema echo** | model returned the schema instead of data — shows both repair modes (hint-only vs. injected skeleton) side by side. |
+| **E. Successful conversions** | how malformed/weird input is salvaged **deterministically in one pass** (no extra LLM round-trip). |
+
+For sections A–C each case prints the raw `error.errors()` detail plus the formatted repair message. Section E prints, per case: the raw model output, every candidate tried (best-first, with status and the winner marked), which source block + transform won, what `json_repair` fixed, what pydantic coerced (e.g. `"31" → 31`), and the final validated object.
+
+### 16.3. Baseline regression guard (section E)
+
+Section E is split into two groups:
+
+- **baseline** — already-valid outputs that must keep validating via the `raw` transform with no `json_repair` and no coercion. Each baseline case prints a verdict: `BASELINE: ✓ clean` or `BASELINE: ⚠ REGRESSION — <reason>`, and the group ends with a `BASELINE SUMMARY: N/M clean` line. If a change ever causes a "normal" case to need repair (or to fail), the ⚠ marker makes it obvious at a glance.
+- **salvaged** — malformed/echoed/coerced inputs, including the schema-echo-with-embedded-values forms recovered by the `value_extracted` transform (section 5.3), such as a full schema envelope whose top-level `"type": "object"` was dropped.
+
+### 16.4. Adding a case
+
+- Section E: call `_print_success_case(label, model_output_text, Model)` (add `expect_clean=True` for a baseline case so it gets a verdict and counts toward the summary).
+- Sections A–C: call `_print_case(label, _trigger(Model, invalid_data))`.
+
+When you add or change a salvage rule, add a representative case here **and** a hard assertion in `test_structured_lite_units.py`.

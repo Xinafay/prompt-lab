@@ -50,11 +50,11 @@ def _temporary_chat_env(*, enable_cache: bool = False) -> Iterator[Path]:
             root / ".servers.jsonc",
             {
                 "openai": {
-                    "type": "openai",
+                    "engine": "openai",
                     "api_key": "env:OPENAI_API_KEY",
                 },
                 "local": {
-                    "type": "local",
+                    "engine": "llamacpp",
                     "host": "http://localhost:8000",
                     "api_key": "not_needed",
                 },
@@ -802,7 +802,7 @@ def _run_live_smoke_local() -> None:
 
     model_ref = f"local/{model_name}"
     server_entry = {
-        "type": "local",
+        "engine": os.getenv("LOCAL_LLM_ENGINE", "llamacpp").strip() or "llamacpp",
         "host": base_url,
         "api_key": api_key,
         "no_verify_tls": no_verify_tls,

@@ -272,7 +272,7 @@ def _dump_raw_transport(model: str) -> None:
         **_base_preset(model, reasoning=True),
     )
 
-    if prepared.spec.server_type == "openai":
+    if prepared.spec.capabilities.chat_protocol == "openai-responses":
         stream = chat_utils._call_openai_responses(
             prepared,
             stream_enabled=True,

@@ -60,7 +60,7 @@ class PreparedChatRequest:
 
 
 def _default_transport_name(prepared: PreparedChatRequest) -> str:
-    if prepared.spec.server_type == "openai":
+    if prepared.spec.capabilities.chat_protocol == "openai-responses":
         return "responses"
     return "chat_completions"
 
@@ -71,11 +71,11 @@ def resolve_model_spec(model: Optional[str]) -> ModelSpec:
 
 
 def is_local_model(model: Optional[str] = None) -> bool:
-    """Return True if the model resolves to a local server."""
+    """Return True if the model resolves to a self-hosted (local) server."""
 
     if model is None:
         model = os.getenv("LLM_MODEL", None)
-    return resolve_model_spec(model).server_type == "local"
+    return resolve_model_spec(model).capabilities.requires_host
 
 
 def _merge_local_extra_body(value: Any) -> dict[str, Any]:
@@ -110,7 +110,7 @@ def prepare_chat_request(
     for ignored_key in _IGNORED_PARAMS:
         body.pop(ignored_key, None)
 
-    if spec.server_type == "local":
+    if spec.capabilities.openai_compatible_extras:
         start = body.pop("start", None)
         if start is not None:
             normalized_messages = normalized_messages + [{"role": "assistant", "content": start}]
@@ -121,7 +121,7 @@ def prepare_chat_request(
     supported = _filter_supported_params(body)
 
     extra_body: dict[str, Any] | None = None
-    if spec.server_type == "local":
+    if spec.capabilities.openai_compatible_extras:
         extra_body_payload = _merge_local_extra_body(provided_extra_body)
         unsupported = {
             key: value
@@ -276,7 +276,7 @@ def build_cache_request(
 ) -> dict[str, Any]:
     """Build the canonical raw-request cache payload for a prepared request."""
 
-    if prepared.spec.server_type == "openai":
+    if prepared.spec.capabilities.chat_protocol == "openai-responses":
         request = _build_openai_responses_request(
             prepared,
             stream_enabled=False,
@@ -288,7 +288,7 @@ def build_cache_request(
     return {
         "transport": _default_transport_name(prepared),
         "server_name": prepared.spec.server_name,
-        "server_type": prepared.spec.server_type,
+        "engine": prepared.spec.engine,
         "model_ref": prepared.model_ref,
         "base_url": prepared.spec.base_url,
         "request": _sanitize_cache_request_value(request),

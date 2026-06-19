@@ -7,12 +7,18 @@ import json_repair
 
 from shared.llm.cancellation import LlmRequestCancelled
 from shared.llm.structured_lite._errors import _classify_validation_error
-from shared.llm.structured_lite._schema import _sanitize_structured_payload, _try_unwrap_schema_shaped_payload
+from shared.llm.structured_lite._schema import (
+    _coerce_schema_echo_values,
+    _sanitize_structured_payload,
+    _try_unwrap_schema_shaped_payload,
+)
 from shared.llm.structured_lite._types import _Candidate, _CandidateValidation, _restore_structured_output
 
 
 STRUCTURAL_RATIO_THRESHOLD: float = 0.10
 STRUCTURAL_HARD_FLOOR: int = 3
+
+_Transform = Literal["raw", "sanitized", "unwrapped", "sanitized+unwrapped", "value_extracted"]
 
 
 def _payload_complexity(payload: Any) -> int:
@@ -94,16 +100,23 @@ def _generate_candidates(text: str, *, response_model: Any) -> list[_Candidate]:
             if unwrapped is not None
             else None
         )
+        value_extracted = _coerce_schema_echo_values(raw_payload)
 
-        variants: list[tuple[Any, Literal["raw", "sanitized", "unwrapped", "sanitized+unwrapped"]]] = [
-            (raw_payload, "raw"),
-        ]
-        if sanitized != raw_payload:
-            variants.append((sanitized, "sanitized"))
+        # Tried in order; later variants only matter when earlier ones fail to
+        # validate. ``value_extracted`` is the most aggressive, so it goes last.
+        # Skip any variant whose payload duplicates one already queued.
+        variants: list[tuple[Any, _Transform]] = [(raw_payload, "raw")]
+
+        def _add(payload: Any, transform: _Transform) -> None:
+            if all(payload != existing for existing, _ in variants):
+                variants.append((payload, transform))
+
+        _add(sanitized, "sanitized")
         if unwrapped is not None:
-            variants.append((unwrapped, "unwrapped"))
-        if sanitized_unwrapped is not None and sanitized_unwrapped != unwrapped:
-            variants.append((sanitized_unwrapped, "sanitized+unwrapped"))
+            _add(unwrapped, "unwrapped")
+            if sanitized_unwrapped is not None:
+                _add(sanitized_unwrapped, "sanitized+unwrapped")
+        _add(value_extracted, "value_extracted")
 
         for payload, transform in variants:
             candidates.append(_Candidate(

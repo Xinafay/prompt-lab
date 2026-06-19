@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
 from shared.llm._io import load_json
+from shared.llm.engine_capabilities import EngineCapabilities, engine_capabilities
 
 
 @dataclass(frozen=True)
@@ -12,11 +13,16 @@ class ModelSpec:
     """Resolved model routing details from .servers.jsonc."""
 
     server_name: str
-    server_type: str
+    engine: str
     model_name: str
     api_key: Optional[str]
     base_url: Optional[str]
     no_verify_tls: bool = False
+
+    @property
+    def capabilities(self) -> EngineCapabilities:
+        """Protocol capabilities for this server's engine."""
+        return engine_capabilities(self.engine)
 
 
 def _servers_config_path() -> str:
@@ -82,27 +88,37 @@ class ServerRegistry:
         if server is None:
             raise ValueError(f"Unknown server '{server_name}' in {self._source_path}")
 
-        server_type = server.get("type")
-        if server_type not in {"openai", "local"}:
-            raise ValueError(f"Unsupported server type '{server_type}' for '{server_name}'.")
+        engine = server.get("engine")
+        if engine is None:
+            if "type" in server:
+                raise ValueError(
+                    f"Server '{server_name}' uses the legacy 'type' field. The LLM "
+                    f"server config changed: rename 'type' to 'engine' and use a "
+                    f"concrete engine (the old 'local' is now one of 'llamacpp', "
+                    f"'llama-swap', 'vllm', or 'ollama')."
+                )
+            raise ValueError(f"Server '{server_name}' is missing the 'engine' field.")
+
+        # Raises ValueError with the supported-engine list on unknown engines.
+        caps = engine_capabilities(engine)
 
         raw_api_key = server.get("api_key")
         api_key = _resolve_env_value(raw_api_key)
-        if server_type == "local" and not api_key:
+        if not caps.requires_api_key and not api_key:
             api_key = "api_key"
-        if server_type == "openai" and not api_key:
+        if caps.requires_api_key and not api_key:
             raise ValueError(f"Missing api_key for server '{server_name}'.")
 
         base_url = server.get("host") or server.get("api_base") or server.get("base_url")
-        if server_type == "local" and not base_url:
-            raise ValueError(f"Missing host for local server '{server_name}'.")
-        if base_url and server_type in {"local", "openai"} and not base_url.rstrip("/").endswith("/v1"):
+        if caps.requires_host and not base_url:
+            raise ValueError(f"Missing host for self-hosted server '{server_name}'.")
+        if base_url and not base_url.rstrip("/").endswith("/v1"):
             base_url = f"{base_url.rstrip('/')}/v1"
         no_verify_tls = _resolve_no_verify_tls(server_name, server)
 
         return ModelSpec(
             server_name=server_name,
-            server_type=server_type,
+            engine=engine,
             model_name=model_name,
             api_key=api_key,
             base_url=base_url,
@@ -118,6 +134,19 @@ def default_server_registry() -> ServerRegistry:
     if _DEFAULT_REGISTRY is None:
         _DEFAULT_REGISTRY = ServerRegistry.from_jsonc(_servers_config_path())
     return _DEFAULT_REGISTRY
+
+
+def set_default_server_registry(registry: ServerRegistry) -> None:
+    """Install an in-code registry as the process-wide default.
+
+    Use this to define servers programmatically instead of loading
+    ``.servers.jsonc`` from the working directory. All helpers (chat,
+    embeddings, count_tokens) resolve models through the default registry, so
+    they pick up the injected definitions automatically. Call
+    ``reset_default_server_registry()`` to revert to file-based loading.
+    """
+    global _DEFAULT_REGISTRY
+    _DEFAULT_REGISTRY = registry
 
 
 def reset_default_server_registry() -> None:

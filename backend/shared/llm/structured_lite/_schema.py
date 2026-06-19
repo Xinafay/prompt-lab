@@ -72,6 +72,11 @@ _UNAMBIGUOUS_SCHEMA_KEYS: frozenset[str] = frozenset(
     {"anyOf", "allOf", "oneOf", "$ref", "additionalProperties", "prefixItems", "unevaluatedProperties"}
 )
 
+# Keys a schema node may carry the real value under, checked in this order.
+# ``value`` is what a model typically invents when filling a schema template;
+# ``const``/``default`` are genuine JSON Schema keywords that also pin a value.
+_VALUE_BEARING_KEYS: tuple[str, ...] = ("value", "const", "default")
+
 
 def _resolve_schema_ref(node: dict[str, Any], *, root_schema: dict[str, Any]) -> dict[str, Any]:
     ref = node.get("$ref")
@@ -244,3 +249,65 @@ def _try_unwrap_schema_shaped_payload(payload: Any) -> dict[str, Any] | None:
     if not other_keys.issubset(_JSON_SCHEMA_METADATA_KEYS):
         return None
     return inner
+
+
+def _is_schema_node(node: Any) -> bool:
+    """True when ``node`` looks like a JSON Schema node rather than plain data.
+
+    The signal is a structural keyword (``anyOf``/``$ref``/...) or a ``type``
+    whose value is a JSON Schema primitive type name. This deliberately mirrors
+    the per-value check in :func:`_looks_like_schema_echo`, so e.g. real data
+    like ``{"type": "admin", "value": 5}`` (type not a schema primitive) is not
+    mistaken for a schema node.
+    """
+    if not isinstance(node, dict):
+        return False
+    if _UNAMBIGUOUS_SCHEMA_KEYS & node.keys():
+        return True
+    node_type = node.get("type")
+    if isinstance(node_type, str) and node_type in _SCHEMA_PRIMITIVE_TYPES:
+        return True
+    if isinstance(node_type, list) and any(
+        isinstance(t, str) and t in _SCHEMA_PRIMITIVE_TYPES for t in node_type
+    ):
+        return True
+    return False
+
+
+def _coerce_schema_echo_values(payload: Any) -> Any:
+    """Recover a data payload from a schema echo whose nodes embed the values.
+
+    Small models sometimes return the schema with the real answer tucked inside
+    each field's schema node — e.g. ``{"name": {"type": "string", "value": "Ada"}}``
+    or the same wrapped as ``{"type": "object", "properties": {...}}``. This walks
+    the structure and replaces each value-bearing schema node with its embedded
+    value (checked in :data:`_VALUE_BEARING_KEYS` order), descending into object
+    nodes through their ``properties``.
+
+    Returns the input unchanged when there is nothing to recover, so callers can
+    cheaply detect a no-op via equality.
+    """
+    if isinstance(payload, dict):
+        # A ``{...metadata..., "properties": {...}}`` object envelope — descend
+        # into ``properties``. Handled even when the model dropped the
+        # ``"type": "object"`` marker (a common quirk), since the envelope is
+        # recognised by ``properties`` + only-metadata siblings, not by ``type``.
+        envelope = _try_unwrap_schema_shaped_payload(payload)
+        if envelope is not None:
+            return _coerce_schema_echo_values(envelope)
+        if _is_schema_node(payload):
+            for key in _VALUE_BEARING_KEYS:
+                if key in payload:
+                    return _coerce_schema_echo_values(payload[key])
+            node_type = payload.get("type")
+            is_object = node_type == "object" or (
+                isinstance(node_type, list) and "object" in node_type
+            )
+            properties = payload.get("properties")
+            if is_object and isinstance(properties, dict):
+                return _coerce_schema_echo_values(properties)
+            return payload
+        return {key: _coerce_schema_echo_values(value) for key, value in payload.items()}
+    if isinstance(payload, list):
+        return [_coerce_schema_echo_values(item) for item in payload]
+    return payload
