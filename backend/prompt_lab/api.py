@@ -654,12 +654,70 @@ def _validate_validation_results_for_compare(
                 f"version {validation_batch.version}, expected {version}"
             ),
         )
+    if validation_batch.status != "completed":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Validation batch {validation_batch.validation_batch_id} has "
+                f"status {validation_batch.status}, expected completed"
+            ),
+        )
+    if validation_batch.completed_results != validation_batch.total_results:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Validation batch {validation_batch.validation_batch_id} has "
+                f"completed_results {validation_batch.completed_results}, expected "
+                f"{validation_batch.total_results}"
+            ),
+        )
+    if len(validation_results) != validation_batch.total_results:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Validation batch {validation_batch.validation_batch_id} has "
+                f"{len(validation_results)} validation results, expected "
+                f"{validation_batch.total_results}"
+            ),
+        )
 
     validator_checks = {
         validator.validator_id: {check.check_id for check in validator.checks}
         for validator in validator_snapshots
     }
+    snapshot_ids = set(validator_checks)
+    batch_validator_ids = set(validation_batch.validator_ids)
+    if snapshot_ids != batch_validator_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Validation batch {validation_batch.validation_batch_id} has "
+                f"validator_ids {sorted(batch_validator_ids)}, but snapshot "
+                f"validator_ids are {sorted(snapshot_ids)}"
+            ),
+        )
+
+    seen_result_ids: set[str] = set()
+    seen_logical_results: set[tuple[str, int, str]] = set()
     for result in validation_results:
+        if result.validation_result_id in seen_result_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"duplicate validation_result_id {result.validation_result_id}",
+            )
+        seen_result_ids.add(result.validation_result_id)
+
+        logical_key = (result.case_id, result.repeat_index, result.validator_id)
+        if logical_key in seen_logical_results:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"duplicate validation result for case {result.case_id} "
+                    f"repeat {result.repeat_index} validator {result.validator_id}"
+                ),
+            )
+        seen_logical_results.add(logical_key)
+
         if result.validation_batch_id != validation_batch.validation_batch_id:
             raise HTTPException(
                 status_code=400,
@@ -695,6 +753,17 @@ def _validate_validation_results_for_compare(
                         f"Validation result {result.validation_result_id} references "
                         f"unknown check_id {check.check_id} for validator_id "
                         f"{result.validator_id}"
+                    ),
+                )
+        if result.status == "ok":
+            actual_check_ids = {check.check_id for check in result.check_results}
+            if actual_check_ids != check_ids:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Validation result {result.validation_result_id} has "
+                        f"check_ids {sorted(actual_check_ids)} do not match snapshot "
+                        f"check_ids {sorted(check_ids)}"
                     ),
                 )
 

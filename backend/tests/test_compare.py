@@ -269,6 +269,27 @@ def validation_result_path(
     )
 
 
+def validation_batch_path(version_dir: Path, *, validation_batch_id: str) -> Path:
+    return version_dir / "validations" / validation_batch_id / "batch.json"
+
+
+def update_validation_batch_counts(
+    version_dir: Path,
+    *,
+    validation_batch_id: str,
+    total_results: int,
+    completed_results: int,
+) -> None:
+    batch_path = validation_batch_path(
+        version_dir,
+        validation_batch_id=validation_batch_id,
+    )
+    batch = json.loads(batch_path.read_text(encoding="utf-8"))
+    batch["total_results"] = total_results
+    batch["completed_results"] = completed_results
+    write_json(batch_path, batch)
+
+
 def test_compare_matrix_marks_any_no_as_fail() -> None:
     matrix = build_compare_matrix(
         experiment_id="demo",
@@ -611,6 +632,174 @@ def test_api_rejects_compare_result_with_unknown_snapshot_validator_id() -> None
         assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
 
 
+def test_api_rejects_compare_with_missing_validation_result_file() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        baseline_dir, candidate_dir = write_demo_experiment(root)
+        write_run_batch(baseline_dir, "baseline-run-001", version="v001")
+        write_run_batch(candidate_dir, "candidate-run-001", version="v002")
+        write_validation_batch(
+            baseline_dir,
+            validation_batch_id="validation-001",
+            run_batch_id="baseline-run-001",
+            version="v001",
+            verdict="yes",
+        )
+        write_validation_batch(
+            candidate_dir,
+            validation_batch_id="validation-002",
+            run_batch_id="candidate-run-001",
+            version="v002",
+            verdict="yes",
+        )
+        validation_result_path(
+            candidate_dir,
+            validation_batch_id="validation-002",
+        ).unlink()
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/api/experiments/demo/comparisons",
+            json={"baseline_version": "v001", "candidate_version": "v002"},
+        )
+
+        assert response.status_code == 400
+        assert "has 0 validation results, expected 1" in response.json()["detail"]
+        assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
+
+
+def test_api_rejects_compare_with_duplicate_validation_result_id() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        baseline_dir, candidate_dir = write_demo_experiment(root)
+        write_run_batch(baseline_dir, "baseline-run-001", version="v001")
+        write_run_batch(candidate_dir, "candidate-run-001", version="v002")
+        write_validation_batch(
+            baseline_dir,
+            validation_batch_id="validation-001",
+            run_batch_id="baseline-run-001",
+            version="v001",
+            verdict="yes",
+        )
+        write_validation_batch(
+            candidate_dir,
+            validation_batch_id="validation-002",
+            run_batch_id="candidate-run-001",
+            version="v002",
+            verdict="yes",
+        )
+        update_validation_batch_counts(
+            candidate_dir,
+            validation_batch_id="validation-002",
+            total_results=2,
+            completed_results=2,
+        )
+        original_path = validation_result_path(
+            candidate_dir,
+            validation_batch_id="validation-002",
+        )
+        duplicate = json.loads(original_path.read_text(encoding="utf-8"))
+        write_json(original_path.with_name("quality-copy.json"), duplicate)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/api/experiments/demo/comparisons",
+            json={"baseline_version": "v001", "candidate_version": "v002"},
+        )
+
+        assert response.status_code == 400
+        assert "duplicate validation_result_id" in response.json()["detail"]
+        assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
+
+
+def test_api_rejects_compare_with_duplicate_logical_validation_result() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        baseline_dir, candidate_dir = write_demo_experiment(root)
+        write_run_batch(baseline_dir, "baseline-run-001", version="v001")
+        write_run_batch(candidate_dir, "candidate-run-001", version="v002")
+        write_validation_batch(
+            baseline_dir,
+            validation_batch_id="validation-001",
+            run_batch_id="baseline-run-001",
+            version="v001",
+            verdict="yes",
+        )
+        write_validation_batch(
+            candidate_dir,
+            validation_batch_id="validation-002",
+            run_batch_id="candidate-run-001",
+            version="v002",
+            verdict="yes",
+        )
+        update_validation_batch_counts(
+            candidate_dir,
+            validation_batch_id="validation-002",
+            total_results=2,
+            completed_results=2,
+        )
+        original_path = validation_result_path(
+            candidate_dir,
+            validation_batch_id="validation-002",
+        )
+        duplicate = json.loads(original_path.read_text(encoding="utf-8"))
+        duplicate["validation_result_id"] = "validation-002-case-a-repeat-001-copy"
+        write_json(original_path.with_name("quality-copy.json"), duplicate)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/api/experiments/demo/comparisons",
+            json={"baseline_version": "v001", "candidate_version": "v002"},
+        )
+
+        assert response.status_code == 400
+        assert "duplicate validation result for case case-a repeat 1 validator quality" in (
+            response.json()["detail"]
+        )
+        assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
+
+
+def test_api_rejects_compare_ok_result_missing_snapshot_check() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        baseline_dir, candidate_dir = write_demo_experiment(root)
+        write_run_batch(baseline_dir, "baseline-run-001", version="v001")
+        write_run_batch(candidate_dir, "candidate-run-001", version="v002")
+        write_validation_batch(
+            baseline_dir,
+            validation_batch_id="validation-001",
+            run_batch_id="baseline-run-001",
+            version="v001",
+            verdict="yes",
+        )
+        write_validation_batch(
+            candidate_dir,
+            validation_batch_id="validation-002",
+            run_batch_id="candidate-run-001",
+            version="v002",
+            verdict="yes",
+        )
+        corrupted_path = validation_result_path(
+            candidate_dir,
+            validation_batch_id="validation-002",
+        )
+        corrupted = json.loads(corrupted_path.read_text(encoding="utf-8"))
+        corrupted["check_results"] = []
+        write_json(corrupted_path, corrupted)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/api/experiments/demo/comparisons",
+            json={"baseline_version": "v001", "candidate_version": "v002"},
+        )
+
+        assert response.status_code == 400
+        assert "check_ids [] do not match snapshot check_ids ['coverage']" in (
+            response.json()["detail"]
+        )
+        assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
+
+
 def main() -> int:
     tests = [
         test_compare_matrix_marks_any_no_as_fail,
@@ -623,6 +812,10 @@ def main() -> int:
         test_api_rejects_compare_result_with_unknown_snapshot_check_id,
         test_api_rejects_compare_result_with_mismatched_run_batch_id,
         test_api_rejects_compare_result_with_unknown_snapshot_validator_id,
+        test_api_rejects_compare_with_missing_validation_result_file,
+        test_api_rejects_compare_with_duplicate_validation_result_id,
+        test_api_rejects_compare_with_duplicate_logical_validation_result,
+        test_api_rejects_compare_ok_result_missing_snapshot_check,
     ]
     for test in tests:
         test()
