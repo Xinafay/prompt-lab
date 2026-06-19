@@ -16,10 +16,9 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 from prompt_lab import llm_client
 from prompt_lab.automatic_validators import execute_automatic_validator
 from prompt_lab.case_context import materialize_case_context
-from prompt_lab.compare import build_comparison_prompt
+from prompt_lab.compare import build_compare_matrix
 from prompt_lab.config import PromptLabConfig
 from prompt_lab.dry_run import (
-    dry_comparison_response_json,
     dry_judgment_response_json,
     dry_proposal_response_json,
     dry_structured_response_json,
@@ -31,12 +30,12 @@ from prompt_lab.judge import build_judge_prompt
 from prompt_lab.jobs import JobAlreadyRunningError, JobManager
 from prompt_lab.models.artifacts import ExperimentArtifact, RunArtifact
 from prompt_lab.models.judgments import (
-    ComparisonArtifact,
     FindingDecisionSet,
     JudgmentArtifact,
 )
 from prompt_lab.models.validators import (
     AutomaticValidatorDefinition,
+    CompareMatrixResponse,
     LlmQuestionnaireResponse,
     LlmQuestionnaireValidatorDefinition,
     ValidationBatchArtifact,
@@ -265,48 +264,6 @@ def _render_judgment_markdown(judgment: JudgmentArtifact) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def _render_comparison_markdown(comparison: ComparisonArtifact) -> str:
-    lines = [
-        f"# Comparison {comparison.comparison_id}",
-        "",
-        f"Baseline: `{_markdown_text(comparison.baseline_version)}`",
-        f"Candidate: `{_markdown_text(comparison.candidate_version)}`",
-        f"Recommendation: `{comparison.recommendation}`",
-        "",
-        _markdown_text(comparison.summary),
-    ]
-    sections = [
-        ("Improvements", comparison.improvements),
-        ("Regressions", comparison.regressions),
-        ("Unchanged Problems", comparison.unchanged_problems),
-        ("New Problems", comparison.new_problems),
-        ("Stability Changes", comparison.stability_changes),
-    ]
-    for title, items in sections:
-        lines.extend(["", f"## {title}"])
-        if items:
-            lines.extend(f"- {_markdown_text(item)}" for item in items)
-        else:
-            lines.append("- None.")
-    lines.extend(["", "## Decision Points"])
-    if comparison.decision_points:
-        for decision in comparison.decision_points:
-            options = "; ".join(_markdown_text(item) for item in decision.options)
-            lines.extend(
-                [
-                    (
-                        f"- `{_markdown_text(decision.decision_id)}`: "
-                        f"{_markdown_text(decision.description)}"
-                    ),
-                    f"  Options: {options}",
-                    f"  Recommended: {_markdown_text(decision.recommended_option)}",
-                ]
-            )
-    else:
-        lines.append("- None.")
-    return "\n".join(lines).rstrip() + "\n"
-
-
 def _select_latest_run_batch_dir(runs_dir: Path) -> Path | None:
     run_batch_dirs = _run_batch_dirs_newest_first(runs_dir)
     if not run_batch_dirs:
@@ -412,54 +369,6 @@ def _validate_judgment_metadata(
         raise HTTPException(
             status_code=400,
             detail=f"Judgment judge_model must be {judge_model}",
-        )
-
-
-def _validate_comparison_metadata(
-    *,
-    comparison: ComparisonArtifact,
-    comparison_id: str,
-    baseline_version: str,
-    candidate_version: str,
-    baseline_run_batch_id: str,
-    candidate_run_batch_id: str,
-    judge_model: str,
-) -> None:
-    if comparison.comparison_id != comparison_id:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Comparison comparison_id must be {comparison_id}",
-        )
-    if comparison.baseline_version != baseline_version:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Comparison baseline_version must be {baseline_version}",
-        )
-    if comparison.candidate_version != candidate_version:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Comparison candidate_version must be {candidate_version}",
-        )
-    if comparison.baseline_run_batch_ids != [baseline_run_batch_id]:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Comparison baseline_run_batch_ids must be "
-                f"['{baseline_run_batch_id}']"
-            ),
-        )
-    if comparison.candidate_run_batch_ids != [candidate_run_batch_id]:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Comparison candidate_run_batch_ids must be "
-                f"['{candidate_run_batch_id}']"
-            ),
-        )
-    if comparison.judge_model != judge_model:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Comparison judge_model must be {judge_model}",
         )
 
 
@@ -1793,44 +1702,45 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     @app.post("/api/experiments/{experiment_id}/comparisons")
     def compare_experiment_versions(
         experiment_id: str, request: ComparisonRequest
-    ) -> dict[str, object]:
-        experiment = store.load_experiment(experiment_id)
+    ) -> CompareMatrixResponse:
+        store.load_experiment(experiment_id)
         baseline_version = request.baseline_version
         candidate_version = request.candidate_version
-        dry_run = request.dry_run
         baseline_version_dir = store.version_dir(experiment_id, baseline_version)
         candidate_version_dir = store.version_dir(experiment_id, candidate_version)
 
-        baseline_cases = store.load_cases(experiment_id)
-        candidate_cases = baseline_cases
-        if not baseline_cases:
-            raise HTTPException(status_code=400, detail="Experiment has no cases")
-        for case in baseline_cases:
-            _validate_case_id_path_segment(case.id)
-        shared_case_ids = {case.id for case in baseline_cases}
+        baseline_validation_dir = _select_latest_validation_dir(baseline_version_dir)
+        candidate_validation_dir = _select_latest_validation_dir(candidate_version_dir)
+        if baseline_validation_dir is None or candidate_validation_dir is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Compare requires completed validation batches for both versions. "
+                    "Run validation before comparing."
+                ),
+            )
 
-        repeat_count = experiment.run_defaults.repeat_count
-        baseline_run_batch_id, baseline_run_artifacts = _load_latest_validated_run_batch(
-            version_dir=baseline_version_dir,
-            version=baseline_version,
-            cases=shared_case_ids,
-            repeat_count=repeat_count,
+        baseline_validation_batch = ValidationBatchArtifact.model_validate(
+            _read_json(baseline_validation_dir / "batch.json")
         )
-        candidate_run_batch_id, candidate_run_artifacts = _load_latest_validated_run_batch(
-            version_dir=candidate_version_dir,
-            version=candidate_version,
-            cases=shared_case_ids,
-            repeat_count=repeat_count,
+        candidate_validation_batch = ValidationBatchArtifact.model_validate(
+            _read_json(candidate_validation_dir / "batch.json")
         )
-
-        experiment_dir = store.experiment_dir(experiment_id)
-        rubric_path = experiment_dir / "rubric.md"
-        rubric = _read_optional_text(rubric_path)
-        baseline_prompt_template = store.read_text(
-            experiment_id, baseline_version, experiment.template.path
+        baseline_validator_snapshots = _read_validation_snapshots(
+            baseline_validation_dir
         )
-        candidate_prompt_template = store.read_text(
-            experiment_id, candidate_version, experiment.template.path
+        candidate_validator_snapshots = _read_validation_snapshots(
+            candidate_validation_dir
+        )
+        baseline_validation_results = store.load_validation_results(
+            experiment_id,
+            baseline_version,
+            baseline_validation_batch.validation_batch_id,
+        )
+        candidate_validation_results = store.load_validation_results(
+            experiment_id,
+            candidate_version,
+            candidate_validation_batch.validation_batch_id,
         )
         job_id = start_workflow_job(
             kind="compare", experiment_id=experiment_id, version=candidate_version
@@ -1838,76 +1748,44 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         job_manager.update(
             job_id,
             completed_units=0,
-            message="Comparing versions",
+            message="Building compare matrix",
         )
         comparison_dir: Path | None = None
         try:
             comparison_id, comparison_dir = _next_comparison_location(
                 candidate_version_dir
             )
-            comparison_prompt = build_comparison_prompt(
+            matrix = build_compare_matrix(
                 experiment_id=experiment_id,
-                baseline_version=baseline_version,
-                candidate_version=candidate_version,
-                rubric=rubric,
-                baseline_prompt_template=baseline_prompt_template,
-                candidate_prompt_template=candidate_prompt_template,
-                baseline_run_batch_ids=[baseline_run_batch_id],
-                candidate_run_batch_ids=[candidate_run_batch_id],
-                baseline_cases=baseline_cases,
-                candidate_cases=candidate_cases,
-                baseline_run_artifacts=baseline_run_artifacts,
-                candidate_run_artifacts=candidate_run_artifacts,
-                comparison_id=comparison_id,
+                versions=[baseline_version, candidate_version],
+                validator_snapshots_by_version={
+                    baseline_version: [
+                        validator.model_dump(mode="json")
+                        for validator in baseline_validator_snapshots
+                    ],
+                    candidate_version: [
+                        validator.model_dump(mode="json")
+                        for validator in candidate_validator_snapshots
+                    ],
+                },
+                results_by_version={
+                    baseline_version: baseline_validation_results,
+                    candidate_version: candidate_validation_results,
+                },
             )
-            if dry_run:
-                generated = llm_client.generate_structured_from_fake_response(
-                    experiment.models.judge_model,
-                    comparison_prompt,
-                    ComparisonArtifact,
-                    None,
-                    dry_comparison_response_json(
-                        comparison_id=comparison_id,
-                        baseline_version=baseline_version,
-                        candidate_version=candidate_version,
-                        baseline_run_batch_id=baseline_run_batch_id,
-                        candidate_run_batch_id=candidate_run_batch_id,
-                        judge_model=experiment.models.judge_model,
-                    ),
-                )
-            else:
-                generated = generate_structured_for_workflow(
-                    job_id,
-                    experiment.models.judge_model,
-                    comparison_prompt,
-                    ComparisonArtifact,
-                    None,
-                )
             raise_if_workflow_job_cancelled(job_id)
-            output = generated.output
-            comparison = (
-                output
-                if isinstance(output, ComparisonArtifact)
-                else ComparisonArtifact.model_validate(output)
-            )
-            _validate_comparison_metadata(
-                comparison=comparison,
-                comparison_id=comparison_id,
-                baseline_version=baseline_version,
-                candidate_version=candidate_version,
-                baseline_run_batch_id=baseline_run_batch_id,
-                candidate_run_batch_id=candidate_run_batch_id,
-                judge_model=experiment.models.judge_model,
-            )
-
             _write_json(
-                comparison_dir / "comparison.json", comparison.model_dump(mode="json")
-            )
-            (comparison_dir / "comparison.md").write_text(
-                _render_comparison_markdown(comparison), encoding="utf-8"
-            )
-            (comparison_dir / "rubric_snapshot.md").write_text(
-                rubric, encoding="utf-8"
+                comparison_dir / "compare_matrix.json",
+                {
+                    "comparison_id": comparison_id,
+                    "baseline_validation_batch_id": (
+                        baseline_validation_batch.validation_batch_id
+                    ),
+                    "candidate_validation_batch_id": (
+                        candidate_validation_batch.validation_batch_id
+                    ),
+                    "matrix": matrix.model_dump(mode="json"),
+                },
             )
             complete_workflow_job(job_id, "Comparison completed")
         except llm_client.PromptLabLlmCancelled as exc:
@@ -1921,12 +1799,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 _cleanup_reserved_comparison_dir(comparison_dir)
             fail_workflow_job_if_running(job_id, str(exc) or type(exc).__name__)
             raise
-        return {
-            "comparison_id": comparison_id,
-            "baseline_run_batch_id": baseline_run_batch_id,
-            "candidate_run_batch_id": candidate_run_batch_id,
-            "comparison": comparison.model_dump(mode="json"),
-        }
+        return matrix
 
     @app.put(
         "/api/experiments/{experiment_id}/versions/{version}/reviews/{review_id}/decisions"
