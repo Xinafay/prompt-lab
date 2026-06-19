@@ -672,6 +672,64 @@ def _build_validation_evidence(
     return evidence
 
 
+def _validate_validation_results_for_judge(
+    *,
+    validation_batch: ValidationBatchArtifact,
+    validation_results: list[ValidationResultArtifact],
+    validator_snapshots: list[ValidatorDefinition],
+    run_artifacts: list[RunArtifact],
+) -> None:
+    validator_ids = {validator.validator_id for validator in validator_snapshots}
+    run_lookup = {
+        (run.case_id, run.repeat_index): run.run_id
+        for run in run_artifacts
+    }
+    for result in validation_results:
+        if result.validation_batch_id != validation_batch.validation_batch_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} has "
+                    f"validation_batch_id {result.validation_batch_id}, expected "
+                    f"{validation_batch.validation_batch_id}"
+                ),
+            )
+        if result.run_batch_id != validation_batch.run_batch_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} has "
+                    f"run_batch_id {result.run_batch_id}, expected "
+                    f"{validation_batch.run_batch_id}"
+                ),
+            )
+        if result.validator_id not in validator_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} uses unknown "
+                    f"validator_id {result.validator_id}"
+                ),
+            )
+        expected_run_id = run_lookup.get((result.case_id, result.repeat_index))
+        if expected_run_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} references "
+                    f"unknown run case {result.case_id} repeat {result.repeat_index}"
+                ),
+            )
+        if result.run_id != expected_run_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} has run_id "
+                    f"{result.run_id}, expected {expected_run_id}"
+                ),
+            )
+
+
 def _run_errors_from_artifacts(
     run_artifacts: list[RunArtifact],
 ) -> list[dict[str, object]]:
@@ -1560,10 +1618,6 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 validation_batch.validation_batch_id,
             )
             validator_snapshots = _read_validation_snapshots(validation_dir)
-            validation_evidence = _build_validation_evidence(
-                results=validation_results,
-                validators=validator_snapshots,
-            )
             prompt_template = store.read_text(
                 experiment_id, version, experiment.template.path
             )
@@ -1597,6 +1651,16 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 version=version,
                 case_ids=case_ids,
                 repeat_count=experiment.run_defaults.repeat_count,
+            )
+            _validate_validation_results_for_judge(
+                validation_batch=validation_batch,
+                validation_results=validation_results,
+                validator_snapshots=validator_snapshots,
+                run_artifacts=run_artifacts,
+            )
+            validation_evidence = _build_validation_evidence(
+                results=validation_results,
+                validators=validator_snapshots,
             )
 
             model_source = None

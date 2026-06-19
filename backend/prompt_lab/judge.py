@@ -35,7 +35,6 @@ def build_judge_prompt(
                     {
                         "version": version,
                         "run_batch_ids": [run_batch_id],
-                        "validation_batch_id": validation_batch_id,
                         "judge_model": judge_model,
                     }
                 ),

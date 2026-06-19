@@ -499,8 +499,32 @@ def test_build_judge_prompt_uses_validation_evidence_without_raw_outputs_or_rubr
     assert '"version": "v001"' in prompt
     assert '"run_batch_ids": [' in prompt
     assert '"batch-001"' in prompt
-    assert '"validation_batch_id": "validation-001"' in prompt
     assert '"judge_model": "openai/judge"' in prompt
+
+
+def test_build_judge_prompt_keeps_validation_batch_out_of_judgment_metadata() -> None:
+    prompt = build_judge_prompt(
+        experiment_id="demo",
+        version="v001",
+        run_batch_id="batch-001",
+        validation_batch_id="validation-001",
+        judge_model="openai/judge",
+        output_declaration="text output",
+        prompt_template="Say {{ value }}",
+        model_source=None,
+        validation_evidence=[],
+        run_errors=[],
+    )
+
+    judgment_metadata = prompt.split("<<<JUDGMENT_METADATA_JSON", 1)[1].split(
+        "JUDGMENT_METADATA_JSON>>>", 1
+    )[0]
+    validation_metadata = prompt.split("<<<VALIDATION_METADATA_JSON", 1)[1].split(
+        "VALIDATION_METADATA_JSON>>>", 1
+    )[0]
+
+    assert '"validation_batch_id"' not in judgment_metadata
+    assert '"validation_batch_id": "validation-001"' in validation_metadata
 
 
 def test_judge_prompt_template_file_is_used() -> None:
@@ -738,6 +762,79 @@ def test_api_includes_validation_result_execution_errors_in_judge_evidence() -> 
                     "execution_error": "validator crashed",
                 }
             ]
+    finally:
+        llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
+
+
+def test_api_rejects_contaminated_validation_result_before_judging() -> None:
+    calls: list[str] = []
+
+    def fake_generate_structured(
+        model: str,
+        prompt: str,
+        response_model: Any,
+        validation_context: dict[str, Any] | None,
+    ) -> FakeGeneratedStructured:
+        del model, response_model, validation_context
+        calls.append(prompt)
+        return FakeGeneratedStructured(
+            JudgmentArtifact.model_validate(
+                valid_judgment_payload(
+                    run_batch_ids=["batch-001"], judge_model="openai/judge"
+                )
+            )
+        )
+
+    original_generate_structured = llm_client.generate_structured
+    llm_client.generate_structured = fake_generate_structured  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            version_dir = write_demo_experiment(root)
+            write_run_batch(version_dir, "batch-001")
+            write_json(
+                version_dir
+                / "validations"
+                / "validation-batch-001"
+                / "case-a"
+                / "repeat-001"
+                / "contaminated.json",
+                {
+                    "schema_version": "prompt_lab.validation_result/v1",
+                    "validation_result_id": "contaminated-result",
+                    "validation_batch_id": "other-validation",
+                    "run_batch_id": "batch-001",
+                    "run_id": "batch-001-case-a-repeat-001",
+                    "case_id": "case-a",
+                    "repeat_index": 1,
+                    "validator_id": "quality",
+                    "validator_type": "llm_questionnaire",
+                    "status": "ok",
+                    "included_in_judge": True,
+                    "check_results": [
+                        {
+                            "check_id": "complete",
+                            "verdict": "no",
+                            "comment": "CONTAMINATED EVIDENCE",
+                            "included_in_judge": True,
+                            "metrics": {},
+                        }
+                    ],
+                    "usage": {},
+                    "execution_error": None,
+                },
+            )
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+
+            response = TestClient(app, raise_server_exceptions=False).post(
+                "/api/experiments/demo/versions/v001/judgments"
+            )
+
+            assert response.status_code == 400
+            assert "Validation result contaminated-result" in response.json()["detail"]
+            assert "validation_batch_id" in response.json()["detail"]
+            assert calls == []
+            assert not (runtime_version_dir(root) / "reviews").exists()
     finally:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
@@ -1286,9 +1383,11 @@ def main() -> int:
         test_nested_artifacts_reject_extra_fields,
         test_decisions_default_to_accepted,
         test_build_judge_prompt_uses_validation_evidence_without_raw_outputs_or_rubric,
+        test_build_judge_prompt_keeps_validation_batch_out_of_judgment_metadata,
         test_judge_prompt_template_file_is_used,
         test_api_creates_judgment_and_default_accepted_decisions,
         test_api_includes_validation_result_execution_errors_in_judge_evidence,
+        test_api_rejects_contaminated_validation_result_before_judging,
         test_api_creates_dry_run_judgment_without_live_llm,
         test_api_rejects_judgment_without_completed_validation_batch,
         test_api_judgment_replaces_existing_reviews_and_proposals,
