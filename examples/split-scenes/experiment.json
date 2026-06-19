@@ -15,6 +15,7 @@
   },
   "models": {
     "generator_model": "local/gpt-oss-120b",
+    "validator_model": "openai/example-large-model",
     "judge_model": "openai/example-large-model"
   },
   "run_defaults": {

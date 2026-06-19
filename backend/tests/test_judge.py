@@ -18,6 +18,7 @@ from prompt_lab.config import PromptLabConfig
 from prompt_lab.judge import build_judge_prompt
 from prompt_lab.models.artifacts import CaseArtifact, RunArtifact
 from prompt_lab.models.judgments import FindingDecisionSet, JudgmentArtifact
+from prompt_lab.settings import PromptLabSettings, save_settings
 
 
 def assert_validation_error(
@@ -121,6 +122,15 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 def write_demo_experiment(
     root: Path, *, repeat_count: int = 2, case_ids: list[str] | None = None
 ) -> Path:
+    save_settings(
+        root / "config" / "settings.json",
+        PromptLabSettings(
+            default_generator_model="local/a",
+            default_validator_model="openai/judge",
+            default_judge_model="openai/judge",
+            default_repeat_count=repeat_count,
+        ),
+    )
     case_ids = case_ids or ["case-a"]
     example = root / "examples" / "demo"
     version_dir = example / "versions" / "v001"
@@ -141,7 +151,7 @@ def write_demo_experiment(
                 "model_entrypoint": "model.DemoOutput",
             },
             "template": {"engine": "jinjax", "path": "prompt.md"},
-            "models": {"generator_model": "local/a", "judge_model": "openai/judge"},
+            "models": {"generator_model": "local/a", "validator_model": "openai/judge", "judge_model": "openai/judge"},
             "run_defaults": {
                 "repeat_count": repeat_count,
                 "llm_cache": "disabled",

@@ -27,7 +27,7 @@ def write_demo_review(root: Path, *, finding_ids: list[str] | None = None) -> Pa
             "active_version": "v001",
             "output": {"type": "text"},
             "template": {"engine": "jinja2", "path": "prompt.md"},
-            "models": {"generator_model": "local/a", "judge_model": "openai/judge"},
+            "models": {"generator_model": "local/a", "validator_model": "openai/judge", "judge_model": "openai/judge"},
             "run_defaults": {
                 "repeat_count": 1,
                 "llm_cache": "disabled",

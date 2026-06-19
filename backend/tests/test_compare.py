@@ -16,6 +16,7 @@ from prompt_lab.compare import build_comparison_prompt
 from prompt_lab.config import PromptLabConfig
 from prompt_lab.models.artifacts import CaseArtifact, RunArtifact
 from prompt_lab.models.judgments import ComparisonArtifact
+from prompt_lab.settings import PromptLabSettings, save_settings
 
 
 def assert_validation_error(
@@ -113,6 +114,15 @@ def valid_case_payload(
 
 
 def write_demo_experiment(root: Path, *, repeat_count: int = 2) -> tuple[Path, Path]:
+    save_settings(
+        root / "config" / "settings.json",
+        PromptLabSettings(
+            default_generator_model="local/a",
+            default_validator_model="openai/judge",
+            default_judge_model="openai/judge",
+            default_repeat_count=repeat_count,
+        ),
+    )
     example = root / "examples" / "demo"
     baseline_dir = example / "versions" / "v001"
     candidate_dir = example / "versions" / "v002"
@@ -142,7 +152,7 @@ def write_demo_experiment(root: Path, *, repeat_count: int = 2) -> tuple[Path, P
                 "model_entrypoint": "model.DemoOutput",
             },
             "template": {"engine": "jinjax", "path": "prompt.md"},
-            "models": {"generator_model": "local/a", "judge_model": "openai/judge"},
+            "models": {"generator_model": "local/a", "validator_model": "openai/judge", "judge_model": "openai/judge"},
             "run_defaults": {
                 "repeat_count": repeat_count,
                 "llm_cache": "disabled",

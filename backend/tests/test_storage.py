@@ -16,7 +16,7 @@ def test_store_does_not_list_examples_directly() -> None:
         version = example / "versions" / "v001"
         version.mkdir(parents=True)
         (example / "experiment.json").write_text(
-            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
+            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
             encoding="utf-8",
         )
 
@@ -41,7 +41,7 @@ def test_store_ignores_old_runtime_experiment_directories() -> None:
                 "active_version": "v001",
                 "output": {"type": "text"},
                 "template": {"engine": "jinja2", "path": "prompt.md"},
-                "models": {"generator_model": "local/a", "judge_model": "openai/b"},
+                "models": {"generator_model": "local/a", "validator_model": "openai/b", "judge_model": "openai/b"},
                 "run_defaults": {
                     "repeat_count": 3,
                     "llm_cache": "disabled",
@@ -67,7 +67,7 @@ def test_store_loads_cases_for_experiment() -> None:
         cases = experiment / "cases"
         cases.mkdir(parents=True)
         (experiment / "experiment.json").write_text(
-            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
+            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
             encoding="utf-8",
         )
         (cases / "case-a.json").write_text(
@@ -89,7 +89,7 @@ def test_store_rejects_read_path_escape() -> None:
         version = experiment / "versions" / "v001"
         version.mkdir(parents=True)
         (experiment / "experiment.json").write_text(
-            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
+            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
             encoding="utf-8",
         )
         (experiment / "secret.txt").write_text("secret", encoding="utf-8")
@@ -111,7 +111,7 @@ def test_store_rejects_write_path_escape() -> None:
         version = experiment / "versions" / "v001"
         version.mkdir(parents=True)
         (experiment / "experiment.json").write_text(
-            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
+            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
             encoding="utf-8",
         )
 
@@ -132,7 +132,7 @@ def test_store_rejects_experiment_id_path_escape() -> None:
         experiment = root / "experiments" / "demo"
         (experiment / "versions" / "v001").mkdir(parents=True)
         (experiment / "experiment.json").write_text(
-            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
+            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
             encoding="utf-8",
         )
 
@@ -154,7 +154,7 @@ def test_store_rejects_version_path_escape_for_read() -> None:
         version = experiment / "versions" / "v001"
         version.mkdir(parents=True)
         (experiment / "experiment.json").write_text(
-            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
+            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
             encoding="utf-8",
         )
         (experiment / "secret.txt").write_text("secret", encoding="utf-8")
@@ -176,7 +176,7 @@ def test_store_rejects_version_path_escape_for_write() -> None:
         version = experiment / "versions" / "v001"
         version.mkdir(parents=True)
         (experiment / "experiment.json").write_text(
-            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
+            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
             encoding="utf-8",
         )
 
@@ -198,7 +198,7 @@ def test_store_writes_nested_run_artifact() -> None:
         version = experiment / "versions" / "v001"
         version.mkdir(parents=True)
         (experiment / "experiment.json").write_text(
-            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
+            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
             encoding="utf-8",
         )
 
@@ -223,11 +223,11 @@ def test_store_resolves_only_experiments_root() -> None:
         (example / "versions" / "v001").mkdir(parents=True)
         (experiment / "versions" / "v002").mkdir(parents=True)
         (example / "experiment.json").write_text(
-            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Example Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
+            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Example Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
             encoding="utf-8",
         )
         (experiment / "experiment.json").write_text(
-            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Editable Demo","description":"","active_version":"v002","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
+            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Editable Demo","description":"","active_version":"v002","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
             encoding="utf-8",
         )
 
@@ -256,6 +256,7 @@ def write_experiment_manifest(
                 "template": {"engine": "jinja2", "path": "prompt.md"},
                 "models": {
                     "generator_model": "local/a",
+                    "validator_model": "openai/b",
                     "judge_model": "openai/b",
                 },
                 "run_defaults": {
@@ -288,6 +289,7 @@ def test_store_saves_experiment_manifest_under_experiments_root() -> None:
         payload["description"] = "Edited from settings"
         payload["models"] = {
             "generator_model": "local/new",
+            "validator_model": "openai/new",
             "judge_model": "openai/new",
         }
         payload["run_defaults"] = {

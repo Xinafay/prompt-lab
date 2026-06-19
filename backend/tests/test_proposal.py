@@ -12,6 +12,7 @@ from prompt_lab import llm_client
 from prompt_lab.api import create_app
 from prompt_lab.config import PromptLabConfig
 from prompt_lab.proposal import ProposalDraft, build_proposal_prompt
+from prompt_lab.settings import PromptLabSettings, save_settings
 from test_judge import valid_case_payload, valid_judgment_payload, write_json
 
 
@@ -22,6 +23,15 @@ class FakeGeneratedStructured:
 
 
 def write_review_fixture(root: Path, *, output_type: str = "pydantic") -> Path:
+    save_settings(
+        root / "config" / "settings.json",
+        PromptLabSettings(
+            default_generator_model="local/a",
+            default_validator_model="openai/judge",
+            default_judge_model="openai/judge",
+            default_repeat_count=1,
+        ),
+    )
     example = root / "examples" / "demo"
     version_dir = example / "versions" / "v001"
     review_dir = version_dir / "reviews" / "review-001"
@@ -44,7 +54,7 @@ def write_review_fixture(root: Path, *, output_type: str = "pydantic") -> Path:
             "active_version": "v001",
             "output": output,
             "template": {"engine": "jinjax", "path": "prompt.md"},
-            "models": {"generator_model": "local/a", "judge_model": "openai/judge"},
+            "models": {"generator_model": "local/a", "validator_model": "openai/judge", "judge_model": "openai/judge"},
             "run_defaults": {
                 "repeat_count": 1,
                 "llm_cache": "disabled",

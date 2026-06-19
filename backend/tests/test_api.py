@@ -27,6 +27,7 @@ def demo_experiment_payload(
         "template": {"engine": "jinjax", "path": "prompt.md"},
         "models": {
             "generator_model": "local/a",
+            "validator_model": "openai/b",
             "judge_model": "openai/b",
         },
         "run_defaults": {
@@ -115,7 +116,7 @@ def test_api_lists_experiments() -> None:
         example = root / "examples" / "demo"
         (example / "versions" / "v001").mkdir(parents=True)
         (example / "experiment.json").write_text(
-            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
+            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
             encoding="utf-8",
         )
         app = create_app(PromptLabConfig.from_env(project_root=root))
@@ -134,6 +135,7 @@ def test_api_returns_global_settings() -> None:
             settings_path,
             PromptLabSettings(
                 default_generator_model="local/configured-generator",
+                default_validator_model="openai/configured-validator",
                 default_judge_model="openai/configured-judge",
                 default_repeat_count=6,
             ),
@@ -146,6 +148,7 @@ def test_api_returns_global_settings() -> None:
         assert response.json() == {
             "schema_version": "prompt_lab.settings/v1",
             "default_generator_model": "local/configured-generator",
+            "default_validator_model": "openai/configured-validator",
             "default_judge_model": "openai/configured-judge",
             "default_repeat_count": 6,
         }
@@ -158,6 +161,7 @@ def test_api_updates_global_settings() -> None:
         payload = {
             "schema_version": "prompt_lab.settings/v1",
             "default_generator_model": "local/new-generator",
+            "default_validator_model": "openai/new-validator",
             "default_judge_model": "openai/new-judge",
             "default_repeat_count": 4,
         }
@@ -182,6 +186,7 @@ def test_api_updates_experiment_manifest_under_experiments() -> None:
         payload["description"] = "Saved from Settings"
         payload["models"] = {
             "generator_model": "local/updated",
+            "validator_model": "openai/updated",
             "judge_model": "openai/updated",
         }
         payload["run_defaults"] = {
@@ -250,7 +255,7 @@ def test_api_seeds_examples_into_experiments_on_startup() -> None:
         version = example / "versions" / "v001"
         version.mkdir(parents=True)
         (example / "experiment.json").write_text(
-            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
+            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
             encoding="utf-8",
         )
         (version / "prompt.md").write_text("Hello {{ name }}", encoding="utf-8")
@@ -315,7 +320,7 @@ def test_api_gets_version_overview() -> None:
         (example / "cases").mkdir(parents=True)
         version_dir.mkdir(parents=True, exist_ok=True)
         (example / "experiment.json").write_text(
-            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"Demo experiment","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
+            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"Demo experiment","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
             encoding="utf-8",
         )
         (example / "rubric.md").write_text("Prefer concise answers.", encoding="utf-8")
@@ -372,7 +377,7 @@ def test_api_lists_latest_run_artifacts() -> None:
         run_dir = version_dir / "runs" / "run_version-000001" / "a"
         run_dir.mkdir(parents=True)
         (example / "experiment.json").write_text(
-            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
+            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
             encoding="utf-8",
         )
         (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
@@ -404,7 +409,7 @@ def test_api_lists_empty_runs_when_version_has_no_batches() -> None:
         version_dir = example / "versions" / "v001"
         version_dir.mkdir(parents=True)
         (example / "experiment.json").write_text(
-            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
+            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
             encoding="utf-8",
         )
         app = create_app(PromptLabConfig.from_env(project_root=root))
@@ -443,7 +448,7 @@ def test_api_starts_run_job() -> None:
             (example / "cases").mkdir(parents=True)
             version_dir.mkdir(parents=True, exist_ok=True)
             (example / "experiment.json").write_text(
-                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
+                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
                 encoding="utf-8",
             )
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
@@ -526,7 +531,7 @@ def test_api_reports_active_job_and_rejects_second_run() -> None:
             (example / "cases").mkdir(parents=True)
             version_dir.mkdir(parents=True, exist_ok=True)
             (example / "experiment.json").write_text(
-                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
+                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
                 encoding="utf-8",
             )
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
@@ -590,7 +595,7 @@ def test_api_starting_run_clears_existing_runtime_chain() -> None:
             (example / "cases").mkdir(parents=True)
             version_dir.mkdir(parents=True, exist_ok=True)
             (example / "experiment.json").write_text(
-                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
+                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
                 encoding="utf-8",
             )
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
@@ -642,7 +647,7 @@ def test_api_dry_run_text_version_avoids_live_llm() -> None:
             (example / "cases").mkdir(parents=True)
             version_dir.mkdir(parents=True, exist_ok=True)
             (example / "experiment.json").write_text(
-                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
+                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
                 encoding="utf-8",
             )
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
@@ -814,7 +819,7 @@ def test_api_rejects_empty_cases_without_calling_llm() -> None:
             (example / "cases").mkdir(parents=True)
             version_dir.mkdir(parents=True, exist_ok=True)
             (example / "experiment.json").write_text(
-                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
+                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
                 encoding="utf-8",
             )
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
@@ -852,7 +857,7 @@ def test_api_rejects_unsafe_case_id_without_calling_llm() -> None:
             (example / "cases").mkdir(parents=True)
             version_dir.mkdir(parents=True, exist_ok=True)
             (example / "experiment.json").write_text(
-                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
+                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
                 encoding="utf-8",
             )
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
