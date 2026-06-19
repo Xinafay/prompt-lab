@@ -115,13 +115,13 @@ export function getCompareActionLabel({
 
 export function getCompareActionState({
   hasComparison,
-  hasRuns,
+  hasValidation,
   isBusy,
   sameVersion,
   versionCount
 }: {
   hasComparison: boolean;
-  hasRuns: boolean;
+  hasValidation: boolean;
   isBusy: boolean;
   sameVersion: boolean;
   versionCount: number;
@@ -154,11 +154,11 @@ export function getCompareActionState({
       label
     };
   }
-  if (!hasRuns) {
+  if (!hasValidation) {
     return {
       disabled: true,
-      disabledReason: "Run both versions before comparing.",
-      emptyMessage: "No comparison report. Run both versions before comparing.",
+      disabledReason: "Validate both versions before comparing.",
+      emptyMessage: "No comparison report. Validate both versions before comparing.",
       note: null,
       label
     };

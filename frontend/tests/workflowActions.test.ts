@@ -148,7 +148,7 @@ test("compare action explains when only one version exists", () => {
   assert.deepEqual(
     getCompareActionState({
       hasComparison: false,
-      hasRuns: false,
+      hasValidation: false,
       isBusy: false,
       sameVersion: true,
       versionCount: 1
@@ -163,19 +163,19 @@ test("compare action explains when only one version exists", () => {
   );
 });
 
-test("compare action asks for runs before comparing different versions", () => {
+test("compare action asks for validation before comparing different versions", () => {
   assert.deepEqual(
     getCompareActionState({
       hasComparison: false,
-      hasRuns: false,
+      hasValidation: false,
       isBusy: false,
       sameVersion: false,
       versionCount: 2
     }),
     {
       disabled: true,
-      disabledReason: "Run both versions before comparing.",
-      emptyMessage: "No comparison report. Run both versions before comparing.",
+      disabledReason: "Validate both versions before comparing.",
+      emptyMessage: "No comparison report. Validate both versions before comparing.",
       note: null,
       label: "Compare versions"
     }
@@ -186,7 +186,7 @@ test("compare action invites comparison when prerequisites are ready", () => {
   assert.deepEqual(
     getCompareActionState({
       hasComparison: false,
-      hasRuns: true,
+      hasValidation: true,
       isBusy: false,
       sameVersion: false,
       versionCount: 2

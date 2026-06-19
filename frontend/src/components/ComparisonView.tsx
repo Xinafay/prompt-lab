@@ -7,7 +7,7 @@ interface ComparisonViewProps {
   baselineVersion: string;
   candidateVersion: string;
   comparison: ComparisonArtifact | null;
-  hasRuns: boolean;
+  hasValidation: boolean;
   isBusy: boolean;
   onBaselineVersionChange: (version: string) => void;
   onCandidateVersionChange: (version: string) => void;
@@ -36,7 +36,7 @@ export function ComparisonView({
   baselineVersion,
   candidateVersion,
   comparison,
-  hasRuns,
+  hasValidation,
   isBusy,
   onBaselineVersionChange,
   onCandidateVersionChange,
@@ -45,7 +45,7 @@ export function ComparisonView({
   const sameVersion = baselineVersion === candidateVersion;
   const compareAction = getCompareActionState({
     hasComparison: comparison !== null,
-    hasRuns,
+    hasValidation,
     isBusy,
     sameVersion,
     versionCount: knownVersions.length

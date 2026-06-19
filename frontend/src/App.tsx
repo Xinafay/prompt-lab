@@ -11,6 +11,7 @@ import {
   getGlobalSettings,
   getJob,
   getLatestReviewState,
+  getLatestValidationState,
   getReviewProposal,
   getReviewState,
   getVersionOverview,
@@ -45,6 +46,7 @@ import type {
   ProposalResponse,
   ReviewState,
   RunsResponse,
+  ValidationState,
   VersionOverview,
   VersionSummary,
   WorkflowMode
@@ -98,10 +100,15 @@ const SHOW_DRY_RUN_CONTROLS =
 
 function workflowCompletionMessage(kind: string): string {
   if (kind === "run_version") return "Active run completed.";
+  if (kind === "validation") return "Validation loaded.";
   if (kind === "judge") return "Active review loaded.";
   if (kind === "proposal") return "Proposal generated.";
   if (kind === "compare") return "Comparison loaded.";
   return "Workflow action completed.";
+}
+
+function hasCompletedValidation(state: ValidationState | null): boolean {
+  return state?.validation_batch.status === "completed";
 }
 
 function App() {
@@ -117,6 +124,12 @@ function App() {
   const [globalSettingsState, setGlobalSettingsState] =
     useState<GlobalSettingsState>({ status: "loading" });
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
+  const [validationState, setValidationState] = useState<ValidationState | null>(
+    null
+  );
+  const [compareValidationByVersion, setCompareValidationByVersion] = useState<
+    Record<string, boolean>
+  >({});
   const [reviewState, setReviewState] = useState<ReviewState | null>(null);
   const [proposalResponse, setProposalResponse] =
     useState<ProposalResponse | null>(null);
@@ -206,6 +219,8 @@ function App() {
     runRequestIdRef.current += 1;
     workflowRequestIdRef.current += 1;
     setSelectedExperiment(experiment);
+    setValidationState(null);
+    setCompareValidationByVersion({});
     setReviewState(null);
     setProposalResponse(null);
     setCreatedVersion(null);
@@ -247,6 +262,8 @@ function App() {
     setSelectedExperiment(null);
     setDetailState({ status: "idle" });
     setJobStatus(null);
+    setValidationState(null);
+    setCompareValidationByVersion({});
     setReviewState(null);
     setProposalResponse(null);
     setCreatedVersion(null);
@@ -428,9 +445,10 @@ function App() {
     if (!isSelectionCurrent(selectionKey)) {
       return;
     }
-    const [overview, runs, latestReview] = await Promise.all([
+    const [overview, runs, latestValidation, latestReview] = await Promise.all([
       getVersionOverview(job.experiment_id, job.version),
       getVersionRuns(job.experiment_id, job.version),
+      getLatestValidationState(job.experiment_id, job.version),
       getLatestReviewState(job.experiment_id, job.version)
     ]);
     const latestProposal =
@@ -445,11 +463,20 @@ function App() {
       return;
     }
     setDetailState({ status: "loaded", overview, runs });
+    setValidationState(latestValidation);
+    setCompareValidationByVersion((current) => ({
+      ...current,
+      [job.version]: hasCompletedValidation(latestValidation)
+    }));
     setReviewState(latestReview);
     setProposalResponse(latestProposal);
     setDecisionsDirty(false);
     setHumanNotesDirty(false);
-    if (job.kind === "run_version" || job.kind === "judge") {
+    if (
+      job.kind === "run_version" ||
+      job.kind === "validation" ||
+      job.kind === "judge"
+    ) {
       setCreatedVersion(null);
       setComparison(null);
     }
@@ -644,18 +671,21 @@ function App() {
   useEffect(() => {
     if (selectedExperiment === null) {
       setDetailState({ status: "idle" });
+      setValidationState(null);
       return;
     }
 
     let cancelled = false;
     setDetailState({ status: "loading" });
     setJobStatus(null);
+    setValidationState(null);
 
     async function loadDetails(experiment: Experiment) {
       try {
-        const [overview, runs, latestReview] = await Promise.all([
+        const [overview, runs, latestValidation, latestReview] = await Promise.all([
           getVersionOverview(experiment.id, experiment.active_version),
           getVersionRuns(experiment.id, experiment.active_version),
+          getLatestValidationState(experiment.id, experiment.active_version),
           getLatestReviewState(experiment.id, experiment.active_version)
         ]);
         const latestProposal =
@@ -668,6 +698,7 @@ function App() {
               );
         if (!cancelled) {
           setDetailState({ status: "loaded", overview, runs });
+          setValidationState(latestValidation);
           setReviewState(latestReview);
           setProposalResponse(latestProposal);
           setDecisionsDirty(false);
@@ -719,6 +750,47 @@ function App() {
       cancelled = true;
     };
   }, [selectedExperiment]);
+
+  useEffect(() => {
+    if (selectedExperiment === null) {
+      setCompareValidationByVersion({});
+      return;
+    }
+
+    let cancelled = false;
+    const experimentId = selectedExperiment.id;
+    const versions = [...new Set([baselineVersion, candidateVersion])];
+    setCompareValidationByVersion({});
+
+    async function loadCompareValidationState() {
+      try {
+        const entries = await Promise.all(
+          versions.map(async (version) => {
+            const state = await getLatestValidationState(experimentId, version);
+            return [version, hasCompletedValidation(state)] as const;
+          })
+        );
+        if (!cancelled) {
+          setCompareValidationByVersion(Object.fromEntries(entries));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setCompareValidationByVersion({});
+          setWorkflowMessage(
+            error instanceof Error
+              ? error.message
+              : "Could not load validation state for comparison."
+          );
+        }
+      }
+    }
+
+    void loadCompareValidationState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [baselineVersion, candidateVersion, selectedExperiment]);
 
   useEffect(() => {
     if (selectedExperiment === null) {
@@ -797,6 +869,8 @@ function App() {
         return;
       }
       setJobStatus(job);
+      setValidationState(null);
+      setCompareValidationByVersion({});
       setReviewState(null);
       setProposalResponse(null);
       setCreatedVersion(null);
@@ -1146,8 +1220,8 @@ function App() {
       );
       return;
     }
-    if (!hasRuns) {
-      setWorkflowMessage("Run both versions before comparing.");
+    if (!hasComparedValidation) {
+      setWorkflowMessage("Validate both versions before comparing.");
       return;
     }
     const dryRun = workflowMode === "dry-run";
@@ -1202,16 +1276,19 @@ function App() {
   }
 
   async function refreshExperimentsAfterSettingsSave(savedExperiment: Experiment) {
-    const [experiments, overview, runs, versions] = await Promise.all([
+    const [experiments, overview, runs, latestValidation, versions] = await Promise.all([
       apiGet<Experiment[]>("/api/experiments"),
       getVersionOverview(savedExperiment.id, savedExperiment.active_version),
       getVersionRuns(savedExperiment.id, savedExperiment.active_version),
+      getLatestValidationState(savedExperiment.id, savedExperiment.active_version),
       getExperimentVersions(savedExperiment.id)
     ]);
     setState({ status: "loaded", experiments });
     setSelectedExperiment(savedExperiment);
     selectedKeyRef.current = `${savedExperiment.id}:${savedExperiment.active_version}`;
     setDetailState({ status: "loaded", overview, runs });
+    setValidationState(latestValidation);
+    setCompareValidationByVersion({});
     setVersionSummaries(versions.versions);
     setCandidateVersion(savedExperiment.active_version);
     candidateVersionRef.current = savedExperiment.active_version;
@@ -1282,6 +1359,8 @@ function App() {
     }
     setWorkflowBusy(true);
     setWorkflowMessage(`Switching to ${version}...`);
+    setValidationState(null);
+    setCompareValidationByVersion({});
     setReviewState(null);
     setProposalResponse(null);
     setCreatedVersion(null);
@@ -1331,15 +1410,21 @@ function App() {
   }, [createdVersion, selectedExperiment, versionSummaries]);
 
   const hasRuns = detailState.status === "loaded" && detailState.runs.runs.length > 0;
+  const hasValidation = hasCompletedValidation(validationState);
+  const hasComparedValidation =
+    baselineVersion !== candidateVersion &&
+    Boolean(compareValidationByVersion[baselineVersion]) &&
+    Boolean(compareValidationByVersion[candidateVersion]);
   const workflowLocked = workflowBusy || jobStatus?.status === "running";
   const judgeAction = getJudgeActionState({
     hasReview: reviewState !== null,
     hasRuns,
+    hasValidation,
     isBusy: workflowLocked
   });
   const compareAction = getCompareActionState({
     hasComparison: comparison !== null,
-    hasRuns,
+    hasValidation: hasComparedValidation,
     isBusy: workflowLocked,
     sameVersion: baselineVersion === candidateVersion,
     versionCount: knownVersions.length
@@ -1601,7 +1686,7 @@ function App() {
                         baselineVersion={baselineVersion}
                         candidateVersion={candidateVersion}
                         comparison={comparison}
-                        hasRuns={hasRuns}
+                        hasValidation={hasComparedValidation}
                         isBusy={workflowLocked}
                         knownVersions={knownVersions}
                         onBaselineVersionChange={handleBaselineVersionChange}
