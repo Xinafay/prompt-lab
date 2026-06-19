@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
-import random
 import time
 from typing import Any, Protocol, runtime_checkable
 
@@ -16,6 +14,7 @@ from shared.llm.embeddings_result import EmbeddingsResponse
 from shared.llm.embeddings_transport import execute_prepared_embeddings_request
 from shared.llm.llm_cache import SqliteLlmCache, get_llm_cache
 from shared.llm.transports.usage import _flatten_usage_details, _usage_tokens
+from shared.llm.transport_retry import run_with_transport_retry, transport_retries_from_env
 
 
 _LOGGER = logging.getLogger("shared.llm_client")
@@ -90,33 +89,17 @@ class CachedEmbeddingsClient:
         return self._inner.embed_prepared(prepared)
 
 
-def _is_retryable(exc: Exception) -> bool:
-    try:
-        import openai
-
-        return isinstance(exc, (openai.RateLimitError, openai.APIConnectionError, openai.APITimeoutError))
-    except ImportError:
-        return False
-
-
 class RetryingEmbeddingsClient:
     def __init__(self, inner: Any, *, max_retries: int = _DEFAULT_MAX_RETRIES) -> None:
         self._inner = inner
         self._max_retries = max_retries
 
     def _run_with_retry(self, fn: Any) -> EmbeddingsResponse:
-        delay = 1.0
-        for attempt in range(self._max_retries + 1):
-            try:
-                return fn()
-            except LlmRequestCancelled:
-                raise
-            except Exception as exc:
-                if not _is_retryable(exc) or attempt >= self._max_retries:
-                    raise
-                time.sleep(delay * random.uniform(0.8, 1.2))
-                delay *= 2
-        raise RuntimeError("unreachable")
+        return run_with_transport_retry(
+            fn,
+            max_retries=self._max_retries,
+            cancellation_error=LlmRequestCancelled,
+        )
 
     def embed(
         self,
@@ -182,7 +165,7 @@ class LoggingEmbeddingsClient:
 def default_embeddings_client() -> EmbeddingsClient:
     """Build the default embeddings client stack: Logging(Cached(Retrying(Default())))."""
 
-    transport_retries = int(os.getenv("LLM_TRANSPORT_RETRIES", "1"))
+    transport_retries = transport_retries_from_env()
     cache = get_llm_cache()
     client: Any = DefaultEmbeddingsClient()
     client = RetryingEmbeddingsClient(client, max_retries=transport_retries)
