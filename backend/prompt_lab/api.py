@@ -796,7 +796,19 @@ def _validate_validation_results_for_compare(
                     ),
                 )
         if result.status == "ok":
-            actual_check_ids = {check.check_id for check in result.check_results}
+            actual_check_ids_list = [check.check_id for check in result.check_results]
+            seen_check_ids: set[str] = set()
+            for check_id in actual_check_ids_list:
+                if check_id in seen_check_ids:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Validation result {result.validation_result_id} has "
+                            f"duplicate check_id {check_id}"
+                        ),
+                    )
+                seen_check_ids.add(check_id)
+            actual_check_ids = set(actual_check_ids_list)
             if actual_check_ids != check_ids:
                 raise HTTPException(
                     status_code=400,

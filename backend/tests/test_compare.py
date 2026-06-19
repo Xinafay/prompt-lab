@@ -1003,6 +1003,45 @@ def test_api_rejects_compare_validation_batch_id_mismatching_directory_name() ->
         assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
 
 
+def test_api_rejects_compare_ok_result_with_duplicate_check_ids() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        baseline_dir, candidate_dir = write_demo_experiment(root)
+        write_run_batch(baseline_dir, "baseline-run-001", version="v001")
+        write_run_batch(candidate_dir, "candidate-run-001", version="v002")
+        write_validation_batch(
+            baseline_dir,
+            validation_batch_id="validation-001",
+            run_batch_id="baseline-run-001",
+            version="v001",
+            verdict="yes",
+        )
+        write_validation_batch(
+            candidate_dir,
+            validation_batch_id="validation-002",
+            run_batch_id="candidate-run-001",
+            version="v002",
+            verdict="yes",
+        )
+        result_path = validation_result_path(
+            candidate_dir,
+            validation_batch_id="validation-002",
+        )
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+        result["check_results"].append(dict(result["check_results"][0]))
+        write_json(result_path, result)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/api/experiments/demo/comparisons",
+            json={"baseline_version": "v001", "candidate_version": "v002"},
+        )
+
+        assert response.status_code == 400
+        assert "duplicate check_id coverage" in response.json()["detail"]
+        assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
+
+
 def main() -> int:
     tests = [
         test_compare_matrix_marks_any_no_as_fail,
@@ -1023,6 +1062,7 @@ def main() -> int:
         test_api_rejects_compare_result_with_mismatched_run_id,
         test_api_rejects_compare_missing_expected_logical_result,
         test_api_rejects_compare_validation_batch_id_mismatching_directory_name,
+        test_api_rejects_compare_ok_result_with_duplicate_check_ids,
     ]
     for test in tests:
         test()
