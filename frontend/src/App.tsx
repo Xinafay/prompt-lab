@@ -1,0 +1,1454 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+
+import {
+  apiGet,
+  cancelJob,
+  compareVersions,
+  createProposalVersion,
+  generateProposal,
+  getActiveJob,
+  getExperimentVersions,
+  getJob,
+  getLatestReviewState,
+  getReviewProposal,
+  getReviewState,
+  getVersionOverview,
+  getVersionRuns,
+  judgeVersion,
+  jobEventsStreamUrl,
+  runVersion,
+  updateExperiment,
+  updateHumanNotes,
+  updateReviewDecisions
+} from "./api";
+import { CaseBrowser } from "./components/CaseBrowser";
+import { ComparisonView } from "./components/ComparisonView";
+import { ExperimentSettings } from "./components/ExperimentSettings";
+import { ExperimentsList } from "./components/ExperimentsList";
+import { ProposalView } from "./components/ProposalView";
+import { ReviewView } from "./components/ReviewView";
+import { RunsView } from "./components/RunsView";
+import { TooltipButton } from "./components/TooltipButton";
+import { WorkbenchTabs } from "./components/WorkbenchTabs";
+import { WorkflowToolbar } from "./components/WorkflowToolbar";
+import type {
+  ComparisonArtifact,
+  CreatedVersionResponse,
+  Experiment,
+  FindingDecisionValue,
+  JobEvent,
+  JobStatus,
+  ProposalResponse,
+  ReviewState,
+  RunsResponse,
+  VersionOverview,
+  VersionSummary,
+  WorkflowMode
+} from "./types";
+import {
+  buildExperimentPath,
+  parseExperimentRoute,
+  type WorkbenchTab
+} from "./urlState";
+import {
+  getCompareActionState,
+  getJudgeActionState,
+  getProposalActionLabel,
+  getRunActionLabel
+} from "./workflowActions";
+
+type LoadState =
+  | { status: "loading" }
+  | { status: "loaded"; experiments: Experiment[] }
+  | { status: "error"; message: string };
+
+type DetailState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "loaded"; overview: VersionOverview; runs: RunsResponse }
+  | { status: "error"; message: string };
+
+type HistoryMode = "push" | "replace";
+
+type PendingNavigation =
+  | { kind: "experiment"; experiment: Experiment | null }
+  | { kind: "route"; route: ReturnType<typeof currentExperimentRoute> }
+  | { kind: "tab"; tab: WorkbenchTab }
+  | { kind: "version"; version: string };
+
+function currentExperimentRoute() {
+  return parseExperimentRoute(new URL(window.location.href));
+}
+
+const SHOW_DRY_RUN_CONTROLS =
+  import.meta.env.VITE_PROMPT_LAB_SHOW_DRY_RUN === "1";
+
+function workflowCompletionMessage(kind: string): string {
+  if (kind === "run_version") return "Active run completed.";
+  if (kind === "judge") return "Active review loaded.";
+  if (kind === "proposal") return "Proposal generated.";
+  if (kind === "compare") return "Comparison loaded.";
+  return "Workflow action completed.";
+}
+
+function App() {
+  const [state, setState] = useState<LoadState>({ status: "loading" });
+  const [selectedExperiment, setSelectedExperiment] =
+    useState<Experiment | null>(null);
+  const [detailState, setDetailState] = useState<DetailState>({ status: "idle" });
+  const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
+  const [reviewState, setReviewState] = useState<ReviewState | null>(null);
+  const [proposalResponse, setProposalResponse] =
+    useState<ProposalResponse | null>(null);
+  const [createdVersion, setCreatedVersion] =
+    useState<CreatedVersionResponse | null>(null);
+  const [comparison, setComparison] = useState<ComparisonArtifact | null>(null);
+  const [versionSummaries, setVersionSummaries] = useState<VersionSummary[]>([]);
+  const [activeTab, setActiveTab] = useState<WorkbenchTab>(
+    () => currentExperimentRoute().tab
+  );
+  const [workflowMode, setWorkflowMode] = useState<WorkflowMode>("live");
+  const [baselineVersion, setBaselineVersion] = useState("v001");
+  const [candidateVersion, setCandidateVersion] = useState("v001");
+  const [workflowBusy, setWorkflowBusy] = useState(false);
+  const [workflowMessage, setWorkflowMessage] = useState<string | null>(null);
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
+  const [settingsDirty, setSettingsDirty] = useState(false);
+  const [settingsDraft, setSettingsDraft] = useState<Experiment | null>(null);
+  const [pendingNavigation, setPendingNavigation] =
+    useState<PendingNavigation | null>(null);
+  const [navigationError, setNavigationError] = useState<string | null>(null);
+  const [navigationSaving, setNavigationSaving] = useState(false);
+  const [decisionsDirty, setDecisionsDirty] = useState(false);
+  const [humanNotesDirty, setHumanNotesDirty] = useState(false);
+  const selectedKeyRef = useRef<string | null>(null);
+  const followedJobIdRef = useRef<string | null>(null);
+  const runRequestIdRef = useRef(0);
+  const workflowRequestIdRef = useRef(0);
+  const baselineVersionRef = useRef("v001");
+  const candidateVersionRef = useRef("v001");
+
+  function writeExperimentRoute(
+    experimentId: string,
+    tab: WorkbenchTab,
+    historyMode: HistoryMode
+  ) {
+    const url = new URL(window.location.href);
+    url.pathname = buildExperimentPath(experimentId, tab);
+    url.search = "";
+    const method = historyMode === "push" ? "pushState" : "replaceState";
+    window.history[method](window.history.state, "", url);
+  }
+
+  function activateTab(tab: WorkbenchTab, historyMode: HistoryMode = "replace") {
+    setActiveTab(tab);
+    if (selectedExperiment !== null) {
+      writeExperimentRoute(selectedExperiment.id, tab, historyMode);
+    }
+  }
+
+  function selectExperiment(
+    experiment: Experiment | null,
+    options?: {
+      historyMode?: HistoryMode;
+      tab?: WorkbenchTab;
+      updateUrl?: boolean;
+    }
+  ) {
+    const nextTab = options?.tab ?? activeTab;
+    selectedKeyRef.current =
+      experiment === null ? null : `${experiment.id}:${experiment.active_version}`;
+    runRequestIdRef.current += 1;
+    workflowRequestIdRef.current += 1;
+    setSelectedExperiment(experiment);
+    setReviewState(null);
+    setProposalResponse(null);
+    setCreatedVersion(null);
+    setComparison(null);
+    setVersionSummaries([]);
+    setWorkflowMessage(null);
+    setSettingsMessage(null);
+    setWorkflowBusy(false);
+    setSettingsBusy(false);
+    setSettingsDirty(false);
+    setSettingsDraft(null);
+    setPendingNavigation(null);
+    setNavigationError(null);
+    setNavigationSaving(false);
+    setDecisionsDirty(false);
+    setHumanNotesDirty(false);
+    setActiveTab(nextTab);
+    if (experiment !== null) {
+      if (options?.updateUrl !== false) {
+        writeExperimentRoute(
+          experiment.id,
+          nextTab,
+          options?.historyMode ?? "replace"
+        );
+      }
+      setCandidateVersion(experiment.active_version);
+      setBaselineVersion("v001");
+      candidateVersionRef.current = experiment.active_version;
+      baselineVersionRef.current = "v001";
+    }
+  }
+
+  function shouldBlockSettingsNavigation(): boolean {
+    return activeTab === "settings" && settingsDirty && !settingsBusy;
+  }
+
+  function experimentForRoute(route: ReturnType<typeof currentExperimentRoute>) {
+    if (state.status !== "loaded") {
+      return null;
+    }
+    if (route.experimentId === null) {
+      return state.experiments[0] ?? null;
+    }
+    return (
+      state.experiments.find((experiment) => experiment.id === route.experimentId) ??
+      state.experiments[0] ??
+      null
+    );
+  }
+
+  function performPendingNavigation(navigation: PendingNavigation) {
+    if (navigation.kind === "experiment") {
+      selectExperiment(navigation.experiment, { historyMode: "push" });
+      return;
+    }
+    if (navigation.kind === "route") {
+      selectExperiment(experimentForRoute(navigation.route), {
+        historyMode: "push",
+        tab: navigation.route.tab
+      });
+      return;
+    }
+    if (navigation.kind === "tab") {
+      activateTab(navigation.tab, "push");
+      return;
+    }
+    void performActiveVersionChange(navigation.version);
+  }
+
+  function requestExperimentSelection(experiment: Experiment | null) {
+    if (experiment?.id === selectedExperiment?.id) {
+      return;
+    }
+    if (shouldBlockSettingsNavigation()) {
+      setNavigationError(null);
+      setPendingNavigation({ kind: "experiment", experiment });
+      return;
+    }
+    selectExperiment(experiment, { historyMode: "push" });
+  }
+
+  function requestTabChange(tab: WorkbenchTab) {
+    if (tab === activeTab) {
+      return;
+    }
+    if (shouldBlockSettingsNavigation()) {
+      setNavigationError(null);
+      setPendingNavigation({ kind: "tab", tab });
+      return;
+    }
+    activateTab(tab, "push");
+  }
+
+  function handleStayOnSettings() {
+    setPendingNavigation(null);
+    setNavigationError(null);
+  }
+
+  function handleDiscardSettingsAndContinue() {
+    if (pendingNavigation === null) {
+      return;
+    }
+    const navigation = pendingNavigation;
+    setSettingsDirty(false);
+    setSettingsDraft(null);
+    setPendingNavigation(null);
+    setNavigationError(null);
+    performPendingNavigation(navigation);
+  }
+
+  async function handleSaveSettingsAndContinue() {
+    if (pendingNavigation === null || settingsDraft === null) {
+      return;
+    }
+    const navigation = pendingNavigation;
+    setNavigationSaving(true);
+    setNavigationError(null);
+    try {
+      await handleSaveExperimentSettings(settingsDraft);
+      setSettingsDirty(false);
+      setSettingsDraft(null);
+      setPendingNavigation(null);
+      performPendingNavigation(navigation);
+    } catch (error) {
+      setNavigationError(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setNavigationSaving(false);
+    }
+  }
+
+  function isSelectionCurrent(selectionKey: string): boolean {
+    return selectedKeyRef.current === selectionKey;
+  }
+
+  function beginWorkflow(selectionKey: string, message?: string): number {
+    const requestId = workflowRequestIdRef.current + 1;
+    workflowRequestIdRef.current = requestId;
+    setWorkflowBusy(true);
+    if (message !== undefined) {
+      setWorkflowMessage(message);
+    }
+    window.setTimeout(() => {
+      void syncActiveWorkflowJob("Workflow action running.");
+    }, 100);
+    return requestId;
+  }
+
+  function isWorkflowCurrent(requestId: number, selectionKey: string): boolean {
+    return (
+      workflowRequestIdRef.current === requestId && isSelectionCurrent(selectionKey)
+    );
+  }
+
+  async function refreshSelectedVersionArtifacts(job: JobStatus) {
+    const selectionKey = `${job.experiment_id}:${job.version}`;
+    if (!isSelectionCurrent(selectionKey)) {
+      return;
+    }
+    const [overview, runs, latestReview] = await Promise.all([
+      getVersionOverview(job.experiment_id, job.version),
+      getVersionRuns(job.experiment_id, job.version),
+      getLatestReviewState(job.experiment_id, job.version)
+    ]);
+    const latestProposal =
+      latestReview === null
+        ? null
+        : await getReviewProposal(
+            job.experiment_id,
+            job.version,
+            latestReview.review_id
+          );
+    if (!isSelectionCurrent(selectionKey)) {
+      return;
+    }
+    setDetailState({ status: "loaded", overview, runs });
+    setReviewState(latestReview);
+    setProposalResponse(latestProposal);
+    setDecisionsDirty(false);
+    setHumanNotesDirty(false);
+    if (job.kind === "run_version" || job.kind === "judge") {
+      setCreatedVersion(null);
+      setComparison(null);
+    }
+  }
+
+  async function followWorkflowJob(job: JobStatus, message: string) {
+    if (job.status !== "running") {
+      setJobStatus(job);
+      return;
+    }
+    if (followedJobIdRef.current === job.job_id) {
+      return;
+    }
+    followedJobIdRef.current = job.job_id;
+    setJobStatus(job);
+    setWorkflowBusy(true);
+    setWorkflowMessage(message);
+    try {
+      const completedJob = await followJobEvents(
+        job.job_id,
+        job,
+        () => followedJobIdRef.current === job.job_id
+      );
+      if (followedJobIdRef.current !== job.job_id) {
+        return;
+      }
+      setJobStatus(completedJob);
+      setWorkflowBusy(false);
+      if (completedJob.status === "completed") {
+        await refreshSelectedVersionArtifacts(completedJob);
+        setWorkflowMessage(workflowCompletionMessage(completedJob.kind));
+      } else if (completedJob.status === "cancelled") {
+        setWorkflowMessage("Workflow job cancelled.");
+      } else {
+        setWorkflowMessage(completedJob.message || "Workflow job failed.");
+      }
+    } catch (error) {
+      if (followedJobIdRef.current === job.job_id) {
+        setWorkflowBusy(false);
+        setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+      }
+    } finally {
+      if (followedJobIdRef.current === job.job_id) {
+        followedJobIdRef.current = null;
+      }
+    }
+  }
+
+  async function syncActiveWorkflowJob(message: string) {
+    const activeJob = await getActiveJob();
+    if (activeJob === null || activeJob.status !== "running") {
+      return;
+    }
+    void followWorkflowJob(activeJob, message);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadExperiments() {
+      try {
+        const experiments = await apiGet<Experiment[]>("/api/experiments");
+        if (!cancelled) {
+          setState({ status: "loaded", experiments });
+          if (selectedKeyRef.current === null) {
+            const requestedRoute = currentExperimentRoute();
+            const requestedExperiment =
+              requestedRoute.experimentId === null
+                ? null
+                : experiments.find(
+                    (experiment) => experiment.id === requestedRoute.experimentId
+                  ) ?? null;
+            selectExperiment(requestedExperiment ?? experiments[0] ?? null, {
+              historyMode: "replace",
+              tab: requestedRoute.tab
+            });
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setState({
+            status: "error",
+            message: error instanceof Error ? error.message : "Unknown error"
+          });
+        }
+      }
+    }
+
+    void loadExperiments();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (state.status !== "loaded") {
+      return;
+    }
+    const loadedExperiments = state.experiments;
+
+    function handlePopState() {
+      const requestedRoute = currentExperimentRoute();
+      if (shouldBlockSettingsNavigation()) {
+        if (selectedExperiment !== null) {
+          writeExperimentRoute(selectedExperiment.id, activeTab, "replace");
+        }
+        setNavigationError(null);
+        setPendingNavigation({ kind: "route", route: requestedRoute });
+        return;
+      }
+      const requestedExperiment =
+        requestedRoute.experimentId === null
+          ? loadedExperiments[0] ?? null
+          : loadedExperiments.find(
+              (experiment) => experiment.id === requestedRoute.experimentId
+            ) ?? loadedExperiments[0] ?? null;
+      selectExperiment(requestedExperiment, {
+        tab: requestedRoute.tab,
+        updateUrl: false
+      });
+    }
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [activeTab, selectedExperiment, settingsBusy, settingsDirty, state]);
+
+  useEffect(() => {
+    if (!settingsDirty) {
+      return;
+    }
+
+    function handleBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [settingsDirty]);
+
+  useEffect(() => {
+    if (selectedExperiment === null) {
+      setDetailState({ status: "idle" });
+      return;
+    }
+
+    let cancelled = false;
+    setDetailState({ status: "loading" });
+    setJobStatus(null);
+
+    async function loadDetails(experiment: Experiment) {
+      try {
+        const [overview, runs, latestReview] = await Promise.all([
+          getVersionOverview(experiment.id, experiment.active_version),
+          getVersionRuns(experiment.id, experiment.active_version),
+          getLatestReviewState(experiment.id, experiment.active_version)
+        ]);
+        const latestProposal =
+          latestReview === null
+            ? null
+            : await getReviewProposal(
+                experiment.id,
+                experiment.active_version,
+                latestReview.review_id
+              );
+        if (!cancelled) {
+          setDetailState({ status: "loaded", overview, runs });
+          setReviewState(latestReview);
+          setProposalResponse(latestProposal);
+          setDecisionsDirty(false);
+          setHumanNotesDirty(false);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setDetailState({
+            status: "error",
+            message: error instanceof Error ? error.message : "Unknown error"
+          });
+        }
+      }
+    }
+
+    void loadDetails(selectedExperiment);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedExperiment]);
+
+  useEffect(() => {
+    if (selectedExperiment === null) {
+      setVersionSummaries([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadVersions(experiment: Experiment) {
+      try {
+        const response = await getExperimentVersions(experiment.id);
+        if (!cancelled) {
+          setVersionSummaries(response.versions);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setWorkflowMessage(
+            error instanceof Error ? error.message : "Could not load versions."
+          );
+        }
+      }
+    }
+
+    void loadVersions(selectedExperiment);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedExperiment]);
+
+  useEffect(() => {
+    if (selectedExperiment === null) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadActiveJob() {
+      try {
+        if (cancelled) {
+          return;
+        }
+        await syncActiveWorkflowJob("Resumed active workflow job.");
+      } catch (error) {
+        if (!cancelled) {
+          setWorkflowMessage(
+            error instanceof Error ? error.message : "Could not load active job."
+          );
+        }
+      }
+    }
+
+    void loadActiveJob();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedExperiment]);
+
+  const subtitle = useMemo(() => {
+    if (state.status !== "loaded") {
+      return "Loading local experiment manifests";
+    }
+    const count = state.experiments.length;
+    return `${count} experiment${count === 1 ? "" : "s"} available`;
+  }, [state]);
+
+  async function handleRunVersion() {
+    if (selectedExperiment === null || detailState.status !== "loaded") {
+      return;
+    }
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
+
+    const overview = detailState.overview;
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    const selectionKey = `${experimentId}:${version}`;
+    const requestId = runRequestIdRef.current + 1;
+    runRequestIdRef.current = requestId;
+    const isCurrentRequest = () =>
+      runRequestIdRef.current === requestId && selectedKeyRef.current === selectionKey;
+
+    try {
+      setJobStatus({
+        job_id: "",
+        kind: "run_version",
+        experiment_id: experimentId,
+        version,
+        status: "running",
+        completed_units: 0,
+        total_units:
+          overview.cases.length * selectedExperiment.run_defaults.repeat_count,
+        message: "Starting run",
+        started_at: new Date().toISOString()
+      });
+      const dryRun = workflowMode === "dry-run";
+      let job = await runVersion(experimentId, version, { dry_run: dryRun });
+      if (!isCurrentRequest()) {
+        return;
+      }
+      setJobStatus(job);
+      setReviewState(null);
+      setProposalResponse(null);
+      setCreatedVersion(null);
+      setComparison(null);
+      setDecisionsDirty(false);
+      setHumanNotesDirty(false);
+
+      job = await followJobEvents(job.job_id, job, isCurrentRequest);
+      if (job.status === "cancelled") {
+        if (isCurrentRequest()) {
+          setWorkflowMessage("Workflow job cancelled.");
+        }
+        return;
+      }
+      if (job.status === "failed") {
+        throw new Error(job.message || "Run failed.");
+      }
+
+      const runs = await getVersionRuns(experimentId, version);
+      if (!isCurrentRequest()) {
+        return;
+      }
+      setDetailState({ status: "loaded", overview, runs });
+      setWorkflowMessage(
+        dryRun
+          ? "Dry-run generated the active run."
+          : "Active run completed."
+      );
+      activateTab("runs");
+    } catch (error) {
+      if (!isCurrentRequest()) {
+        return;
+      }
+      setJobStatus(null);
+      setDetailState({
+        status: "error",
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  }
+
+  async function handleCancelWorkflowJob() {
+    if (jobStatus?.status !== "running") {
+      return;
+    }
+    try {
+      const cancelledJob = await cancelJob(jobStatus.job_id);
+      setJobStatus(cancelledJob);
+      setWorkflowBusy(false);
+      setWorkflowMessage("Workflow job cancelled.");
+    } catch (error) {
+      setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+    }
+  }
+
+  function followJobEvents(
+    jobId: string,
+    initialJob: JobStatus,
+    isCurrentRequest: () => boolean
+  ): Promise<JobStatus> {
+    if (initialJob.status !== "running") {
+      return Promise.resolve(initialJob);
+    }
+
+    return new Promise((resolve, reject) => {
+      const source = new EventSource(jobEventsStreamUrl(jobId));
+      let latestJob = initialJob;
+
+      source.addEventListener("job", (event) => {
+        if (!isCurrentRequest()) {
+          source.close();
+          resolve(latestJob);
+          return;
+        }
+        const jobEvent = JSON.parse((event as MessageEvent).data) as JobEvent;
+        latestJob = {
+          ...latestJob,
+          status: jobEvent.status,
+          completed_units: jobEvent.completed_units,
+          total_units: jobEvent.total_units,
+          message: jobEvent.message
+        };
+        setJobStatus(latestJob);
+        if (latestJob.status !== "running") {
+          source.close();
+          resolve(latestJob);
+        }
+      });
+
+      source.addEventListener("error", () => {
+        source.close();
+        void (async () => {
+          for (let attempt = 0; attempt < 12; attempt += 1) {
+            const job = await getJob(jobId);
+            latestJob = job;
+            if (isCurrentRequest()) {
+              setJobStatus(latestJob);
+            }
+            if (latestJob.status === "running") {
+              await new Promise((pollResolve) => {
+                window.setTimeout(pollResolve, 500);
+              });
+              continue;
+            }
+            resolve(latestJob);
+            return;
+          }
+          reject(new Error("Lost job event stream."));
+        })().catch(() => reject(new Error("Lost job event stream.")));
+      });
+    });
+  }
+
+  async function handleJudgeVersion() {
+    if (selectedExperiment === null) return;
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    const selectionKey = `${experimentId}:${version}`;
+    const dryRun = workflowMode === "dry-run";
+    const requestId = beginWorkflow(
+      selectionKey,
+      dryRun ? "Dry-run judging active run..." : "Judging active run..."
+    );
+    try {
+      const response = await judgeVersion(experimentId, version, dryRun);
+      const review = await getReviewState(experimentId, version, response.review_id);
+      if (!isWorkflowCurrent(requestId, selectionKey)) return;
+      setReviewState(review);
+      setProposalResponse(null);
+      setCreatedVersion(null);
+      setDecisionsDirty(false);
+      setHumanNotesDirty(false);
+      setWorkflowMessage(
+        dryRun
+          ? "Dry-run review loaded as the active review."
+          : "Active review loaded."
+      );
+      activateTab("review");
+    } catch (error) {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+      }
+    } finally {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowBusy(false);
+      }
+    }
+  }
+
+  function handleDecisionChange(
+    findingId: string,
+    decision: FindingDecisionValue,
+    reason: string | null
+  ) {
+    setReviewState((current) => {
+      if (current === null) return current;
+      return {
+        ...current,
+        decisions: {
+          ...current.decisions,
+          finding_decisions: {
+            ...current.decisions.finding_decisions,
+            [findingId]: {
+              decision,
+              reason: reason?.trim() ? reason : null
+            }
+          }
+        }
+      };
+    });
+    setDecisionsDirty(true);
+    setProposalResponse(null);
+    setCreatedVersion(null);
+  }
+
+  async function handleSaveDecisions() {
+    if (selectedExperiment === null || reviewState === null) return;
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    const selectionKey = `${experimentId}:${version}`;
+    const requestId = beginWorkflow(selectionKey);
+    try {
+      const decisions = await updateReviewDecisions(
+        experimentId,
+        version,
+        reviewState.review_id,
+        reviewState.decisions
+      );
+      if (!isWorkflowCurrent(requestId, selectionKey)) return;
+      setReviewState((current) =>
+        current === null || current.review_id !== reviewState.review_id
+          ? current
+          : { ...current, decisions }
+      );
+      setDecisionsDirty(false);
+      setWorkflowMessage("Decisions saved.");
+    } catch (error) {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+      }
+    } finally {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowBusy(false);
+      }
+    }
+  }
+
+  function handleHumanNotesChange(notes: string) {
+    setReviewState((current) =>
+      current === null ? current : { ...current, human_notes: notes }
+    );
+    setHumanNotesDirty(true);
+    setProposalResponse(null);
+    setCreatedVersion(null);
+  }
+
+  async function handleSaveHumanNotes() {
+    if (selectedExperiment === null || reviewState === null) return;
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    const selectionKey = `${experimentId}:${version}`;
+    const requestId = beginWorkflow(selectionKey);
+    try {
+      const response = await updateHumanNotes(
+        experimentId,
+        version,
+        reviewState.review_id,
+        reviewState.human_notes
+      );
+      if (!isWorkflowCurrent(requestId, selectionKey)) return;
+      setReviewState((current) =>
+        current === null || current.review_id !== reviewState.review_id
+          ? current
+          : { ...current, human_notes: response.human_notes }
+      );
+      setHumanNotesDirty(false);
+      setWorkflowMessage("Human notes saved.");
+    } catch (error) {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+      }
+    } finally {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowBusy(false);
+      }
+    }
+  }
+
+  async function handleGenerateProposal() {
+    if (selectedExperiment === null || reviewState === null) return;
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
+    if (decisionsDirty || humanNotesDirty) {
+      setWorkflowMessage("Save decisions and human notes before generating a proposal.");
+      return;
+    }
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    const selectionKey = `${experimentId}:${version}`;
+    const dryRun = workflowMode === "dry-run";
+    const requestId = beginWorkflow(
+      selectionKey,
+      dryRun ? "Dry-run generating proposal..." : "Generating proposal..."
+    );
+    try {
+      const response = await generateProposal(
+        experimentId,
+        version,
+        reviewState.review_id,
+        dryRun
+      );
+      if (!isWorkflowCurrent(requestId, selectionKey)) return;
+      setProposalResponse(response);
+      setCreatedVersion(null);
+      setWorkflowMessage(dryRun ? "Dry-run proposal generated." : "Proposal generated.");
+      activateTab("proposal");
+    } catch (error) {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+      }
+    } finally {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowBusy(false);
+      }
+    }
+  }
+
+  async function handleCreateVersion() {
+    if (selectedExperiment === null || reviewState === null) return;
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    const selectionKey = `${experimentId}:${version}`;
+    const requestId = beginWorkflow(selectionKey);
+    try {
+      const response = await createProposalVersion(
+        experimentId,
+        version,
+        reviewState.review_id
+      );
+      if (!isWorkflowCurrent(requestId, selectionKey)) return;
+      setCreatedVersion(response);
+      setVersionSummaries((current) => {
+        if (current.some((summary) => summary.version === response.version)) {
+          return current;
+        }
+        return [...current, { version: response.version, is_active: false }].sort(
+          (left, right) => left.version.localeCompare(right.version)
+        );
+      });
+      candidateVersionRef.current = response.version;
+      setCandidateVersion(response.version);
+      setComparison(null);
+      setWorkflowMessage(`Created ${response.version}.`);
+    } catch (error) {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+      }
+    } finally {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowBusy(false);
+      }
+    }
+  }
+
+  async function handleCompareVersions() {
+    if (selectedExperiment === null) return;
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    const selectionKey = `${experimentId}:${version}`;
+    const requestedBaseline = baselineVersion;
+    const requestedCandidate = candidateVersion;
+    if (requestedBaseline === requestedCandidate) {
+      setWorkflowMessage(
+        knownVersions.length < 2
+          ? "Create another version before comparing."
+          : "Choose two different versions before comparing."
+      );
+      return;
+    }
+    if (!hasRuns) {
+      setWorkflowMessage("Run both versions before comparing.");
+      return;
+    }
+    const dryRun = workflowMode === "dry-run";
+    const requestId = beginWorkflow(
+      selectionKey,
+      dryRun ? "Dry-run comparing versions..." : "Comparing versions..."
+    );
+    try {
+      const response = await compareVersions(
+        experimentId,
+        requestedBaseline,
+        requestedCandidate,
+        dryRun
+      );
+      if (
+        !isWorkflowCurrent(requestId, selectionKey) ||
+        requestedBaseline !== baselineVersionRef.current ||
+        requestedCandidate !== candidateVersionRef.current
+      ) {
+        return;
+      }
+      setComparison(response.comparison);
+      setWorkflowMessage(
+        dryRun
+          ? "Dry-run comparison loaded."
+          : "Comparison loaded."
+      );
+      activateTab("compare");
+    } catch (error) {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+      }
+    } finally {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowBusy(false);
+      }
+    }
+  }
+
+  function handleBaselineVersionChange(version: string) {
+    baselineVersionRef.current = version;
+    setBaselineVersion(version);
+    setComparison(null);
+    setWorkflowMessage(null);
+  }
+
+  function handleCandidateVersionChange(version: string) {
+    candidateVersionRef.current = version;
+    setCandidateVersion(version);
+    setComparison(null);
+    setWorkflowMessage(null);
+  }
+
+  async function refreshExperimentsAfterSettingsSave(savedExperiment: Experiment) {
+    const [experiments, overview, runs, versions] = await Promise.all([
+      apiGet<Experiment[]>("/api/experiments"),
+      getVersionOverview(savedExperiment.id, savedExperiment.active_version),
+      getVersionRuns(savedExperiment.id, savedExperiment.active_version),
+      getExperimentVersions(savedExperiment.id)
+    ]);
+    setState({ status: "loaded", experiments });
+    setSelectedExperiment(savedExperiment);
+    selectedKeyRef.current = `${savedExperiment.id}:${savedExperiment.active_version}`;
+    setDetailState({ status: "loaded", overview, runs });
+    setVersionSummaries(versions.versions);
+    setCandidateVersion(savedExperiment.active_version);
+    candidateVersionRef.current = savedExperiment.active_version;
+    if (!experiments.some((experiment) => experiment.id === savedExperiment.id)) {
+      setWorkflowMessage("Saved experiment is no longer listed.");
+    }
+  }
+
+  async function handleSaveExperimentSettings(experiment: Experiment) {
+    if (selectedExperiment === null) return;
+    setSettingsBusy(true);
+    setSettingsMessage(null);
+    try {
+      const savedExperiment = await updateExperiment(selectedExperiment.id, experiment);
+      await refreshExperimentsAfterSettingsSave(savedExperiment);
+      setSettingsMessage("Settings saved.");
+      setSettingsDirty(false);
+      setSettingsDraft(null);
+      activateTab("settings");
+    } catch (error) {
+      setSettingsMessage(error instanceof Error ? error.message : "Unknown error");
+      throw error;
+    } finally {
+      setSettingsBusy(false);
+    }
+  }
+
+  function handleResetExperimentSettings() {
+    setSettingsMessage(null);
+  }
+
+  async function handleActiveVersionChange(version: string) {
+    if (shouldBlockSettingsNavigation()) {
+      setNavigationError(null);
+      setPendingNavigation({ kind: "version", version });
+      return;
+    }
+    await performActiveVersionChange(version);
+  }
+
+  async function performActiveVersionChange(version: string) {
+    if (selectedExperiment === null || version === selectedExperiment.active_version) {
+      return;
+    }
+    setWorkflowBusy(true);
+    setWorkflowMessage(`Switching to ${version}...`);
+    setReviewState(null);
+    setProposalResponse(null);
+    setCreatedVersion(null);
+    setComparison(null);
+    setDecisionsDirty(false);
+    setHumanNotesDirty(false);
+    try {
+      const savedExperiment = await updateExperiment(selectedExperiment.id, {
+        ...selectedExperiment,
+        active_version: version
+      });
+      await refreshExperimentsAfterSettingsSave(savedExperiment);
+      setWorkflowMessage(`Switched to ${version}.`);
+      activateTab(activeTab);
+    } catch (error) {
+      setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
+
+  const knownVersions = useMemo(() => {
+    const versions = new Set(versionSummaries.map((summary) => summary.version));
+    if (selectedExperiment !== null) versions.add(selectedExperiment.active_version);
+    versions.add("v001");
+    if (createdVersion !== null) versions.add(createdVersion.version);
+    versions.add(baselineVersion);
+    versions.add(candidateVersion);
+    return [...versions].sort();
+  }, [
+    baselineVersion,
+    candidateVersion,
+    createdVersion,
+    selectedExperiment,
+    versionSummaries
+  ]);
+
+  const activeVersionOptions = useMemo(() => {
+    const versions = new Set(versionSummaries.map((summary) => summary.version));
+    if (selectedExperiment !== null) {
+      versions.add(selectedExperiment.active_version);
+    }
+    if (createdVersion !== null) {
+      versions.add(createdVersion.version);
+    }
+    return [...versions].sort();
+  }, [createdVersion, selectedExperiment, versionSummaries]);
+
+  const hasRuns = detailState.status === "loaded" && detailState.runs.runs.length > 0;
+  const workflowLocked = workflowBusy || jobStatus?.status === "running";
+  const judgeAction = getJudgeActionState({
+    hasReview: reviewState !== null,
+    hasRuns,
+    isBusy: workflowLocked
+  });
+  const compareAction = getCompareActionState({
+    hasComparison: comparison !== null,
+    hasRuns,
+    isBusy: workflowLocked,
+    sameVersion: baselineVersion === candidateVersion,
+    versionCount: knownVersions.length
+  });
+
+  return (
+    <main className="app-shell">
+      <header className="app-header">
+        <div>
+          <h1>Prompt Lab</h1>
+          <p>{subtitle}</p>
+        </div>
+      </header>
+
+      <section className="workspace" aria-live="polite">
+        {state.status === "loading" ? (
+          <div className="empty-state">Loading experiments...</div>
+        ) : null}
+
+        {state.status === "error" ? (
+          <div className="error-state">
+            <h2>Could not load experiments</h2>
+            <p>{state.message}</p>
+          </div>
+        ) : null}
+
+        {state.status === "loaded" && state.experiments.length === 0 ? (
+          <div className="empty-state">No experiments found.</div>
+        ) : null}
+
+        {state.status === "loaded" && state.experiments.length > 0 ? (
+          <div className="tool-layout">
+            <ExperimentsList
+              experiments={state.experiments}
+              onSelect={requestExperimentSelection}
+              selectedExperimentId={selectedExperiment?.id ?? null}
+            />
+
+            <div className="detail-panel">
+              {detailState.status === "idle" ? (
+                <div className="empty-state">Select an experiment.</div>
+              ) : null}
+
+              {detailState.status === "loading" ? (
+                <div className="empty-state">Loading experiment details...</div>
+              ) : null}
+
+              {detailState.status === "error" ? (
+                <div className="error-state">
+                  <h2>Could not load experiment details</h2>
+                  <p>{detailState.message}</p>
+                </div>
+              ) : null}
+
+              {detailState.status === "loaded" ? (
+                <>
+                  <WorkflowToolbar
+                    activeVersion={detailState.overview.version}
+                    availableVersions={activeVersionOptions}
+                    experiment={detailState.overview.experiment}
+                    isVersionSwitching={workflowLocked}
+                    jobStatus={jobStatus}
+                    onActiveVersionChange={handleActiveVersionChange}
+                    onCancelJob={handleCancelWorkflowJob}
+                    onWorkflowModeChange={setWorkflowMode}
+                    showDryRunControls={SHOW_DRY_RUN_CONTROLS}
+                    workflowMessage={workflowMessage}
+                    workflowMode={workflowMode}
+                    primaryAction={
+                      activeTab === "review" ? (
+                        <TooltipButton
+                          className="primary-action"
+                          disabled={judgeAction.disabled}
+                          disabledReason={judgeAction.disabledReason}
+                          onClick={handleJudgeVersion}
+                          type="button"
+                        >
+                          {judgeAction.label}
+                        </TooltipButton>
+                      ) : activeTab === "proposal" ? (
+                        <TooltipButton
+                          className="primary-action"
+                          disabled={
+                            workflowLocked ||
+                            reviewState === null ||
+                            decisionsDirty ||
+                            humanNotesDirty
+                          }
+                          disabledReason={
+                            workflowLocked
+                              ? "Wait for the current workflow action to finish."
+                              : reviewState === null
+                                ? "Judge the active run before generating a proposal."
+                                : "Save review decisions and human notes before generating a proposal."
+                          }
+                          onClick={handleGenerateProposal}
+                          type="button"
+                        >
+                          {getProposalActionLabel({
+                            hasProposal: proposalResponse !== null,
+                            isBusy: workflowLocked
+                          })}
+                        </TooltipButton>
+                      ) : activeTab === "compare" ? (
+                        <TooltipButton
+                          className="primary-action"
+                          disabled={compareAction.disabled}
+                          disabledReason={compareAction.disabledReason}
+                          onClick={handleCompareVersions}
+                          type="button"
+                        >
+                          {compareAction.label}
+                        </TooltipButton>
+                      ) : activeTab === "runs" ? (
+                        <TooltipButton
+                          className="primary-action"
+                          disabled={workflowLocked}
+                          disabledReason="Wait for the current run to finish."
+                          onClick={handleRunVersion}
+                          type="button"
+                        >
+                          {getRunActionLabel({
+                            hasRuns,
+                            isRunning: jobStatus?.status === "running"
+                          })}
+                        </TooltipButton>
+                      ) : null
+                    }
+                  />
+
+                  <WorkbenchTabs
+                    activeTab={activeTab}
+                    onTabChange={requestTabChange}
+                  />
+
+                  <div className="workbench-body">
+                    {activeTab === "overview" ? (
+                      <section className="overview-grid" aria-label="Experiment overview">
+                        <div className="overview-header">
+                          <div>
+                            <h2>{detailState.overview.experiment.title}</h2>
+                            <p>
+                              {detailState.overview.experiment.description ||
+                                "No description provided."}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="overview-section">
+                          <div className="section-heading">
+                            <h3>Prompt</h3>
+                            <span>{detailState.overview.version}</span>
+                          </div>
+                          <pre className="code-block">{detailState.overview.prompt}</pre>
+                        </div>
+
+                        <div className="overview-section">
+                          <div className="section-heading">
+                            <h3>Rubric</h3>
+                          </div>
+                          <pre className="text-block">
+                            {detailState.overview.rubric.trim() ||
+                              "No rubric found."}
+                          </pre>
+                        </div>
+                      </section>
+                    ) : null}
+
+                    {activeTab === "settings" ? (
+                      <ExperimentSettings
+                        experiment={detailState.overview.experiment}
+                        isBusy={settingsBusy}
+                        message={settingsMessage}
+                        onDirtyChange={setSettingsDirty}
+                        onDraftChange={setSettingsDraft}
+                        onReset={handleResetExperimentSettings}
+                        onSave={handleSaveExperimentSettings}
+                      />
+                    ) : null}
+
+                    {activeTab === "cases" ? (
+                      <CaseBrowser cases={detailState.overview.cases} />
+                    ) : null}
+
+                    {activeTab === "runs" ? (
+                      <RunsView
+                        cases={detailState.overview.cases}
+                        runBatchId={detailState.runs.run_batch_id}
+                        runs={detailState.runs.runs}
+                      />
+                    ) : null}
+
+                    {activeTab === "review" ? (
+                      <ReviewView
+                        hasUnsavedDecisionChanges={decisionsDirty}
+                        hasUnsavedHumanNotesChanges={humanNotesDirty}
+                        isBusy={workflowLocked}
+                        judgeDisabled={judgeAction.disabled}
+                        judgeDisabledReason={judgeAction.disabledReason}
+                        onDecisionChange={handleDecisionChange}
+                        onHumanNotesChange={handleHumanNotesChange}
+                        onJudge={handleJudgeVersion}
+                        onSaveDecisions={handleSaveDecisions}
+                        onSaveHumanNotes={handleSaveHumanNotes}
+                        reviewState={reviewState}
+                      />
+                    ) : null}
+
+                    {activeTab === "proposal" ? (
+                      <ProposalView
+                        createdVersion={createdVersion}
+                        hasUnsavedReviewChanges={decisionsDirty || humanNotesDirty}
+                        isBusy={workflowLocked}
+                        onCreateVersion={handleCreateVersion}
+                        onGenerateProposal={handleGenerateProposal}
+                        proposalResponse={proposalResponse}
+                        reviewState={reviewState}
+                      />
+                    ) : null}
+
+                    {activeTab === "compare" ? (
+                      <ComparisonView
+                        baselineVersion={baselineVersion}
+                        candidateVersion={candidateVersion}
+                        comparison={comparison}
+                        hasRuns={hasRuns}
+                        isBusy={workflowLocked}
+                        knownVersions={knownVersions}
+                        onBaselineVersionChange={handleBaselineVersionChange}
+                        onCandidateVersionChange={handleCandidateVersionChange}
+                        onCompare={handleCompareVersions}
+                      />
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      {pendingNavigation !== null ? (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            aria-labelledby="settings-navigation-title"
+            aria-modal="true"
+            className="settings-navigation-modal"
+            role="dialog"
+          >
+            <div>
+              <h2 id="settings-navigation-title">Unsaved settings changes</h2>
+              <p>
+                Save the current experiment settings before leaving this view, or
+                discard the draft changes.
+              </p>
+            </div>
+            {navigationError !== null ? (
+              <div className="settings-error">{navigationError}</div>
+            ) : null}
+            <div className="modal-actions">
+              <button
+                className="secondary-action"
+                disabled={navigationSaving}
+                onClick={handleStayOnSettings}
+                type="button"
+              >
+                Stay
+              </button>
+              <button
+                className="secondary-action danger-action"
+                disabled={navigationSaving}
+                onClick={handleDiscardSettingsAndContinue}
+                type="button"
+              >
+                Discard changes
+              </button>
+              <button
+                className="primary-action"
+                disabled={navigationSaving || settingsDraft === null}
+                onClick={() => void handleSaveSettingsAndContinue()}
+                type="button"
+              >
+                {navigationSaving ? "Saving..." : "Save and continue"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </main>
+  );
+}
+
+export default App;

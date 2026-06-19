@@ -18,7 +18,6 @@ from shared.llm.chat_get_structured_lite import chat_get_structured_lite
 from shared.llm.chat_result import LlmResponse
 from shared.llm.cancellation import LlmRequestCancelled
 from shared.llm.clients.mock_client import MockChatClient
-from shared.llm._io import load_json
 from shared.llm.llm_cache import reset_llm_cache
 from shared.llm.stream_callbacks import StreamCallbacks
 
@@ -51,11 +50,11 @@ def _temporary_chat_env(*, enable_cache: bool = False) -> Iterator[Path]:
             root / ".servers.jsonc",
             {
                 "openai": {
-                    "type": "openai",
+                    "engine": "openai",
                     "api_key": "env:OPENAI_API_KEY",
                 },
                 "local": {
-                    "type": "local",
+                    "engine": "llamacpp",
                     "host": "http://localhost:8000",
                     "api_key": "not_needed",
                 },
@@ -753,24 +752,13 @@ def _resolve_live_model() -> str:
     if isinstance(env_model, str) and env_model.strip():
         return env_model.strip()
 
-    workflow_runtime_path = Path(".workflow_runtime.jsonc")
-    if workflow_runtime_path.exists():
-        workflow_runtime_config = load_json(str(workflow_runtime_path))
-        if isinstance(workflow_runtime_config, dict):
-            model = workflow_runtime_config.get("model")
-            if isinstance(model, str) and model.strip():
-                return model.strip()
-
-    models_path = Path(".models.jsonc")
-    if models_path.exists():
-        models_config = load_json(str(models_path))
-        if isinstance(models_config, list):
-            for item in models_config:
-                if isinstance(item, str) and item.strip():
-                    return item.strip()
+    env_models = os.getenv("CHAT_ENV_MODELS", "")
+    for item in env_models.split(","):
+        if item.strip():
+            return item.strip()
 
     raise ValueError(
-        "Unable to resolve a live model. Set LLM_MODEL, add model to .workflow_runtime.jsonc, or add one to .models.jsonc."
+        "Unable to resolve a live model. Set LLM_MODEL or CHAT_ENV_MODELS."
     )
 
 
@@ -814,7 +802,7 @@ def _run_live_smoke_local() -> None:
 
     model_ref = f"local/{model_name}"
     server_entry = {
-        "type": "local",
+        "engine": os.getenv("LOCAL_LLM_ENGINE", "llamacpp").strip() or "llamacpp",
         "host": base_url,
         "api_key": api_key,
         "no_verify_tls": no_verify_tls,

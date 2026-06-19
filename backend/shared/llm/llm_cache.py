@@ -74,6 +74,15 @@ class LlmCacheEntry:
     created_at: float
 
 
+@dataclass(frozen=True)
+class LlmCachePayloadEntry:
+    """Cached raw LLM response payload as plain JSON data."""
+
+    request: dict[str, Any]
+    response: dict[str, Any]
+    created_at: float
+
+
 class SqliteLlmCache:
     """Simple persistent cache for normalized raw LLM requests."""
 
@@ -122,6 +131,18 @@ class SqliteLlmCache:
         return {str(item["name"]) for item in rows}
 
     def get(self, request: dict[str, Any]) -> LlmCacheEntry | None:
+        entry = self.get_payload(request)
+        if entry is None:
+            return None
+        return LlmCacheEntry(
+            request=entry.request,
+            response=LlmResponse.from_json(entry.response),
+            created_at=entry.created_at,
+        )
+
+    def get_payload(self, request: dict[str, Any]) -> LlmCachePayloadEntry | None:
+        """Return a cached JSON response payload for a normalized request."""
+
         request_hash = _request_hash(request)
         with _CACHE_LOCK:
             row = self._conn.execute(
@@ -134,9 +155,12 @@ class SqliteLlmCache:
             ).fetchone()
         if row is None:
             return None
-        return LlmCacheEntry(
+        response = json.loads(str(row["response_json"]))
+        if not isinstance(response, dict):
+            raise ValueError("Cached LLM response payload must be a JSON object.")
+        return LlmCachePayloadEntry(
             request=json.loads(str(row["request_json"])),
-            response=LlmResponse.from_json(json.loads(str(row["response_json"]))),
+            response=response,
             created_at=float(row["created_at"]),
         )
 
@@ -146,10 +170,20 @@ class SqliteLlmCache:
         *,
         response: LlmResponse,
     ) -> None:
+        self.put_payload(request, response=response.to_json())
+
+    def put_payload(
+        self,
+        request: dict[str, Any],
+        *,
+        response: dict[str, Any],
+    ) -> None:
+        """Store a cacheable JSON response payload for a normalized request."""
+
         request_hash = _request_hash(request)
         created_at = time.time()
         request_json = _canonical_json(request)
-        response_json = _canonical_json(response.to_json())
+        response_json = _canonical_json(response)
         with _CACHE_LOCK:
             self._conn.execute(
                 """

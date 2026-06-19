@@ -8,11 +8,11 @@
     "type": "text"
   },
   "template": {
-    "engine": "jinja2",
+    "engine": "jinjax",
     "path": "prompt.md"
   },
   "models": {
-    "generator_model": "local/example-small-model",
+    "generator_model": "local/gpt-oss-120b",
     "judge_model": "openai/example-large-model"
   },
   "run_defaults": {

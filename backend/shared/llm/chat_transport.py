@@ -59,7 +59,8 @@ def _execute_prepared_chat_request_uncached(
         stream_callback.on_text_delta if (stream_enabled and stream_callback is not None) else None
     )
 
-    if prepared.spec.server_type == "openai":
+    chat_protocol = prepared.spec.capabilities.chat_protocol
+    if chat_protocol == "openai-responses":
         response = _resp_impl.execute_openai_responses(
             prepared,
             stream_enabled=stream_enabled,
@@ -68,13 +69,18 @@ def _execute_prepared_chat_request_uncached(
             stream_handler=stream_handler,
             callbacks=stream_callback,
         )
-    else:
+    elif chat_protocol == "openai-chat-completions":
         response = _cc_impl.execute_chat_completions(
             prepared,
             stream_enabled=stream_enabled,
             call_fn=_call_chat_completion,
             stream_handler=stream_handler,
             callbacks=stream_callback,
+        )
+    else:
+        raise NotImplementedError(
+            f"Chat protocol '{chat_protocol}' (engine '{prepared.spec.engine}') "
+            f"is not yet supported."
         )
 
     content = response.content

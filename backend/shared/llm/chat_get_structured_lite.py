@@ -22,10 +22,12 @@ def chat_get_structured_lite(
     fix_prompt: str | None = None,
     fix_retry: int = 1,
     cache_enabled: bool | None = None,
+    require_model: bool = True,
 ) -> ChatResult[StructuredOutputT]:
     """Send a structured prompt and parse the LLM response into ``response_model``.
 
-    The prompt must contain ``<<MODEL>>``, which is replaced with the JSON schema.
+    When ``require_model`` is ``True`` (default) the prompt must contain ``<<MODEL>>``,
+    which is replaced with the JSON schema.
     On validation failure, sends up to ``fix_retry`` repair requests with the error
     and schema. Transport retry logic is the responsibility of the underlying
     ``request_chat_raw_text`` caller.
@@ -33,7 +35,7 @@ def chat_get_structured_lite(
 
     Args:
         chat: Conversation history. Updated in place on success. Created fresh if ``None``.
-        prompt: User message template. Must contain ``<<MODEL>>``.
+        prompt: User message template. Must contain ``<<MODEL>>`` unless ``require_model`` is ``False``.
         preset: LLM preset (model, temperature, etc.).
         response_model: Pydantic model class or type annotation for the expected output.
         validation_context: Optional context dict forwarded to pydantic validation.
@@ -41,6 +43,10 @@ def chat_get_structured_lite(
         fix_prompt: Repair request template (must contain ``<<ERROR>>``). Uses built-in if ``None``.
         fix_retry: How many repair requests to attempt after a validation failure. Default 1.
         cache_enabled: Optional per-request cache override. ``None`` uses ``LLM_CACHE``.
+        require_model: Whether ``prompt`` must contain the ``<<MODEL>>`` placeholder. Default ``True``.
+            Set to ``False`` for continuation turns where the schema was already stated in an
+            earlier ``chat`` message and this prompt only supplies fresh input. The placeholder is
+            still substituted when present.
 
     Returns:
         ChatResult with the parsed output, usage stats, and the full repair conversation.
@@ -70,6 +76,7 @@ def chat_get_structured_lite(
         stream_callback=stream_callback,
         fix_prompt=fix_prompt,
         fix_retry=fix_retry,
+        require_model=require_model,
     )
     chat.messages = [ChatMessage(**m) for m in new_messages]
     return ChatResult(output=cast(StructuredOutputT, output), usage=usage, conversation=conversation)

@@ -4,13 +4,10 @@ from typing import Any
 
 from openai import DefaultHttpxClient, OpenAI
 
-from shared.llm.chat_request import PreparedChatRequest
-
-
 _OPENAI_CLIENT_CACHE: dict[tuple[str, str | None, str | None, bool], OpenAI] = {}
 
 
-def _get_openai_client(prepared: PreparedChatRequest) -> OpenAI:
+def _get_openai_client(prepared: Any) -> OpenAI:
     spec = prepared.spec
     key = (spec.server_name, spec.api_key, spec.base_url, spec.no_verify_tls)
     client = _OPENAI_CLIENT_CACHE.get(key)

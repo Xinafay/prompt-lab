@@ -338,7 +338,6 @@ def test_pydantic_experiment_artifact_validates() -> None:
                 "type": "pydantic",
                 "model_file": "model.py",
                 "model_entrypoint": "model.SceneList",
-                "validation_context_from_case": "structured_validation_context",
             },
             "template": {"engine": "jinja2", "path": "prompt.md"},
             "models": {
@@ -368,19 +367,34 @@ def test_text_experiment_artifact_validates() -> None:
     assert defaults.case_order == "case-major"
 
 
-def test_case_artifact_validates_variables() -> None:
+def test_case_artifact_validates_stores_and_bindings() -> None:
     case = CaseArtifact.model_validate(
         {
-            "schema_version": "prompt_lab.case/v1",
+            "schema_version": "prompt_lab.case/v2",
             "id": "case-a",
             "title": "Case A",
-            "variables": {"chapter_text": "Hello"},
-            "structured_validation_context": {"parts": []},
+            "stores": {
+                "case": {
+                    "kind": "flat_file_tree",
+                    "values": {
+                        "chapter_text": {
+                            "__carmilla_flat_file_node__": "file",
+                            "value": "Hello",
+                        }
+                    },
+                }
+            },
+            "bindings": {
+                "chapter_text": {
+                    "kind": "store_scope",
+                    "store": "case",
+                    "path": "chapter_text",
+                }
+            },
         }
     )
 
-    assert case.variables["chapter_text"] == "Hello"
-    assert case.structured_validation_context == {"parts": []}
+    assert case.bindings["chapter_text"].path == "chapter_text"
 ```
 
 - [ ] **Step 2: Run test and verify it fails**
@@ -429,7 +443,6 @@ class OutputConfig(BaseModel):
     type: Literal["text", "pydantic"]
     model_file: str | None = None
     model_entrypoint: str | None = None
-    validation_context_from_case: str | None = None
 
 
 class ModelConfig(BaseModel):
@@ -475,17 +488,48 @@ class CaseSource(BaseModel):
     type: str | None = None
 
 
+class FlatFileTreeStore(BaseModel):
+    """A neutral serialized flat-file tree store produced by an external system."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["flat_file_tree"]
+    values: JsonObject
+
+
+class StoreScopeBinding(BaseModel):
+    """Bind a prompt variable to a scope inside a named store."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["store_scope"]
+    store: str = Field(min_length=1)
+    path: str = ""
+
+
+class ValueBinding(BaseModel):
+    """Bind a prompt variable directly to a JSON-like value."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["value"]
+    value: Any
+
+
+PromptBinding = StoreScopeBinding | ValueBinding
+
+
 class CaseArtifact(BaseModel):
     """One prompt input case."""
 
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["prompt_lab.case/v1"]
+    schema_version: Literal["prompt_lab.case/v2"]
     id: str = Field(min_length=1)
     title: str = Field(min_length=1)
     source: CaseSource | None = None
-    variables: JsonObject
-    structured_validation_context: JsonObject | None = None
+    stores: dict[str, FlatFileTreeStore]
+    bindings: dict[str, PromptBinding]
 
 
 class RunBatchArtifact(BaseModel):
@@ -604,20 +648,20 @@ def test_store_loads_cases_for_version() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
         experiment = root / "experiments" / "demo"
-        cases = experiment / "versions" / "v001" / "cases"
+        cases = experiment / "cases"
         cases.mkdir(parents=True)
         (experiment / "experiment.json").write_text(
             '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
             encoding="utf-8",
         )
         (cases / "case-a.json").write_text(
-            '{"schema_version":"prompt_lab.case/v1","id":"case-a","title":"Case A","variables":{"text":"hello"}}',
+            '{"schema_version":"prompt_lab.case/v2","id":"case-a","title":"Case A","stores":{"case":{"kind":"flat_file_tree","values":{"text":{"__carmilla_flat_file_node__":"file","value":"hello"}}}},"bindings":{"text":{"kind":"store_scope","store":"case","path":"text"}}}',
             encoding="utf-8",
         )
 
         store = PromptLabStore(experiments_root=root / "experiments", examples_root=root / "examples")
 
-        loaded = store.load_cases("demo", "v001")
+        loaded = store.load_cases("demo")
         assert len(loaded) == 1
         assert loaded[0].id == "case-a"
 ```
@@ -694,8 +738,8 @@ class PromptLabStore:
             raise NotFoundError(f"File not found: {path}")
         return path.read_text(encoding="utf-8")
 
-    def load_cases(self, experiment_id: str, version: str) -> list[CaseArtifact]:
-        cases_dir = self.version_dir(experiment_id, version) / "cases"
+    def load_cases(self, experiment_id: str) -> list[CaseArtifact]:
+        cases_dir = self.experiment_dir(experiment_id) / "cases"
         if not cases_dir.is_dir():
             return []
         return [
@@ -764,10 +808,11 @@ from prompt_lab.template_renderer import render_prompt
 def test_render_prompt_uses_case_variables() -> None:
     case = CaseArtifact.model_validate(
         {
-            "schema_version": "prompt_lab.case/v1",
+            "schema_version": "prompt_lab.case/v2",
             "id": "case-a",
             "title": "Case A",
-            "variables": {"name": "Ada"},
+            "stores": {"case": {"kind": "flat_file_tree", "values": {}}},
+            "bindings": {"name": {"kind": "value", "value": "Ada"}},
         }
     )
 
@@ -777,10 +822,11 @@ def test_render_prompt_uses_case_variables() -> None:
 def test_render_prompt_supports_lists() -> None:
     case = CaseArtifact.model_validate(
         {
-            "schema_version": "prompt_lab.case/v1",
+            "schema_version": "prompt_lab.case/v2",
             "id": "case-a",
             "title": "Case A",
-            "variables": {"items": ["a", "b"]},
+            "stores": {"case": {"kind": "flat_file_tree", "values": {}}},
+            "bindings": {"items": {"kind": "value", "value": ["a", "b"]}},
         }
     )
 
@@ -801,19 +847,14 @@ Create `backend/prompt_lab/template_renderer.py`:
 ```python
 from __future__ import annotations
 
-from jinja2 import StrictUndefined
-from jinja2.sandbox import SandboxedEnvironment
+from typing import Any
 
-from prompt_lab.models.artifacts import CaseArtifact
-
-
-_ENV = SandboxedEnvironment(undefined=StrictUndefined, autoescape=False)
+from shared.jinjax import Template
 
 
-def render_prompt(template_text: str, case: CaseArtifact) -> str:
-    """Render a prompt template with case variables."""
-    template = _ENV.from_string(template_text)
-    return template.render(case.variables)
+def render_prompt(template_text: str, context: dict[str, Any]) -> str:
+    """Render a prompt template with a materialized case context."""
+    return Template(template_text).render(context)
 ```
 
 - [ ] **Step 4: Add runner guard and pass**
@@ -846,7 +887,7 @@ PYTHONPATH=backend python backend/tests/test_template_renderer.py
 
 ```bash
 git add backend/prompt_lab/template_renderer.py backend/tests/test_template_renderer.py
-git commit -m "feat: render prompt templates from case variables"
+git commit -m "feat: render prompt templates from case context"
 ```
 
 ---
@@ -1157,8 +1198,8 @@ from prompt_lab.models.artifacts import CaseArtifact
 
 def test_iter_case_major_groups_repeats_per_case() -> None:
     cases = [
-        CaseArtifact.model_validate({"schema_version": "prompt_lab.case/v1", "id": "a", "title": "A", "variables": {}}),
-        CaseArtifact.model_validate({"schema_version": "prompt_lab.case/v1", "id": "b", "title": "B", "variables": {}}),
+        CaseArtifact.model_validate({"schema_version": "prompt_lab.case/v2", "id": "a", "title": "A", "stores": {"case": {"kind": "flat_file_tree", "values": {}}}, "bindings": {}}),
+        CaseArtifact.model_validate({"schema_version": "prompt_lab.case/v2", "id": "b", "title": "B", "stores": {"case": {"kind": "flat_file_tree", "values": {}}}, "bindings": {}}),
     ]
 
     pairs = [(case.id, repeat) for case, repeat in iter_case_major(cases, repeat_count=3)]
@@ -1168,7 +1209,7 @@ def test_iter_case_major_groups_repeats_per_case() -> None:
 
 def test_run_text_case_saves_text_output() -> None:
     case = CaseArtifact.model_validate(
-        {"schema_version": "prompt_lab.case/v1", "id": "a", "title": "A", "variables": {"name": "Ada"}}
+        {"schema_version": "prompt_lab.case/v2", "id": "a", "title": "A", "stores": {"case": {"kind": "flat_file_tree", "values": {}}}, "bindings": {"name": {"kind": "value", "value": "Ada"}}}
     )
 
     def generate(model: str, prompt: str) -> object:
@@ -1308,11 +1349,14 @@ class DemoOutput(BaseModel):
 def test_run_structured_case_saves_json_output() -> None:
     case = CaseArtifact.model_validate(
         {
-            "schema_version": "prompt_lab.case/v1",
+            "schema_version": "prompt_lab.case/v2",
             "id": "a",
             "title": "A",
-            "variables": {"name": "Ada"},
-            "structured_validation_context": {"allowed": ["Ada"]},
+            "stores": {"case": {"kind": "flat_file_tree", "values": {}}},
+            "bindings": {
+                "name": {"kind": "value", "value": "Ada"},
+                "allowed": {"kind": "value", "value": ["Ada"]},
+            },
         }
     )
 
@@ -1360,14 +1404,15 @@ def run_structured_case(
     response_model: type[BaseModel],
     generate_structured: Callable[[str, str, type[BaseModel], dict[str, Any] | None], Any],
 ) -> RunArtifact:
-    rendered_prompt = render_prompt(template_text, case)
+    context = materialize_case_context(case)
+    rendered_prompt = render_prompt(template_text, context)
     run_id = f"{run_batch_id}-{case.id}-repeat-{repeat_index:03d}"
     try:
         result = generate_structured(
             generator_model,
             rendered_prompt,
             response_model,
-            case.structured_validation_context,
+            context,
         )
         output = getattr(result, "output")
     except Exception:
@@ -1758,7 +1803,7 @@ def test_api_starts_run_job() -> None:
         root = Path(tmp)
         experiment = root / "examples" / "demo"
         version = experiment / "versions" / "v001"
-        cases = version / "cases"
+        cases = experiment / "cases"
         cases.mkdir(parents=True)
         (experiment / "experiment.json").write_text(
             '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
@@ -1766,7 +1811,7 @@ def test_api_starts_run_job() -> None:
         )
         (version / "prompt.md").write_text("Hello {{ name }}", encoding="utf-8")
         (cases / "a.json").write_text(
-            '{"schema_version":"prompt_lab.case/v1","id":"a","title":"A","variables":{"name":"Ada"}}',
+            '{"schema_version":"prompt_lab.case/v2","id":"a","title":"A","stores":{"case":{"kind":"flat_file_tree","values":{}}},"bindings":{"name":{"kind":"value","value":"Ada"}}}',
             encoding="utf-8",
         )
         app = create_app(PromptLabConfig.from_env(project_root=root))
@@ -1800,7 +1845,7 @@ Inside `create_app`:
     @app.post("/api/experiments/{experiment_id}/versions/{version}/runs")
     def run_version(experiment_id: str, version: str) -> dict[str, object]:
         experiment = store.load_experiment(experiment_id)
-        cases = store.load_cases(experiment_id, version)
+        cases = store.load_cases(experiment_id)
         job = jobs.start_job(
             kind="run_version",
             experiment_id=experiment_id,

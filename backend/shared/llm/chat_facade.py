@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from shared.llm.embeddings_get import get_embeddings, request_embeddings_raw
 from shared.llm.chat_get_text import chat_get_text, request_chat_raw_text
 from shared.llm.chat_request import (
     ModelSpec,
@@ -34,6 +35,8 @@ __all__ = [
     "replay_cached_response",
     "request_chat_raw_text",
     "chat_get_text",
+    "request_embeddings_raw",
+    "get_embeddings",
     "_build_chat_completion_request",
     "_build_openai_responses_request",
     "_call_chat_completion",

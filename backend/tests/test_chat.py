@@ -72,11 +72,11 @@ def _temporary_chat_env(*, enable_cache: bool = False) -> Iterator[Path]:
             root / ".servers.jsonc",
             {
                 "openai": {
-                    "type": "openai",
+                    "engine": "openai",
                     "api_key": "env:OPENAI_API_KEY",
                 },
                 "local": {
-                    "type": "local",
+                    "engine": "llamacpp",
                     "host": "http://localhost:8000",
                     "api_key": "not_needed",
                 },
@@ -317,17 +317,17 @@ def test_no_verify_tls_server_option_configures_openai_client() -> None:
             root / ".servers.jsonc",
             {
                 "openai": {
-                    "type": "openai",
+                    "engine": "openai",
                     "api_key": "env:OPENAI_API_KEY",
                 },
                 "local": {
-                    "type": "local",
+                    "engine": "llamacpp",
                     "host": "https://localhost:8000",
                     "api_key": "not_needed",
                     "no_verify_tls": True,
                 },
                 "local-dash": {
-                    "type": "local",
+                    "engine": "llamacpp",
                     "host": "https://localhost:8001",
                     "api_key": "not_needed",
                     "no-verify-tls": True,

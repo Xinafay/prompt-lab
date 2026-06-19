@@ -19,13 +19,15 @@ Use this skill when an experiment uses `output.type = "pydantic"` or when a text
   "output": {
     "type": "pydantic",
     "model_file": "model.py",
-    "model_entrypoint": "model.YourModel",
-    "validation_context_from_case": "structured_validation_context"
+    "model_entrypoint": "model.YourModel"
   }
 }
 ```
 
-5. Preserve validation errors as run artifacts. They are evidence for prompt/model improvement.
+5. Use `prompt_lab.case/v2` cases with `stores` and `bindings`; Prompt Lab
+   materializes that case context for both prompt rendering and Pydantic
+   validation.
+6. Preserve validation errors as run artifacts. They are evidence for prompt/model improvement.
 
 ## Contract Rules
 
@@ -34,4 +36,3 @@ Use this skill when an experiment uses `output.type = "pydantic"` or when a text
 - Validators should enforce hard constraints, not subjective quality preferences.
 - Prefer prompt changes over model changes when the output shape is already adequate.
 - Change `model.py` when accepted findings or human notes show missing fields, wrong field order, unclear descriptions, wrong types, or validator problems.
-

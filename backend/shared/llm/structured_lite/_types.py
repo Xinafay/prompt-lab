@@ -47,7 +47,9 @@ class _Candidate:
     payload: Any
     source_index: int
     source_kind: Literal["fenced", "brace", "raw_text"]
-    transform: Literal["raw", "sanitized", "unwrapped", "sanitized+unwrapped"]
+    transform: Literal[
+        "raw", "sanitized", "unwrapped", "sanitized+unwrapped", "value_extracted"
+    ]
     validation: _CandidateValidation | None = None
 
 

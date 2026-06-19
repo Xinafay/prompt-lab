@@ -1,0 +1,134 @@
+interface JudgeActionInput {
+  hasReview?: boolean;
+  hasRuns: boolean;
+  isBusy: boolean;
+}
+
+interface ActionState {
+  disabled: boolean;
+  disabledReason: string | null;
+  label: string;
+}
+
+interface CompareActionState extends ActionState {
+  emptyMessage: string;
+  note: string | null;
+}
+
+export function getJudgeActionState({
+  hasReview = false,
+  hasRuns,
+  isBusy
+}: JudgeActionInput): ActionState {
+  if (isBusy) {
+    return {
+      disabled: true,
+      disabledReason: "Wait for the current workflow action to finish.",
+      label: "Judging..."
+    };
+  }
+  if (!hasRuns) {
+    return {
+      disabled: true,
+      disabledReason: "Create a run before judging the active run.",
+      label: "Judge active run"
+    };
+  }
+  return {
+    disabled: false,
+    disabledReason: null,
+    label: hasReview ? "Rejudge active run" : "Judge active run"
+  };
+}
+
+export function getRunActionLabel({
+  hasRuns,
+  isRunning
+}: {
+  hasRuns: boolean;
+  isRunning: boolean;
+}): string {
+  if (isRunning) return "Running...";
+  return hasRuns ? "Rerun version" : "Run version";
+}
+
+export function getProposalActionLabel({
+  hasProposal,
+  isBusy
+}: {
+  hasProposal: boolean;
+  isBusy: boolean;
+}): string {
+  if (isBusy) return "Generating...";
+  return hasProposal ? "Regenerate proposal" : "Generate proposal";
+}
+
+export function getCompareActionLabel({
+  hasComparison,
+  isBusy
+}: {
+  hasComparison: boolean;
+  isBusy: boolean;
+}): string {
+  if (isBusy) return "Comparing...";
+  return hasComparison ? "Recompare versions" : "Compare versions";
+}
+
+export function getCompareActionState({
+  hasComparison,
+  hasRuns,
+  isBusy,
+  sameVersion,
+  versionCount
+}: {
+  hasComparison: boolean;
+  hasRuns: boolean;
+  isBusy: boolean;
+  sameVersion: boolean;
+  versionCount: number;
+}): CompareActionState {
+  const label = getCompareActionLabel({ hasComparison, isBusy });
+  if (isBusy) {
+    return {
+      disabled: true,
+      disabledReason: "Wait for the current workflow action to finish.",
+      emptyMessage: "No comparison report.",
+      note: null,
+      label
+    };
+  }
+  if (versionCount < 2) {
+    return {
+      disabled: true,
+      disabledReason: "Create another version before comparing.",
+      emptyMessage: "No comparison report. Create another version before comparing.",
+      note: "Create another version before comparing.",
+      label
+    };
+  }
+  if (sameVersion) {
+    return {
+      disabled: true,
+      disabledReason: "Choose two different versions before comparing.",
+      emptyMessage: "No comparison report. Choose two different versions before comparing.",
+      note: "Choose two different versions before comparing.",
+      label
+    };
+  }
+  if (!hasRuns) {
+    return {
+      disabled: true,
+      disabledReason: "Run both versions before comparing.",
+      emptyMessage: "No comparison report. Run both versions before comparing.",
+      note: null,
+      label
+    };
+  }
+  return {
+    disabled: false,
+    disabledReason: null,
+    emptyMessage: "No comparison report. Compare these versions to create one.",
+    note: null,
+    label
+  };
+}

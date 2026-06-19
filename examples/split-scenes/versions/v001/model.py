@@ -38,8 +38,15 @@ class SceneList(RootModel[list[Scene]]):
         if context is None:
             return self
 
-        first_part = context["parts"][0]
-        last_part = context["parts"][-1]
+        chapter_binding = context.get("chapter")
+        if not isinstance(chapter_binding, dict):
+            raise ValueError("Scene validation context must include a chapter binding.")
+        chapter_data = chapter_binding.get("data")
+        if not isinstance(chapter_data, dict):
+            raise ValueError("Scene validation context chapter binding must include data.")
+
+        first_part = chapter_data["parts"][0]
+        last_part = chapter_data["parts"][-1]
         first_paragraph_number = first_part["first_paragraph_number"]
         last_paragraph_number = last_part["first_paragraph_number"] + len(last_part["paragraphs"]) - 1
 
