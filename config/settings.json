@@ -1,0 +1,6 @@
+{
+  "schema_version": "prompt_lab.settings/v1",
+  "default_generator_model": "local/gpt-oss-120b",
+  "default_judge_model": "openai/example-large-model",
+  "default_repeat_count": 3
+}

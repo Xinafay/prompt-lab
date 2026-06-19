@@ -18,6 +18,9 @@ def test_load_settings_returns_defaults_when_file_is_missing() -> None:
         settings = load_settings(path)
 
         assert settings == PromptLabSettings()
+        assert settings.default_generator_model == "local/gpt-oss-120b"
+        assert settings.default_judge_model == "openai/example-large-model"
+        assert settings.default_repeat_count == 3
         assert not path.exists()
 
 
