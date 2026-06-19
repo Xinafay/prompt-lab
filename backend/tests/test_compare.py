@@ -290,6 +290,72 @@ def update_validation_batch_counts(
     write_json(batch_path, batch)
 
 
+def add_style_validator_to_batch(
+    version_dir: Path,
+    *,
+    validation_batch_id: str,
+    run_batch_id: str,
+    version: str,
+    write_result: bool,
+) -> None:
+    write_json(
+        version_dir
+        / "validations"
+        / validation_batch_id
+        / "validators_snapshot"
+        / "style.json",
+        validator_snapshot(
+            validator_id="style",
+            validator_title="Style",
+            check_id="tone",
+            check_title="Tone",
+        ),
+    )
+    batch_path = validation_batch_path(
+        version_dir,
+        validation_batch_id=validation_batch_id,
+    )
+    batch = json.loads(batch_path.read_text(encoding="utf-8"))
+    batch["validator_ids"] = ["quality", "style"]
+    batch["total_results"] = 2
+    batch["completed_results"] = 2
+    write_json(batch_path, batch)
+    if not write_result:
+        return
+    write_json(
+        version_dir
+        / "validations"
+        / validation_batch_id
+        / "case-a"
+        / "repeat-001"
+        / "style.json",
+        {
+            "schema_version": "prompt_lab.validation_result/v1",
+            "validation_result_id": f"{validation_batch_id}-case-a-repeat-001-style",
+            "validation_batch_id": validation_batch_id,
+            "run_batch_id": run_batch_id,
+            "run_id": f"{run_batch_id}-case-a-repeat-001",
+            "case_id": "case-a",
+            "repeat_index": 1,
+            "validator_id": "style",
+            "validator_type": "llm_questionnaire",
+            "status": "ok",
+            "included_in_judge": True,
+            "check_results": [
+                {
+                    "check_id": "tone",
+                    "verdict": "yes",
+                    "comment": "yes evidence",
+                    "included_in_judge": True,
+                    "metrics": {},
+                }
+            ],
+            "usage": {},
+            "execution_error": None,
+        },
+    )
+
+
 def corrupt_validation_result(
     version_dir: Path,
     *,
@@ -703,11 +769,19 @@ def test_api_rejects_compare_with_duplicate_validation_result_id() -> None:
             version="v002",
             verdict="yes",
         )
-        update_validation_batch_counts(
+        add_style_validator_to_batch(
+            baseline_dir,
+            validation_batch_id="validation-001",
+            run_batch_id="baseline-run-001",
+            version="v001",
+            write_result=True,
+        )
+        add_style_validator_to_batch(
             candidate_dir,
             validation_batch_id="validation-002",
-            total_results=2,
-            completed_results=2,
+            run_batch_id="candidate-run-001",
+            version="v002",
+            write_result=False,
         )
         original_path = validation_result_path(
             candidate_dir,
@@ -747,11 +821,19 @@ def test_api_rejects_compare_with_duplicate_logical_validation_result() -> None:
             version="v002",
             verdict="yes",
         )
-        update_validation_batch_counts(
+        add_style_validator_to_batch(
+            baseline_dir,
+            validation_batch_id="validation-001",
+            run_batch_id="baseline-run-001",
+            version="v001",
+            write_result=True,
+        )
+        add_style_validator_to_batch(
             candidate_dir,
             validation_batch_id="validation-002",
-            total_results=2,
-            completed_results=2,
+            run_batch_id="candidate-run-001",
+            version="v002",
+            write_result=False,
         )
         original_path = validation_result_path(
             candidate_dir,
@@ -948,9 +1030,7 @@ def test_api_rejects_compare_missing_expected_logical_result() -> None:
         )
 
         assert response.status_code == 400
-        assert "missing validation result for case case-b repeat 1 validator quality" in (
-            response.json()["detail"]
-        )
+        assert "total_results 1, expected 2" in response.json()["detail"]
         assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
 
 
@@ -1083,6 +1163,95 @@ def test_api_rejects_compare_error_result_with_duplicate_check_ids() -> None:
         assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
 
 
+def test_api_rejects_compare_result_with_mismatched_validator_type() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        baseline_dir, candidate_dir = write_demo_experiment(root)
+        write_run_batch(baseline_dir, "baseline-run-001", version="v001")
+        write_run_batch(candidate_dir, "candidate-run-001", version="v002")
+        write_validation_batch(
+            baseline_dir,
+            validation_batch_id="validation-001",
+            run_batch_id="baseline-run-001",
+            version="v001",
+            verdict="yes",
+        )
+        write_validation_batch(
+            candidate_dir,
+            validation_batch_id="validation-002",
+            run_batch_id="candidate-run-001",
+            version="v002",
+            verdict="yes",
+        )
+        corrupt_validation_result(
+            candidate_dir,
+            validation_batch_id="validation-002",
+            updates={"validator_type": "automatic"},
+        )
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/api/experiments/demo/comparisons",
+            json={"baseline_version": "v001", "candidate_version": "v002"},
+        )
+
+        assert response.status_code == 400
+        assert "validator_type automatic, expected llm_questionnaire" in (
+            response.json()["detail"]
+        )
+        assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
+
+
+def test_api_rejects_compare_completed_batch_with_no_validators() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        baseline_dir, candidate_dir = write_demo_experiment(root)
+        write_run_batch(baseline_dir, "baseline-run-001", version="v001")
+        write_run_batch(candidate_dir, "candidate-run-001", version="v002")
+        write_validation_batch(
+            baseline_dir,
+            validation_batch_id="validation-001",
+            run_batch_id="baseline-run-001",
+            version="v001",
+            verdict="yes",
+        )
+        write_validation_batch(
+            candidate_dir,
+            validation_batch_id="validation-002",
+            run_batch_id="candidate-run-001",
+            version="v002",
+            verdict="yes",
+        )
+        validation_result_path(
+            candidate_dir,
+            validation_batch_id="validation-002",
+        ).unlink()
+        validators_snapshot = (
+            candidate_dir / "validations" / "validation-002" / "validators_snapshot"
+        )
+        for path in validators_snapshot.glob("*.json"):
+            path.unlink()
+        batch_path = validation_batch_path(
+            candidate_dir,
+            validation_batch_id="validation-002",
+        )
+        batch = json.loads(batch_path.read_text(encoding="utf-8"))
+        batch["validator_ids"] = []
+        batch["total_results"] = 0
+        batch["completed_results"] = 0
+        write_json(batch_path, batch)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/api/experiments/demo/comparisons",
+            json={"baseline_version": "v001", "candidate_version": "v002"},
+        )
+
+        assert response.status_code == 400
+        assert "has no validator snapshots" in response.json()["detail"]
+        assert not (runtime_version_dir(root, "v002") / "comparisons").exists()
+
+
 def main() -> int:
     tests = [
         test_compare_matrix_marks_any_no_as_fail,
@@ -1105,6 +1274,8 @@ def main() -> int:
         test_api_rejects_compare_validation_batch_id_mismatching_directory_name,
         test_api_rejects_compare_ok_result_with_duplicate_check_ids,
         test_api_rejects_compare_error_result_with_duplicate_check_ids,
+        test_api_rejects_compare_result_with_mismatched_validator_type,
+        test_api_rejects_compare_completed_batch_with_no_validators,
     ]
     for test in tests:
         test()

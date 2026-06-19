@@ -695,12 +695,31 @@ def _validate_validation_results_for_compare(
             ),
         )
 
-    validator_checks = {
-        validator.validator_id: {check.check_id for check in validator.checks}
+    validator_metadata = {
+        validator.validator_id: {
+            "type": validator.type,
+            "check_ids": {check.check_id for check in validator.checks},
+        }
         for validator in validator_snapshots
     }
-    snapshot_ids = set(validator_checks)
+    snapshot_ids = set(validator_metadata)
     batch_validator_ids = set(validation_batch.validator_ids)
+    if not snapshot_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Validation batch {validation_batch.validation_batch_id} has "
+                "no validator snapshots"
+            ),
+        )
+    if not batch_validator_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Validation batch {validation_batch.validation_batch_id} has "
+                "no validator_ids"
+            ),
+        )
     if snapshot_ids != batch_validator_ids:
         raise HTTPException(
             status_code=400,
@@ -708,6 +727,16 @@ def _validate_validation_results_for_compare(
                 f"Validation batch {validation_batch.validation_batch_id} has "
                 f"validator_ids {sorted(batch_validator_ids)}, but snapshot "
                 f"validator_ids are {sorted(snapshot_ids)}"
+            ),
+        )
+    expected_total_results = len(run_artifacts) * len(snapshot_ids)
+    if validation_batch.total_results != expected_total_results:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Validation batch {validation_batch.validation_batch_id} has "
+                f"total_results {validation_batch.total_results}, expected "
+                f"{expected_total_results}"
             ),
         )
 
@@ -776,8 +805,8 @@ def _validate_validation_results_for_compare(
                     f"{result.run_id}, expected {expected_run_id}"
                 ),
             )
-        check_ids = validator_checks.get(result.validator_id)
-        if check_ids is None:
+        validator_snapshot = validator_metadata.get(result.validator_id)
+        if validator_snapshot is None:
             raise HTTPException(
                 status_code=400,
                 detail=(
@@ -785,6 +814,17 @@ def _validate_validation_results_for_compare(
                     f"validator_id {result.validator_id}"
                 ),
             )
+        expected_validator_type = validator_snapshot["type"]
+        if result.validator_type != expected_validator_type:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} has "
+                    f"validator_type {result.validator_type}, expected "
+                    f"{expected_validator_type}"
+                ),
+            )
+        check_ids = validator_snapshot["check_ids"]
         for check in result.check_results:
             if check.check_id not in check_ids:
                 raise HTTPException(
