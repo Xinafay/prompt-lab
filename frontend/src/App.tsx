@@ -1054,6 +1054,12 @@ function App() {
   function handleValidationStateChange(nextState: ValidationState) {
     setValidationState(nextState);
     setValidationDirty(true);
+    setReviewState(null);
+    setProposalResponse(null);
+    setCreatedVersion(null);
+    setComparison(null);
+    setDecisionsDirty(false);
+    setHumanNotesDirty(false);
   }
 
   async function handleSaveValidationInclusion() {
