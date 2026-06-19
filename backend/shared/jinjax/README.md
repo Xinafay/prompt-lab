@@ -57,15 +57,33 @@ The custom filters are registered on every environment `create_env` returns.
 
 ### `tojson` filter
 
-An extended version of the standard `tojson` filter — adds optional `indent`
-and `ensure_ascii`:
+An extended version of the standard `tojson` filter. Unlike Jinja's built-in,
+it targets Markdown output: by default it produces **raw, unescaped JSON** with
+`ensure_ascii=False`, so non-ASCII characters (e.g. Polish letters, emoji) are
+emitted as-is and `<`, `>`, `&`, `'` are *not* escaped.
+
+Parameters:
+
+| param          | default | effect                                            |
+| -------------- | ------- | ------------------------------------------------- |
+| `indent`       | `None`  | pretty-print indentation (compact when `None`)    |
+| `ensure_ascii` | `False` | escape non-ASCII as `\uXXXX`                       |
+| `html_safe`    | `False` | escape `<`, `>`, `&`, `'` and wrap in `Markup`     |
+| `sort_keys`    | `False` | sort object keys alphabetically                   |
 
 ```jinja
-{{ obj | tojson }}              {# standard Jinja behavior #}
-{{ obj | tojson(2) }}           {# indent=2 #}
-{{ obj | tojson(None, False) }} {# ensure_ascii=False, no indent #}
-{{ obj | tojson(2, False) }}    {# ensure_ascii=False, indent=2 #}
+{{ obj | tojson }}                {# raw JSON, ensure_ascii=False #}
+{{ obj | tojson(2) }}             {# indent=2 #}
+{{ obj | tojson(None, True) }}    {# ensure_ascii=True #}
+{{ obj | tojson(html_safe=True) }}{# HTML-safe (escapes <, >, &, ') #}
+{{ obj | tojson(sort_keys=True) }}{# keys sorted alphabetically #}
 ```
+
+> **Security note:** when embedding the output inside an HTML `<script>` block,
+> pass `html_safe=True` **and** `ensure_ascii=True`. `html_safe` does not escape
+> the U+2028/U+2029 line/paragraph separators, which Jinja sidesteps via
+> `ensure_ascii=True`; with `ensure_ascii=False` those are emitted raw and can
+> break or inject JavaScript.
 
 ## Structure
 
