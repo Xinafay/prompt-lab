@@ -124,8 +124,25 @@ def write_review_fixture(root: Path, *, output_type: str = "pydantic") -> Path:
             },
         },
     )
-    (review_dir / "rubric_snapshot.md").write_text(
-        "Prefer concise complete answers.", encoding="utf-8"
+    write_json(
+        review_dir / "validation_context.json",
+        {
+            "validation_batch_id": "validation-001",
+            "run_batch_id": "batch-001",
+            "validation_evidence": [
+                {
+                    "validator_id": "quality",
+                    "validator_title": "Quality checks",
+                    "check_id": "complete",
+                    "check_title": "Complete answer",
+                    "case_id": "case-a",
+                    "repeat_index": 1,
+                    "verdict": "no",
+                    "comment": "The output misses the required summary.",
+                }
+            ],
+            "validator_snapshots": [],
+        },
     )
     (review_dir / "human_notes.md").write_text(
         "Keep the answer terse; do not add friendliness work.", encoding="utf-8"
@@ -172,7 +189,20 @@ def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
         output_type="pydantic",
         prompt_template="Say {{ value }} and include summary.",
         model_source="class DemoOutput: ...\n    answer: str",
-        rubric_snapshot="Prefer complete answers.",
+        validation_context={
+            "validation_batch_id": "validation-001",
+            "run_batch_id": "batch-001",
+            "validation_evidence": [
+                {
+                    "validator_id": "quality",
+                    "check_id": "complete",
+                    "case_id": "case-a",
+                    "repeat_index": 1,
+                    "verdict": "no",
+                    "comment": "Missing summary.",
+                }
+            ],
+        },
         judgment=valid_judgment_payload(
             findings=[
                 {
@@ -222,7 +252,9 @@ def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
     assert "Say {{ value }} and include summary." in prompt
     assert "Current model: local/generator" in prompt
     assert "Keep the answer terse" in prompt
-    assert "Prefer complete answers." in prompt
+    assert "VALIDATION_CONTEXT_JSON" in prompt
+    assert "validation-001" in prompt
+    assert "RUBRIC_SNAPSHOT_MD" not in prompt
     assert "f-accepted" in prompt
     assert "Missing summary." in prompt
     assert "f-rejected" in prompt
@@ -303,6 +335,7 @@ def test_api_generates_proposal_artifacts_with_traceable_source() -> None:
             assert source["source_version"] == "v001"
             assert source["review_id"] == "review-001"
             assert source["judgment_id"] == "j001"
+            assert source["validation_batch_id"] == "validation-001"
             assert source["generated_by_model"] == "openai/judge"
             assert source["human_notes_present"] is True
             assert source["decision_summary"] == {
@@ -316,7 +349,9 @@ def test_api_generates_proposal_artifacts_with_traceable_source() -> None:
             assert "Say {{ value }}" in calls[0]["prompt"]
             assert "Current model: local/a" in calls[0]["prompt"]
             assert "Keep the answer terse" in calls[0]["prompt"]
-            assert "Prefer concise complete answers." in calls[0]["prompt"]
+            assert "VALIDATION_CONTEXT_JSON" in calls[0]["prompt"]
+            assert "validation-001" in calls[0]["prompt"]
+            assert "RUBRIC_SNAPSHOT_MD" not in calls[0]["prompt"]
             assert "f-accepted" in calls[0]["prompt"]
             assert "The output misses the required summary." in calls[0]["prompt"]
             assert "f-rejected" in calls[0]["prompt"]

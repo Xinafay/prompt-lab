@@ -604,6 +604,78 @@ def _read_validation_state(
     }
 
 
+def _validation_snapshot_lookup(
+    validators: list[ValidatorDefinition],
+) -> dict[str, dict[str, object]]:
+    lookup: dict[str, dict[str, object]] = {}
+    for validator in validators:
+        checks = getattr(validator, "checks", [])
+        check_lookup = {
+            check.check_id: {"check_title": check.title}
+            for check in checks
+        }
+        lookup[validator.validator_id] = {
+            "validator_title": validator.title,
+            "checks": check_lookup,
+        }
+    return lookup
+
+
+def _build_validation_evidence(
+    *,
+    results: list[ValidationResultArtifact],
+    validators: list[ValidatorDefinition],
+) -> list[dict[str, object]]:
+    validator_lookup = _validation_snapshot_lookup(validators)
+    evidence: list[dict[str, object]] = []
+    for result in sorted(
+        results,
+        key=lambda item: (item.case_id, item.repeat_index, item.validator_id),
+    ):
+        if not result.included_in_judge:
+            continue
+        validator_snapshot = validator_lookup.get(result.validator_id, {})
+        check_lookup = validator_snapshot.get("checks", {})
+        for check in result.check_results:
+            if not check.included_in_judge:
+                continue
+            payload: dict[str, object] = {
+                "validator_id": result.validator_id,
+                "check_id": check.check_id,
+                "case_id": result.case_id,
+                "repeat_index": result.repeat_index,
+                "verdict": check.verdict,
+                "comment": check.comment,
+            }
+            validator_title = validator_snapshot.get("validator_title")
+            if isinstance(validator_title, str):
+                payload["validator_title"] = validator_title
+            if isinstance(check_lookup, dict):
+                check_snapshot = check_lookup.get(check.check_id)
+                if isinstance(check_snapshot, dict):
+                    check_title = check_snapshot.get("check_title")
+                    if isinstance(check_title, str):
+                        payload["check_title"] = check_title
+            evidence.append(payload)
+    return evidence
+
+
+def _run_errors_from_artifacts(
+    run_artifacts: list[RunArtifact],
+) -> list[dict[str, object]]:
+    return [
+        {
+            "case_id": run.case_id,
+            "repeat_index": run.repeat_index,
+            "status": run.status,
+            "validation_error": run.validation_error,
+            "execution_error": run.execution_error,
+        }
+        for run in sorted(run_artifacts, key=lambda item: (item.case_id, item.repeat_index))
+        if run.validation_error is not None or run.execution_error is not None
+    ]
+
+
 def _validation_result_relative_path(result: ValidationResultArtifact) -> str:
     return (
         f"validations/{result.validation_batch_id}/{result.case_id}/"
@@ -1458,46 +1530,64 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             )
             version_dir = store.version_dir(experiment_id, version)
             runs_dir = version_dir / "runs"
-            experiment_dir = store.experiment_dir(experiment_id)
-            rubric_path = experiment_dir / "rubric.md"
-            rubric = _read_optional_text(rubric_path)
+            validation_dir = _select_latest_validation_dir(version_dir)
+            if validation_dir is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Judgment requires a completed validation batch. "
+                        "Run validation before generating a judgment."
+                    ),
+                )
+            validation_batch = ValidationBatchArtifact.model_validate(
+                _read_json(validation_dir / "batch.json")
+            )
+            validation_results = store.load_validation_results(
+                experiment_id,
+                version,
+                validation_batch.validation_batch_id,
+            )
+            validator_snapshots = _read_validation_snapshots(validation_dir)
+            validation_evidence = _build_validation_evidence(
+                results=validation_results,
+                validators=validator_snapshots,
+            )
             prompt_template = store.read_text(
                 experiment_id, version, experiment.template.path
             )
             cases = store.load_cases(experiment_id)
             case_ids = {case.id for case in cases}
-            if run_batch_id is None:
-                selected_run_batch_id, run_artifacts = _load_latest_validated_run_batch(
-                    version_dir=version_dir,
-                    version=version,
-                    cases=case_ids,
-                    repeat_count=experiment.run_defaults.repeat_count,
+            selected_run_batch_id = validation_batch.run_batch_id
+            if run_batch_id is not None and run_batch_id != selected_run_batch_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Requested run batch does not match latest completed "
+                        "validation batch"
+                    ),
                 )
-                run_batch_dir = runs_dir / selected_run_batch_id
-            else:
-                _validate_run_batch_id_path_segment(run_batch_id)
-                selected_run_batch_id = run_batch_id
-                run_batch_dir = (runs_dir / run_batch_id).resolve()
-                resolved_runs_dir = runs_dir.resolve()
-                if (
-                    run_batch_dir == resolved_runs_dir
-                    or not run_batch_dir.is_relative_to(resolved_runs_dir)
-                    or not run_batch_dir.is_dir()
-                ):
-                    raise HTTPException(status_code=404, detail="Run batch not found")
-                run_artifacts = _load_run_artifacts_from_batch_dir(run_batch_dir)
-                if not run_artifacts:
-                    raise HTTPException(
-                        status_code=400, detail="Run batch has no artifacts"
-                    )
-                _validate_run_artifacts(
-                    run_artifacts=run_artifacts,
-                    selected_run_batch_id=selected_run_batch_id,
-                    version=version,
-                    case_ids=case_ids,
-                    repeat_count=experiment.run_defaults.repeat_count,
+            run_batch_dir = (runs_dir / selected_run_batch_id).resolve()
+            resolved_runs_dir = runs_dir.resolve()
+            if (
+                run_batch_dir == resolved_runs_dir
+                or not run_batch_dir.is_relative_to(resolved_runs_dir)
+                or not run_batch_dir.is_dir()
+            ):
+                raise HTTPException(status_code=404, detail="Run batch not found")
+            run_artifacts = _load_run_artifacts_from_batch_dir(run_batch_dir)
+            if not run_artifacts:
+                raise HTTPException(
+                    status_code=400, detail="Run batch has no artifacts"
                 )
+            _validate_run_artifacts(
+                run_artifacts=run_artifacts,
+                selected_run_batch_id=selected_run_batch_id,
+                version=version,
+                case_ids=case_ids,
+                repeat_count=experiment.run_defaults.repeat_count,
+            )
 
+            model_source = None
             if experiment.output.type == "pydantic":
                 model_file = experiment.output.model_file
                 model_entrypoint = experiment.output.model_entrypoint
@@ -1515,12 +1605,13 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 experiment_id=experiment_id,
                 version=version,
                 run_batch_id=selected_run_batch_id,
+                validation_batch_id=validation_batch.validation_batch_id,
                 judge_model=experiment.models.judge_model,
                 output_declaration=output_declaration,
-                rubric=rubric,
                 prompt_template=prompt_template,
-                cases=cases,
-                run_artifacts=run_artifacts,
+                model_source=model_source,
+                validation_evidence=validation_evidence,
+                run_errors=_run_errors_from_artifacts(run_artifacts),
             )
             if dry_run:
                 generated = llm_client.generate_structured_from_fake_response(
@@ -1565,12 +1656,22 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             (review_dir / "judgment.md").write_text(
                 _render_judgment_markdown(judgment), encoding="utf-8"
             )
-            (review_dir / "rubric_snapshot.md").write_text(rubric, encoding="utf-8")
+            validation_context = {
+                "validation_batch_id": validation_batch.validation_batch_id,
+                "run_batch_id": selected_run_batch_id,
+                "validation_evidence": validation_evidence,
+                "validator_snapshots": [
+                    validator.model_dump(mode="json")
+                    for validator in validator_snapshots
+                ],
+            }
+            _write_json(review_dir / "validation_context.json", validation_context)
             _write_json(review_dir / "decisions.json", decisions.model_dump(mode="json"))
             complete_workflow_job(job_id, "Judgment completed")
             return {
                 "review_id": review_id,
                 "run_batch_id": selected_run_batch_id,
+                "validation_batch_id": validation_batch.validation_batch_id,
                 "judgment": judgment.model_dump(mode="json"),
             }
         except ValidationError as exc:
@@ -1837,11 +1938,11 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             prompt_template = store.read_text(
                 experiment_id, version, experiment.template.path
             )
-            rubric_snapshot_path = review_dir / "rubric_snapshot.md"
-            rubric_snapshot = (
-                rubric_snapshot_path.read_text(encoding="utf-8")
-                if rubric_snapshot_path.is_file()
-                else ""
+            validation_context_path = review_dir / "validation_context.json"
+            validation_context = (
+                _read_json(validation_context_path)
+                if validation_context_path.is_file()
+                else {}
             )
             human_notes_path = review_dir / "human_notes.md"
             human_notes = (
@@ -1862,7 +1963,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 output_type=experiment.output.type,
                 prompt_template=prompt_template,
                 model_source=model_source,
-                rubric_snapshot=rubric_snapshot,
+                validation_context=validation_context,
                 judgment=judgment,
                 decisions=decisions,
                 human_notes=human_notes,
@@ -1924,6 +2025,9 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 "generated_by_model": experiment.models.judge_model,
                 "output_type": experiment.output.type,
             }
+            validation_batch_id = validation_context.get("validation_batch_id")
+            if isinstance(validation_batch_id, str):
+                source["validation_batch_id"] = validation_batch_id
             _write_json(proposal_dir / "source.json", source)
             complete_workflow_job(job_id, "Proposal completed")
             return {

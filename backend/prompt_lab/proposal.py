@@ -68,7 +68,7 @@ def build_proposal_prompt(
     output_type: str,
     prompt_template: str,
     model_source: str | None,
-    rubric_snapshot: str,
+    validation_context: dict[str, Any],
     judgment: JudgmentArtifact | dict[str, Any],
     decisions: FindingDecisionSet | dict[str, Any],
     human_notes: str,
@@ -116,7 +116,11 @@ def build_proposal_prompt(
             "current_prompt_section": fenced_section(
                 "CURRENT_PROMPT_MD", prompt_template
             ),
-            "rubric_section": fenced_section("RUBRIC_SNAPSHOT_MD", rubric_snapshot),
+            "validation_context_section": fenced_section(
+                "VALIDATION_CONTEXT_JSON",
+                json_block(validation_context),
+                fence="json",
+            ),
             "human_notes_section": fenced_section("HUMAN_NOTES_MD", human_notes),
             "accepted_findings_section": fenced_section(
                 "ACCEPTED_FINDINGS_JSON",
