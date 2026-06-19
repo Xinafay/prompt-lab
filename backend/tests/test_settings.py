@@ -19,6 +19,7 @@ def test_load_settings_returns_defaults_when_file_is_missing() -> None:
 
         assert settings == PromptLabSettings()
         assert settings.default_generator_model == "local/gpt-oss-120b"
+        assert settings.default_validator_model == "openai/example-large-model"
         assert settings.default_judge_model == "openai/example-large-model"
         assert settings.default_repeat_count == 3
         assert not path.exists()
@@ -29,6 +30,7 @@ def test_save_settings_writes_formatted_json_and_loads_it_back() -> None:
         path = Path(tmp) / "config" / "settings.json"
         settings = PromptLabSettings(
             default_generator_model="local/generator",
+            default_validator_model="openai/validator",
             default_judge_model="openai/judge",
             default_repeat_count=5,
         )
@@ -41,6 +43,7 @@ def test_save_settings_writes_formatted_json_and_loads_it_back() -> None:
         assert payload == {
             "schema_version": "prompt_lab.settings/v1",
             "default_generator_model": "local/generator",
+            "default_validator_model": "openai/validator",
             "default_judge_model": "openai/judge",
             "default_repeat_count": 5,
         }

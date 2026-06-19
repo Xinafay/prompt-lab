@@ -14,6 +14,9 @@ class PromptLabSettings(BaseModel):
 
     schema_version: Literal["prompt_lab.settings/v1"] = "prompt_lab.settings/v1"
     default_generator_model: str = Field(default="local/gpt-oss-120b", min_length=1)
+    default_validator_model: str = Field(
+        default="openai/example-large-model", min_length=1
+    )
     default_judge_model: str = Field(
         default="openai/example-large-model", min_length=1
     )

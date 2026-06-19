@@ -69,6 +69,7 @@ def _apply_settings_to_copied_manifest(
             "models": experiment.models.model_copy(
                 update={
                     "generator_model": settings.default_generator_model,
+                    "validator_model": settings.default_validator_model,
                     "judge_model": settings.default_judge_model,
                 }
             ),

@@ -16,7 +16,11 @@ MANIFEST = {
     "active_version": "v001",
     "output": {"type": "text"},
     "template": {"engine": "jinja2", "path": "prompt.md"},
-    "models": {"generator_model": "local/a", "judge_model": "openai/b"},
+    "models": {
+        "generator_model": "local/a",
+        "validator_model": "openai/validator-a",
+        "judge_model": "openai/b",
+    },
     "run_defaults": {
         "repeat_count": 1,
         "llm_cache": "disabled",
@@ -62,6 +66,7 @@ def test_seed_applies_global_defaults_to_copied_manifest() -> None:
         write_example(root)
         settings = PromptLabSettings(
             default_generator_model="local/default-generator",
+            default_validator_model="openai/default-validator",
             default_judge_model="openai/default-judge",
             default_repeat_count=7,
         )
@@ -80,6 +85,7 @@ def test_seed_applies_global_defaults_to_copied_manifest() -> None:
         )
         assert copied_manifest["models"] == {
             "generator_model": "local/default-generator",
+            "validator_model": "openai/default-validator",
             "judge_model": "openai/default-judge",
         }
         assert copied_manifest["run_defaults"]["repeat_count"] == 7
@@ -90,6 +96,7 @@ def test_seed_applies_global_defaults_to_copied_manifest() -> None:
         )
         assert source_manifest["models"] == {
             "generator_model": "local/a",
+            "validator_model": "openai/validator-a",
             "judge_model": "openai/b",
         }
         assert source_manifest["run_defaults"]["repeat_count"] == 1
