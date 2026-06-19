@@ -76,6 +76,22 @@ test("judge action is enabled after validation exists", () => {
   );
 });
 
+test("judge action is disabled until validation inclusion is saved", () => {
+  assert.deepEqual(
+    getJudgeActionState({
+      hasRuns: true,
+      hasUnsavedValidationChanges: true,
+      hasValidation: true,
+      isBusy: false
+    }),
+    {
+      disabled: true,
+      disabledReason: "Save validation inclusion before judging.",
+      label: "Judge validated run"
+    }
+  );
+});
+
 test("judge action label changes when a review already exists", () => {
   assert.deepEqual(
     getJudgeActionState({

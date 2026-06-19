@@ -1,6 +1,7 @@
 interface JudgeActionInput {
   hasReview?: boolean;
   hasRuns: boolean;
+  hasUnsavedValidationChanges?: boolean;
   hasValidation?: boolean;
   isBusy: boolean;
 }
@@ -19,6 +20,7 @@ interface CompareActionState extends ActionState {
 export function getJudgeActionState({
   hasReview = false,
   hasRuns,
+  hasUnsavedValidationChanges = false,
   hasValidation = false,
   isBusy
 }: JudgeActionInput): ActionState {
@@ -40,6 +42,13 @@ export function getJudgeActionState({
     return {
       disabled: true,
       disabledReason: "Validate the active run before judging.",
+      label: "Judge validated run"
+    };
+  }
+  if (hasUnsavedValidationChanges) {
+    return {
+      disabled: true,
+      disabledReason: "Save validation inclusion before judging.",
       label: "Judge validated run"
     };
   }

@@ -1559,6 +1559,7 @@ function App() {
   const judgeAction = getJudgeActionState({
     hasReview: reviewState !== null,
     hasRuns,
+    hasUnsavedValidationChanges: validationDirty,
     hasValidation,
     isBusy: workflowLocked
   });
