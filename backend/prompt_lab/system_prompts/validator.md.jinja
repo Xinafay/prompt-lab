@@ -10,9 +10,13 @@ Rules:
 - Treat OUTPUT_TEXT, OUTPUT_JSON, or INVALID_OUTPUT_TEXT as the run result being validated.
 - If VALIDATION_ERROR is present, the generator produced INVALID_OUTPUT_TEXT but it failed the structured-output contract.
 - Use RENDERED_PROMPT or CASE_CONTEXT_JSON only as supporting evidence when present.
-- Use `yes` when the provided context clearly satisfies the check.
-- Use `no` when the provided context clearly fails the check.
-- Use `unknown` when the provided context is insufficient or ambiguous.
+- Use `5` for very good: the result satisfies the check with no meaningful issue.
+- Use `4` for good: the result satisfies the check with minor improvement opportunities.
+- Use `3` for acceptable but improvable: the result partially satisfies the check.
+- Use `2` for weak: the result mostly fails the check, but contains some useful evidence.
+- Use `1` for bad: the result fails the check.
+- Use `null` only when the provided evidence is insufficient or ambiguous.
+- Do not use `3` as a substitute for missing evidence.
 
 {{ validator_section }}
 

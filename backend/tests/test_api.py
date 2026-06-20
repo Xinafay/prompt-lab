@@ -17,6 +17,25 @@ import prompt_lab.api as api_module
 from test_judge import valid_case_payload, valid_run_payload, write_json
 
 
+def fake_dry_validator_response_json(check_ids: list[str]) -> str:
+    return json.dumps(
+        {
+            "check_results": [
+                {
+                    "check_id": check_id,
+                    "grade": 5,
+                    "comment": f"dry-run validator response for {check_id}",
+                }
+                for check_id in check_ids
+            ]
+        },
+        ensure_ascii=False,
+    )
+
+
+api_module.dry_validator_response_json = fake_dry_validator_response_json
+
+
 def demo_experiment_payload(
     *, experiment_id: str = "demo", active_version: str = "v001"
 ) -> dict[str, object]:
@@ -1272,7 +1291,7 @@ def test_api_failed_validation_batch_is_terminal_and_not_latest() -> None:
                     "check_results": [
                         {
                             "check_id": "wrong-check",
-                            "verdict": "yes",
+                            "grade": 5,
                             "comment": "bad id",
                         }
                     ]

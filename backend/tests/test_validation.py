@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from prompt_lab.models.artifacts import CaseArtifact, RunArtifact
+from prompt_lab.models.validators import LlmQuestionnaireResponse
 from prompt_lab.models.validators import LlmQuestionnaireValidatorDefinition
 from prompt_lab.models.validators import (
     ValidationInclusionUpdate,
@@ -10,6 +11,7 @@ from prompt_lab.models.validators import (
 )
 from prompt_lab.validation import (
     apply_inclusion_update,
+    build_llm_validation_result,
     build_llm_validator_prompt,
     build_skipped_validation_result,
     validate_llm_check_ids,
@@ -83,7 +85,7 @@ def _validation_result(**overrides: object) -> ValidationResultArtifact:
         "check_results": [
             {
                 "check_id": "has-answer",
-                "verdict": "yes",
+                "grade": 5,
                 "comment": "ok",
                 "included_in_judge": True,
                 "metrics": {},
@@ -118,6 +120,28 @@ def test_build_llm_validator_prompt_respects_output_only_input_scope() -> None:
     assert "<<<RUN_STATUS_JSON" not in prompt
     assert "Rendered prompt should stay hidden" not in prompt
     assert "secret_context" not in prompt
+
+
+def test_build_llm_validator_prompt_defines_global_grade_scale() -> None:
+    prompt = build_llm_validator_prompt(
+        experiment_id="demo",
+        version="v001",
+        validation_batch_id="validation-001",
+        validator=_validator(),
+        run=_run_artifact(),
+        case=_case_artifact(),
+        case_context={},
+    )
+
+    assert "Use `5` for very good" in prompt
+    assert "Use `4` for good" in prompt
+    assert "Use `3` for acceptable but improvable" in prompt
+    assert "Use `2` for weak" in prompt
+    assert "Use `1` for bad" in prompt
+    assert "Use `null` only when" in prompt
+    assert "Use `yes`" not in prompt
+    assert "Use `no`" not in prompt
+    assert "Use `unknown`" not in prompt
 
 
 def test_build_llm_validator_prompt_renders_text_output_as_text() -> None:
@@ -211,6 +235,32 @@ def test_build_llm_validator_prompt_includes_only_materialized_case_context() ->
     assert '"stores"' not in prompt
     assert '"bindings"' not in prompt
     assert "Rendered prompt should stay hidden" not in prompt
+
+
+def test_build_llm_validation_result_records_grades() -> None:
+    result = build_llm_validation_result(
+        "validation-001",
+        _run_artifact(),
+        _validator(),
+        LlmQuestionnaireResponse.model_validate(
+            {
+                "check_results": [
+                    {
+                        "check_id": "has-answer",
+                        "grade": 4,
+                        "comment": "Good with minor omissions.",
+                    }
+                ]
+            }
+        ),
+        usage={"total_tokens": 7},
+    )
+
+    assert result.status == "ok"
+    assert result.check_results[0].grade == 4
+    assert result.check_results[0].comment == "Good with minor omissions."
+    assert result.check_results[0].included_in_judge is True
+    assert result.usage == {"total_tokens": 7}
 
 
 def test_build_skipped_validation_result_records_non_included_result() -> None:
@@ -362,9 +412,11 @@ def test_apply_inclusion_update_rejects_included_skipped_result() -> None:
 def main() -> int:
     tests = [
         test_build_llm_validator_prompt_respects_output_only_input_scope,
+        test_build_llm_validator_prompt_defines_global_grade_scale,
         test_build_llm_validator_prompt_renders_text_output_as_text,
         test_build_llm_validator_prompt_renders_validation_error_with_raw_output,
         test_build_llm_validator_prompt_includes_only_materialized_case_context,
+        test_build_llm_validation_result_records_grades,
         test_build_skipped_validation_result_records_non_included_result,
         test_validate_llm_check_ids_rejects_missing_check_ids,
         test_apply_inclusion_update_rejects_unknown_result_id,

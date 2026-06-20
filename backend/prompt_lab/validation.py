@@ -151,7 +151,7 @@ def build_llm_validation_result(
             "check_results": [
                 ValidationCheckResult(
                     check_id=check_result.check_id,
-                    verdict=check_result.verdict,
+                    grade=check_result.grade,
                     comment=check_result.comment,
                     included_in_judge=True,
                 ).model_dump(mode="json")
