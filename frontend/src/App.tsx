@@ -42,7 +42,7 @@ import {
 import { WorkbenchTabs } from "./components/WorkbenchTabs";
 import { WorkflowToolbar } from "./components/WorkflowToolbar";
 import type {
-  ComparisonArtifact,
+  CompareMatrixResponse,
   CreatedVersionResponse,
   Experiment,
   FindingDecisionValue,
@@ -143,7 +143,7 @@ function App() {
     useState<ProposalResponse | null>(null);
   const [createdVersion, setCreatedVersion] =
     useState<CreatedVersionResponse | null>(null);
-  const [comparison, setComparison] = useState<ComparisonArtifact | null>(null);
+  const [comparison, setComparison] = useState<CompareMatrixResponse | null>(null);
   const [versionSummaries, setVersionSummaries] = useState<VersionSummary[]>([]);
   const [activeTab, setActiveTab] = useState<WorkbenchTab>(
     () => currentExperimentRoute().tab

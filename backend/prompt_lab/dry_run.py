@@ -93,41 +93,6 @@ def dry_proposal_response_json(
     return json.dumps(payload, ensure_ascii=False)
 
 
-def dry_comparison_response_json(
-    *,
-    comparison_id: str,
-    baseline_version: str,
-    candidate_version: str,
-    baseline_run_batch_id: str,
-    candidate_run_batch_id: str,
-    judge_model: str,
-) -> str:
-    return json.dumps(
-        {
-            "schema_version": "prompt_lab.comparison/v1",
-            "comparison_id": comparison_id,
-            "baseline_version": baseline_version,
-            "candidate_version": candidate_version,
-            "baseline_run_batch_ids": [baseline_run_batch_id],
-            "candidate_run_batch_ids": [candidate_run_batch_id],
-            "judge_model": judge_model,
-            "summary": "Dry-run comparison generated from deterministic fake LLM JSON.",
-            "improvements": [
-                "Dry-run candidate artifacts were available for comparison."
-            ],
-            "regressions": [],
-            "unchanged_problems": [],
-            "new_problems": [],
-            "stability_changes": [
-                "Dry-run comparison validated the artifact writing workflow."
-            ],
-            "recommendation": "inconclusive",
-            "decision_points": [],
-        },
-        ensure_ascii=False,
-    )
-
-
 def sample_model_payload(
     annotation: Any,
     *,

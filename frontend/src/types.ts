@@ -409,5 +409,4 @@ export interface CompareMatrixResponse {
   rows: CompareMatrixRow[];
 }
 
-export type ComparisonArtifact = CompareMatrixResponse;
 export type ComparisonResponse = CompareMatrixResponse;

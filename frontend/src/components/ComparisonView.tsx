@@ -1,7 +1,7 @@
 import type {
   CompareMatrixCell,
+  CompareMatrixResponse,
   CompareMatrixRow,
-  ComparisonArtifact
 } from "../types";
 import { getCompareActionState } from "../workflowActions";
 import { TooltipButton } from "./TooltipButton";
@@ -10,7 +10,7 @@ interface ComparisonViewProps {
   knownVersions: string[];
   baselineVersion: string;
   candidateVersion: string;
-  comparison: ComparisonArtifact | null;
+  comparison: CompareMatrixResponse | null;
   hasUnsavedValidationChanges: boolean;
   hasValidation: boolean;
   isBusy: boolean;
