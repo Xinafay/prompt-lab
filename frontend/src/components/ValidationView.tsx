@@ -1,4 +1,11 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 
 import type {
   RunArtifact,
@@ -67,7 +74,7 @@ function aggregateStatus(cells: ValidationMatrixCell[]): {
   label: string;
 } {
   if (cells.length === 0) {
-    return { className: "compare-cell-empty", label: "No data" };
+    return { className: "compare-cell-empty", label: "empty" };
   }
   const missingOrError = cells.filter(
     (cell) => cell.verdict === "missing" || cell.verdict === "error"
@@ -77,16 +84,16 @@ function aggregateStatus(cells: ValidationMatrixCell[]): {
   if (missingOrError > 0 || failed > 0) {
     return {
       className: "compare-cell-fail",
-      label: `${missingOrError + failed}/${cells.length} fail`
+      label: `${missingOrError + failed} fail`
     };
   }
   if (unknown > 0) {
     return {
       className: "compare-cell-mixed",
-      label: `${unknown}/${cells.length} unknown`
+      label: `${unknown} unknown`
     };
   }
-  return { className: "compare-cell-pass", label: "All pass" };
+  return { className: "compare-cell-pass", label: "pass" };
 }
 
 function outputText(run: RunArtifact | null | undefined): string {
@@ -147,7 +154,11 @@ function MatrixCheckbox({
   }, [state.indeterminate]);
 
   return (
-    <label className="validation-matrix-checkbox" title={title}>
+    <label
+      className="validation-matrix-checkbox"
+      onClick={(event) => event.stopPropagation()}
+      title={title}
+    >
       <input
         aria-label={label}
         checked={state.checked}
@@ -157,6 +168,9 @@ function MatrixCheckbox({
         ref={inputRef}
         type="checkbox"
       />
+      <span className="validation-checkbox-tooltip" role="tooltip">
+        {title}
+      </span>
     </label>
   );
 }
@@ -164,6 +178,48 @@ function MatrixCheckbox({
 function resultTitle(result: ValidationResult | null): string {
   if (result === null) return "Missing validation result";
   return `${result.case_id} / repeat ${result.repeat_index}`;
+}
+
+function validationComment(cell: ValidationMatrixCell): string {
+  return cell.comment.trim()
+    ? cell.comment
+    : "No validation comment was saved for this check.";
+}
+
+function MatrixItem({
+  checkbox,
+  badge,
+  title,
+  meta,
+  description,
+  className = ""
+}: {
+  checkbox?: ReactNode;
+  badge?: ReactNode;
+  title?: ReactNode;
+  meta?: ReactNode;
+  description?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`validation-matrix-item ${className}`.trim()}>
+      {checkbox !== undefined || badge !== undefined ? (
+        <div className="validation-matrix-item-toolbar">
+          <span>{checkbox}</span>
+          <span>{badge}</span>
+        </div>
+      ) : null}
+      {title !== undefined ? (
+        <strong className="validation-matrix-item-title">{title}</strong>
+      ) : null}
+      {meta !== undefined ? (
+        <span className="validation-matrix-item-meta">{meta}</span>
+      ) : null}
+      {description !== undefined ? (
+        <p className="validation-matrix-item-description">{description}</p>
+      ) : null}
+    </div>
+  );
 }
 
 export function ValidationView({
@@ -273,14 +329,17 @@ export function ValidationView({
                 <thead>
                   <tr>
                     <th className="validation-matrix-corner" scope="col">
-                      <div className="validation-corner-summary">
-                        <span>Validation matrix</span>
-                        <span
-                          className={`validation-aggregate-pill ${allStatus.className}`}
-                        >
-                          {allStatus.label}
-                        </span>
-                      </div>
+                      <MatrixItem
+                        badge={
+                          <span
+                            className={`validation-aggregate-pill ${allStatus.className}`}
+                          >
+                            {allStatus.label}
+                          </span>
+                        }
+                        meta={`${matrix.rows.length} checks · ${matrix.columns.length} outputs`}
+                        title="Validation matrix"
+                      />
                     </th>
                     {matrix.columns.map((column) => {
                       const columnCells = matrix.rows.map(
@@ -290,26 +349,30 @@ export function ValidationView({
                       const columnStatus = aggregateStatus(columnCells);
                       return (
                         <th key={column.key} scope="col">
-                          <div className="validation-column-header">
-                            <MatrixCheckbox
-                              label={`Include ${column.title} in judge`}
-                              onChange={(included) =>
-                                updateInclusion(
-                                  { kind: "column", columnKey: column.key },
-                                  included
-                                )
-                              }
-                              state={inclusionState(columnCells, isBusy)}
-                              title="Include or exclude this case/run in judge"
-                            />
-                            <strong>{column.case_id}</strong>
-                            <span>repeat {column.repeat_index}</span>
-                            <span
-                              className={`validation-aggregate-pill ${columnStatus.className}`}
-                            >
-                              {columnStatus.label}
-                            </span>
-                          </div>
+                          <MatrixItem
+                            badge={
+                              <span
+                                className={`validation-aggregate-pill ${columnStatus.className}`}
+                              >
+                                {columnStatus.label}
+                              </span>
+                            }
+                            checkbox={
+                              <MatrixCheckbox
+                                label={`Include ${column.title} in judge`}
+                                onChange={(included) =>
+                                  updateInclusion(
+                                    { kind: "column", columnKey: column.key },
+                                    included
+                                  )
+                                }
+                                state={inclusionState(columnCells, isBusy)}
+                                title="Include or exclude this case/run in judge"
+                              />
+                            }
+                            meta={`repeat ${column.repeat_index}`}
+                            title={column.case_id}
+                          />
                         </th>
                       );
                     })}
@@ -337,75 +400,75 @@ export function ValidationView({
                             key={`${row.validator_id}-group`}
                           >
                             <th scope="row">
-                              <div className="validation-validator-header">
-                                <MatrixCheckbox
-                                  label={`Include ${row.validator_title} validator in judge`}
-                                  onChange={(included) =>
-                                    updateInclusion(
-                                      {
-                                        kind: "validator",
-                                        validatorId: row.validator_id
-                                      },
-                                      included
-                                    )
-                                  }
-                                  state={inclusionState(
-                                    validatorCells,
-                                    isBusy
-                                  )}
-                                  title="Include or exclude all checks from this validator in judge"
-                                />
-                                <div>
-                                  <strong>{row.validator_title}</strong>
-                                  <span>{row.validator_type}</span>
-                                </div>
-                              </div>
+                              <MatrixItem
+                                badge={
+                                  <span
+                                    className={`validation-aggregate-pill ${validatorStatus.className}`}
+                                  >
+                                    {validatorStatus.label}
+                                  </span>
+                                }
+                                checkbox={
+                                  <MatrixCheckbox
+                                    label={`Include ${row.validator_title} validator in judge`}
+                                    onChange={(included) =>
+                                      updateInclusion(
+                                        {
+                                          kind: "validator",
+                                          validatorId: row.validator_id
+                                        },
+                                        included
+                                      )
+                                    }
+                                    state={inclusionState(
+                                      validatorCells,
+                                      isBusy
+                                    )}
+                                    title="Include or exclude all checks from this validator in judge"
+                                  />
+                                }
+                                meta={row.validator_type}
+                                title={row.validator_title}
+                              />
                             </th>
                             <td colSpan={matrix.columns.length}>
-                              <div className="validation-validator-meta">
-                                <p>{row.validator_description}</p>
-                                <span
-                                  className={`validation-aggregate-pill ${validatorStatus.className}`}
-                                >
-                                  {validatorStatus.label}
-                                </span>
-                              </div>
+                              <MatrixItem
+                                description={row.validator_description}
+                                meta={`${validatorRows.length} checks`}
+                              />
                             </td>
                           </tr>
                         ) : null}
                         <tr className="validation-check-row" key={row.key}>
                           <th scope="row">
-                            <div className="validation-check-header">
-                              <MatrixCheckbox
-                                label={`Include ${row.check_title} check in judge`}
-                                onChange={(included) =>
-                                  updateInclusion(
-                                    { kind: "row", rowKey: row.key },
-                                    included
-                                  )
-                                }
-                                state={inclusionState(row.cells, isBusy)}
-                                title="Include or exclude this check in judge"
-                              />
-                              <div>
-                                <strong>{row.check_title}</strong>
-                                <p>{row.check_description}</p>
-                              </div>
-                              <span
-                                className={`validation-aggregate-pill ${
-                                  aggregateStatus(row.cells).className
-                                }`}
-                              >
-                                {aggregateStatus(row.cells).label}
-                              </span>
-                            </div>
+                            <MatrixItem
+                              badge={
+                                <span
+                                  className={`validation-aggregate-pill ${
+                                    aggregateStatus(row.cells).className
+                                  }`}
+                                >
+                                  {aggregateStatus(row.cells).label}
+                                </span>
+                              }
+                              checkbox={
+                                <MatrixCheckbox
+                                  label={`Include ${row.check_title} check in judge`}
+                                  onChange={(included) =>
+                                    updateInclusion(
+                                      { kind: "row", rowKey: row.key },
+                                      included
+                                    )
+                                  }
+                                  state={inclusionState(row.cells, isBusy)}
+                                  title="Include or exclude this check in judge"
+                                />
+                              }
+                              description={row.check_description}
+                              title={row.check_title}
+                            />
                           </th>
                           {row.cells.map((cell) => {
-                            const run =
-                              cell.result === null
-                                ? null
-                                : runsById.get(cell.result.run_id) ?? null;
-                            const text = outputText(run);
                             return (
                               <td
                                 className={
@@ -427,41 +490,43 @@ export function ValidationView({
                                 role="button"
                                 tabIndex={0}
                               >
-                                <div className="validation-cell-toolbar">
-                                  <span
-                                    className={`verdict-pill verdict-${cell.verdict}`}
-                                  >
-                                    {verdictLabel(cell.verdict)}
-                                  </span>
-                                  <MatrixCheckbox
-                                    label={`Include ${row.check_title} for ${resultTitle(
-                                      cell.result
-                                    )} in judge`}
-                                    onChange={(included) =>
-                                      updateInclusion(
-                                        {
-                                          kind: "cell",
-                                          rowKey: row.key,
-                                          columnKey: cell.columnKey
-                                        },
-                                        included
-                                      )
-                                    }
-                                    state={{
-                                      checked: cell.included_in_judge,
-                                      indeterminate: false,
-                                      disabled:
-                                        isBusy ||
-                                        cell.result === null ||
-                                        cell.check === null
-                                    }}
-                                    title="Include or exclude this check result in judge"
-                                  />
-                                </div>
-                                <p>{snippet(text)}</p>
-                                {cell.comment.trim() ? (
-                                  <span>{snippet(cell.comment, 120)}</span>
-                                ) : null}
+                                <MatrixItem
+                                  badge={
+                                    <span
+                                      className={`verdict-pill verdict-${cell.verdict}`}
+                                    >
+                                      {verdictLabel(cell.verdict)}
+                                    </span>
+                                  }
+                                  checkbox={
+                                    <MatrixCheckbox
+                                      label={`Include ${row.check_title} for ${resultTitle(
+                                        cell.result
+                                      )} in judge`}
+                                      onChange={(included) =>
+                                        updateInclusion(
+                                          {
+                                            kind: "cell",
+                                            rowKey: row.key,
+                                            columnKey: cell.columnKey
+                                          },
+                                          included
+                                        )
+                                      }
+                                      state={{
+                                        checked: cell.included_in_judge,
+                                        indeterminate: false,
+                                        disabled:
+                                          isBusy ||
+                                          cell.result === null ||
+                                          cell.check === null
+                                      }}
+                                      title="Include or exclude this check result in judge"
+                                    />
+                                  }
+                                  description={snippet(validationComment(cell))}
+                                  meta="Click for run output"
+                                />
                               </td>
                             );
                           })}
@@ -531,11 +596,7 @@ function ValidationCellModal({
 
         <section>
           <h3>Validation comment</h3>
-          <p>
-            {cell.comment.trim()
-              ? cell.comment
-              : "No comment was saved for this check."}
-          </p>
+          <p>{validationComment(cell)}</p>
         </section>
 
         <section>
