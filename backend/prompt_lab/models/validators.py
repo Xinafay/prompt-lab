@@ -17,7 +17,7 @@ InputScope = Literal[
 ValidatorType = Literal["llm_questionnaire", "automatic"]
 ValidationBatchStatus = Literal["running", "completed", "failed", "cancelled"]
 ValidationResultStatus = Literal["ok", "error", "skipped"]
-ValidationGrade = Literal[1, 2, 3, 4, 5] | None
+ValidationGrade = Annotated[int, Field(ge=1, le=5, strict=True)] | None
 CompareDetailStatus = Literal["graded", "not_assessable", "error"]
 ComparisonStatus = Literal["pass", "fail", "mixed", "empty"]
 
@@ -274,6 +274,14 @@ class CompareCellDetail(BaseModel):
     status: CompareDetailStatus
     grade: ValidationGrade
     comment: str = ""
+
+    @model_validator(mode="after")
+    def validate_status_grade_consistency(self) -> Self:
+        if self.status == "graded" and self.grade is None:
+            raise ValueError("graded status requires grade")
+        if self.status in {"not_assessable", "error"} and self.grade is not None:
+            raise ValueError(f"{self.status} status requires null grade")
+        return self
 
 
 class CompareMatrixCell(BaseModel):

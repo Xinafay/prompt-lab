@@ -4,6 +4,7 @@ from pydantic import ValidationError
 
 from prompt_lab.models.validators import (
     AutomaticValidatorDefinition,
+    CompareCellDetail,
     CountComparison,
     LlmQuestionnaireValidatorDefinition,
     ValidationBatchArtifact,
@@ -189,7 +190,7 @@ def test_validation_check_result_accepts_null_grade_with_comment() -> None:
     assert result.check_results[0].grade is None
 
 
-def test_validation_check_result_rejects_out_of_range_grade() -> None:
+def _assert_invalid_grade(value: object) -> None:
     try:
         ValidationResultArtifact.model_validate(
             {
@@ -207,8 +208,8 @@ def test_validation_check_result_rejects_out_of_range_grade() -> None:
                 "check_results": [
                     {
                         "check_id": "direct",
-                        "grade": 6,
-                        "comment": "Out of range.",
+                        "grade": value,
+                        "comment": "Invalid grade.",
                         "included_in_judge": True,
                         "metrics": {},
                     }
@@ -217,9 +218,22 @@ def test_validation_check_result_rejects_out_of_range_grade() -> None:
             }
         )
     except ValidationError as exc:
-        assert "Input should be 1, 2, 3, 4 or 5" in str(exc)
+        assert any(
+            "grade" in [str(part) for part in error["loc"]]
+            for error in exc.errors()
+        )
     else:
-        raise AssertionError("Expected out-of-range grade to be rejected")
+        raise AssertionError(f"Expected grade {value!r} to be rejected")
+
+
+def test_validation_check_result_rejects_out_of_range_grade() -> None:
+    for value in (0, 6):
+        _assert_invalid_grade(value)
+
+
+def test_validation_check_result_rejects_non_strict_grade_values() -> None:
+    for value in (True, False, 5.0, "5"):
+        _assert_invalid_grade(value)
 
 
 def test_validation_check_result_rejects_verdict_field() -> None:
@@ -254,6 +268,63 @@ def test_validation_check_result_rejects_verdict_field() -> None:
         assert "verdict" in str(exc)
     else:
         raise AssertionError("Expected old verdict shape to be rejected")
+
+
+def _compare_cell_detail_payload(
+    *, status: str = "graded", grade: object = 4
+) -> dict[str, object]:
+    return {
+        "case_id": "case-a",
+        "repeat_index": 1,
+        "validation_result_id": "result-001",
+        "status": status,
+        "grade": grade,
+        "comment": "Checked.",
+    }
+
+
+def test_compare_cell_detail_accepts_graded_status_with_grade() -> None:
+    detail = CompareCellDetail.model_validate(
+        _compare_cell_detail_payload(status="graded", grade=4)
+    )
+
+    assert detail.status == "graded"
+    assert detail.grade == 4
+
+
+def test_compare_cell_detail_rejects_graded_status_without_grade() -> None:
+    try:
+        CompareCellDetail.model_validate(
+            _compare_cell_detail_payload(status="graded", grade=None)
+        )
+    except ValidationError as exc:
+        assert "graded status requires grade" in str(exc)
+    else:
+        raise AssertionError("Expected graded detail without grade to be rejected")
+
+
+def test_compare_cell_detail_rejects_not_assessable_status_with_grade() -> None:
+    try:
+        CompareCellDetail.model_validate(
+            _compare_cell_detail_payload(status="not_assessable", grade=3)
+        )
+    except ValidationError as exc:
+        assert "not_assessable status requires null grade" in str(exc)
+    else:
+        raise AssertionError(
+            "Expected not-assessable detail with grade to be rejected"
+        )
+
+
+def test_compare_cell_detail_rejects_error_status_with_grade() -> None:
+    try:
+        CompareCellDetail.model_validate(
+            _compare_cell_detail_payload(status="error", grade=1)
+        )
+    except ValidationError as exc:
+        assert "error status requires null grade" in str(exc)
+    else:
+        raise AssertionError("Expected error detail with grade to be rejected")
 
 
 def test_validation_result_artifact_accepts_skipped_status() -> None:
@@ -352,7 +423,12 @@ def main() -> int:
         test_validation_batch_and_result_artifacts_accept_expected_fields,
         test_validation_check_result_accepts_null_grade_with_comment,
         test_validation_check_result_rejects_out_of_range_grade,
+        test_validation_check_result_rejects_non_strict_grade_values,
         test_validation_check_result_rejects_verdict_field,
+        test_compare_cell_detail_accepts_graded_status_with_grade,
+        test_compare_cell_detail_rejects_graded_status_without_grade,
+        test_compare_cell_detail_rejects_not_assessable_status_with_grade,
+        test_compare_cell_detail_rejects_error_status_with_grade,
         test_validation_result_artifact_accepts_skipped_status,
         test_validation_result_artifact_rejects_included_skipped_status,
         test_validation_state_rejects_malformed_validator_definitions,
