@@ -137,7 +137,7 @@ def test_validation_batch_and_result_artifacts_accept_expected_fields() -> None:
             "check_results": [
                 {
                     "check_id": "direct",
-                    "verdict": "yes",
+                    "grade": 4,
                     "comment": "The answer is direct.",
                     "included_in_judge": True,
                     "metrics": {"word_count": 42},
@@ -153,10 +153,107 @@ def test_validation_batch_and_result_artifacts_accept_expected_fields() -> None:
     assert batch.validator_ids == ["clarity"]
     assert result.schema_version == "prompt_lab.validation_result/v1"
     assert result.status == "ok"
-    assert result.check_results[0].verdict == "yes"
+    assert result.check_results[0].grade == 4
     assert result.check_results[0].comment == "The answer is direct."
     assert result.check_results[0].included_in_judge is True
     assert result.check_results[0].metrics == {"word_count": 42}
+
+
+def test_validation_check_result_accepts_null_grade_with_comment() -> None:
+    result = ValidationResultArtifact.model_validate(
+        {
+            "schema_version": "prompt_lab.validation_result/v1",
+            "validation_result_id": "result-001",
+            "validation_batch_id": "validation-001",
+            "run_batch_id": "run-001",
+            "run_id": "run-001-case-a-1",
+            "case_id": "case-a",
+            "repeat_index": 1,
+            "validator_id": "clarity",
+            "validator_type": "llm_questionnaire",
+            "status": "ok",
+            "included_in_judge": True,
+            "check_results": [
+                {
+                    "check_id": "direct",
+                    "grade": None,
+                    "comment": "The provided output does not include enough evidence.",
+                    "included_in_judge": True,
+                    "metrics": {},
+                }
+            ],
+            "usage": {},
+        }
+    )
+
+    assert result.check_results[0].grade is None
+
+
+def test_validation_check_result_rejects_out_of_range_grade() -> None:
+    try:
+        ValidationResultArtifact.model_validate(
+            {
+                "schema_version": "prompt_lab.validation_result/v1",
+                "validation_result_id": "result-001",
+                "validation_batch_id": "validation-001",
+                "run_batch_id": "run-001",
+                "run_id": "run-001-case-a-1",
+                "case_id": "case-a",
+                "repeat_index": 1,
+                "validator_id": "clarity",
+                "validator_type": "llm_questionnaire",
+                "status": "ok",
+                "included_in_judge": True,
+                "check_results": [
+                    {
+                        "check_id": "direct",
+                        "grade": 6,
+                        "comment": "Out of range.",
+                        "included_in_judge": True,
+                        "metrics": {},
+                    }
+                ],
+                "usage": {},
+            }
+        )
+    except ValidationError as exc:
+        assert "Input should be 1, 2, 3, 4 or 5" in str(exc)
+    else:
+        raise AssertionError("Expected out-of-range grade to be rejected")
+
+
+def test_validation_check_result_rejects_verdict_field() -> None:
+    try:
+        ValidationResultArtifact.model_validate(
+            {
+                "schema_version": "prompt_lab.validation_result/v1",
+                "validation_result_id": "result-001",
+                "validation_batch_id": "validation-001",
+                "run_batch_id": "run-001",
+                "run_id": "run-001-case-a-1",
+                "case_id": "case-a",
+                "repeat_index": 1,
+                "validator_id": "clarity",
+                "validator_type": "llm_questionnaire",
+                "status": "ok",
+                "included_in_judge": True,
+                "check_results": [
+                    {
+                        "check_id": "direct",
+                        "verdict": "yes",
+                        "comment": "Old shape.",
+                        "included_in_judge": True,
+                        "metrics": {},
+                    }
+                ],
+                "usage": {},
+            }
+        )
+    except ValidationError as exc:
+        assert "grade" in str(exc)
+        assert "verdict" in str(exc)
+    else:
+        raise AssertionError("Expected old verdict shape to be rejected")
 
 
 def test_validation_result_artifact_accepts_skipped_status() -> None:
@@ -253,6 +350,9 @@ def main() -> int:
         test_automatic_validator_definition_accepts_word_count_rule,
         test_count_comparison_rejects_inverted_between_range,
         test_validation_batch_and_result_artifacts_accept_expected_fields,
+        test_validation_check_result_accepts_null_grade_with_comment,
+        test_validation_check_result_rejects_out_of_range_grade,
+        test_validation_check_result_rejects_verdict_field,
         test_validation_result_artifact_accepts_skipped_status,
         test_validation_result_artifact_rejects_included_skipped_status,
         test_validation_state_rejects_malformed_validator_definitions,

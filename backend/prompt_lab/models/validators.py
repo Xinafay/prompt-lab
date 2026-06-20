@@ -17,7 +17,8 @@ InputScope = Literal[
 ValidatorType = Literal["llm_questionnaire", "automatic"]
 ValidationBatchStatus = Literal["running", "completed", "failed", "cancelled"]
 ValidationResultStatus = Literal["ok", "error", "skipped"]
-ValidationVerdict = Literal["yes", "no", "unknown"]
+ValidationGrade = Literal[1, 2, 3, 4, 5] | None
+CompareDetailStatus = Literal["graded", "not_assessable", "error"]
 ComparisonStatus = Literal["pass", "fail", "mixed", "empty"]
 
 
@@ -175,10 +176,16 @@ class ValidationCheckResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     check_id: NonEmptyString
-    verdict: ValidationVerdict
+    grade: ValidationGrade
     comment: str = ""
     included_in_judge: bool = True
     metrics: JsonObject = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_null_grade_comment(self) -> Self:
+        if self.grade is None and self.comment.strip() == "":
+            raise ValueError("null grade requires comment")
+        return self
 
 
 class ValidationResultArtifact(BaseModel):
@@ -219,7 +226,7 @@ class LlmQuestionnaireCheckResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     check_id: NonEmptyString
-    verdict: ValidationVerdict
+    grade: ValidationGrade
     comment: NonEmptyString
 
 
@@ -264,7 +271,8 @@ class CompareCellDetail(BaseModel):
     case_id: NonEmptyString
     repeat_index: int = Field(ge=1)
     validation_result_id: NonEmptyString
-    verdict: Literal["yes", "no", "unknown", "missing", "error"]
+    status: CompareDetailStatus
+    grade: ValidationGrade
     comment: str = ""
 
 
@@ -273,9 +281,12 @@ class CompareMatrixCell(BaseModel):
 
     version: NonEmptyString
     status: ComparisonStatus
-    yes: int = Field(ge=0)
-    no: int = Field(ge=0)
-    unknown: int = Field(ge=0)
+    grade_5: int = Field(ge=0)
+    grade_4: int = Field(ge=0)
+    grade_3: int = Field(ge=0)
+    grade_2: int = Field(ge=0)
+    grade_1: int = Field(ge=0)
+    not_assessable: int = Field(ge=0)
     missing: int = Field(ge=0)
     error: int = Field(ge=0)
     total: int = Field(ge=0)

@@ -360,7 +360,7 @@ def test_store_loads_validation_batch_and_results() -> None:
             "check_results": [
                 {
                     "check_id": "under-100",
-                    "verdict": "yes",
+                    "grade": 5,
                     "included_in_judge": True,
                     "metrics": {"value": 3},
                 }
