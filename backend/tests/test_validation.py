@@ -116,6 +116,51 @@ def test_build_llm_validator_prompt_respects_output_only_input_scope() -> None:
     assert "secret_context" not in prompt
 
 
+def test_build_llm_validator_prompt_includes_only_materialized_case_context() -> None:
+    case = CaseArtifact.model_validate(
+        {
+            "schema_version": "prompt_lab.case/v2",
+            "id": "case-a",
+            "title": "Case A",
+            "stores": {
+                "workflow": {
+                    "kind": "flat_file_tree",
+                    "values": {
+                        "full_store_secret": {
+                            "__carmilla_flat_file_node__": "file",
+                            "value": "Full store should stay hidden",
+                        }
+                    },
+                }
+            },
+            "bindings": {
+                "state": {
+                    "kind": "store_scope",
+                    "store": "workflow",
+                    "path": "",
+                }
+            },
+        }
+    )
+
+    prompt = build_llm_validator_prompt(
+        experiment_id="demo",
+        version="v001",
+        validation_batch_id="validation-001",
+        validator=_validator(input_scope="output_and_case"),
+        run=_run_artifact(),
+        case=case,
+        case_context={"chapter": {"text": "Visible source context"}},
+    )
+
+    assert "Visible output" in prompt
+    assert "Visible source context" in prompt
+    assert "Full store should stay hidden" not in prompt
+    assert '"stores"' not in prompt
+    assert '"bindings"' not in prompt
+    assert "Rendered prompt should stay hidden" not in prompt
+
+
 def test_validate_llm_check_ids_rejects_missing_check_ids() -> None:
     try:
         validate_llm_check_ids(_validator(), [])
@@ -223,6 +268,7 @@ def test_apply_inclusion_update_rejects_duplicate_ids() -> None:
 def main() -> int:
     tests = [
         test_build_llm_validator_prompt_respects_output_only_input_scope,
+        test_build_llm_validator_prompt_includes_only_materialized_case_context,
         test_validate_llm_check_ids_rejects_missing_check_ids,
         test_apply_inclusion_update_rejects_unknown_result_id,
         test_apply_inclusion_update_rejects_unknown_check_id,

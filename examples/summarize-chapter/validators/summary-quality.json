@@ -5,7 +5,7 @@
   "title": "Summary quality",
   "description": "Checks whether a chapter summary is faithful and useful for later processing.",
   "enabled": true,
-  "input_scope": "output_and_case",
+  "input_scope": "output_and_prompt",
   "checks": [
     {
       "check_id": "completeness",

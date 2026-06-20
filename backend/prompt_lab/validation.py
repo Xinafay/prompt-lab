@@ -50,12 +50,7 @@ def build_llm_validator_prompt(
     if validator.input_scope in {"output_and_case", "output_prompt_and_case"}:
         case_context_section = fenced_section(
             "CASE_CONTEXT_JSON",
-            json_block(
-                {
-                    "case": case.model_dump(mode="json"),
-                    "materialized_context": case_context,
-                }
-            ),
+            json_block(case_context),
             fence="json",
         )
     return render_system_prompt(
