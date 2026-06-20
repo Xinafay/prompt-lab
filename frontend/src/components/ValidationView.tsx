@@ -1,16 +1,23 @@
-import { useMemo } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
-  ValidationCheckResult,
+  RunArtifact,
   ValidationResult,
-  ValidationState,
-  ValidatorDefinition
+  ValidationState
 } from "../types";
 import { TooltipButton } from "./TooltipButton";
+import {
+  buildValidationMatrix,
+  setValidationInclusion,
+  type InclusionScope,
+  type ValidationMatrixCell,
+  type ValidationMatrixCheckRow
+} from "./validationMatrix";
 export { buildValidationInclusionUpdate } from "./validationInclusion";
 
 interface ValidationViewProps {
   validationState: ValidationState | null;
+  runs: RunArtifact[];
   isBusy: boolean;
   hasRuns: boolean;
   hasUnsavedChanges: boolean;
@@ -22,35 +29,15 @@ interface ValidationViewProps {
   onSaveInclusion: () => void;
 }
 
-function validatorTitle(
-  validators: Map<string, ValidatorDefinition>,
-  result: ValidationResult
-): string {
-  return validators.get(result.validator_id)?.title ?? result.validator_id;
+interface InclusionState {
+  checked: boolean;
+  indeterminate: boolean;
+  disabled: boolean;
 }
 
-function checkTitle(
-  validators: Map<string, ValidatorDefinition>,
-  result: ValidationResult,
-  check: ValidationCheckResult
-): string {
-  const validator = validators.get(result.validator_id);
-  const definition = validator?.checks.find(
-    (candidate) => candidate.check_id === check.check_id
-  );
-  return definition?.title ?? check.check_id;
-}
-
-function checkDescription(
-  validators: Map<string, ValidatorDefinition>,
-  result: ValidationResult,
-  check: ValidationCheckResult
-): string {
-  const validator = validators.get(result.validator_id);
-  const definition = validator?.checks.find(
-    (candidate) => candidate.check_id === check.check_id
-  );
-  return definition?.description ?? "";
+interface SelectedCell {
+  row: ValidationMatrixCheckRow;
+  cell: ValidationMatrixCell;
 }
 
 function formatTimestamp(value: string | null | undefined): string {
@@ -60,8 +47,128 @@ function formatTimestamp(value: string | null | undefined): string {
   return value;
 }
 
+function inclusionState(
+  cells: ValidationMatrixCell[],
+  isBusy: boolean
+): InclusionState {
+  const targets = cells.filter(
+    (cell) => cell.result !== null && cell.check !== null
+  );
+  const included = targets.filter((cell) => cell.included_in_judge).length;
+  return {
+    checked: targets.length > 0 && included === targets.length,
+    indeterminate: included > 0 && included < targets.length,
+    disabled: isBusy || targets.length === 0
+  };
+}
+
+function aggregateStatus(cells: ValidationMatrixCell[]): {
+  className: string;
+  label: string;
+} {
+  if (cells.length === 0) {
+    return { className: "compare-cell-empty", label: "No data" };
+  }
+  const missingOrError = cells.filter(
+    (cell) => cell.verdict === "missing" || cell.verdict === "error"
+  ).length;
+  const failed = cells.filter((cell) => cell.verdict === "no").length;
+  const unknown = cells.filter((cell) => cell.verdict === "unknown").length;
+  if (missingOrError > 0 || failed > 0) {
+    return {
+      className: "compare-cell-fail",
+      label: `${missingOrError + failed}/${cells.length} fail`
+    };
+  }
+  if (unknown > 0) {
+    return {
+      className: "compare-cell-mixed",
+      label: `${unknown}/${cells.length} unknown`
+    };
+  }
+  return { className: "compare-cell-pass", label: "All pass" };
+}
+
+function outputText(run: RunArtifact | null | undefined): string {
+  if (run === null || run === undefined) {
+    return "No run artifact is loaded for this validation result.";
+  }
+  if (run.output_text !== null && run.output_text !== undefined) {
+    return run.output_text;
+  }
+  if (run.output_json !== undefined) {
+    return JSON.stringify(run.output_json, null, 2);
+  }
+  if (run.raw_output !== null && run.raw_output !== undefined) {
+    return run.raw_output;
+  }
+  if (run.validation_error !== null && run.validation_error !== undefined) {
+    return run.validation_error;
+  }
+  if (run.execution_error !== null && run.execution_error !== undefined) {
+    return run.execution_error;
+  }
+  return "This run artifact has no saved output.";
+}
+
+function snippet(value: string, limit = 180): string {
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (compact.length <= limit) return compact;
+  return `${compact.slice(0, limit - 1)}...`;
+}
+
+function verdictLabel(value: ValidationMatrixCell["verdict"]): string {
+  return value === "yes"
+    ? "yes"
+    : value === "no"
+      ? "no"
+      : value === "unknown"
+        ? "unknown"
+        : value;
+}
+
+function MatrixCheckbox({
+  label,
+  title,
+  state,
+  onChange
+}: {
+  label: string;
+  title: string;
+  state: InclusionState;
+  onChange: (included: boolean) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (inputRef.current !== null) {
+      inputRef.current.indeterminate = state.indeterminate;
+    }
+  }, [state.indeterminate]);
+
+  return (
+    <label className="validation-matrix-checkbox" title={title}>
+      <input
+        aria-label={label}
+        checked={state.checked}
+        disabled={state.disabled}
+        onChange={(event) => onChange(event.currentTarget.checked)}
+        onClick={(event) => event.stopPropagation()}
+        ref={inputRef}
+        type="checkbox"
+      />
+    </label>
+  );
+}
+
+function resultTitle(result: ValidationResult | null): string {
+  if (result === null) return "Missing validation result";
+  return `${result.case_id} / repeat ${result.repeat_index}`;
+}
+
 export function ValidationView({
   validationState,
+  runs,
   isBusy,
   hasRuns,
   hasUnsavedChanges,
@@ -72,47 +179,24 @@ export function ValidationView({
   onStateChange,
   onSaveInclusion
 }: ValidationViewProps) {
-  const validators = useMemo(() => {
-    return new Map(
-      (validationState?.validators ?? []).map((validator) => [
-        validator.validator_id,
-        validator
-      ])
-    );
-  }, [validationState]);
-
-  function updateResult(resultId: string, included: boolean) {
-    if (validationState === null) return;
-    onStateChange({
-      ...validationState,
-      results: validationState.results.map((result) =>
-        result.validation_result_id === resultId
-          ? { ...result, included_in_judge: included }
-          : result
-      )
-    });
-  }
-
-  function updateCheck(resultId: string, checkId: string, included: boolean) {
-    if (validationState === null) return;
-    onStateChange({
-      ...validationState,
-      results: validationState.results.map((result) =>
-        result.validation_result_id === resultId
-          ? {
-              ...result,
-              check_results: result.check_results.map((check) =>
-                check.check_id === checkId
-                  ? { ...check, included_in_judge: included }
-                  : check
-              )
-            }
-          : result
-      )
-    });
-  }
-
+  const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
+  const matrix = useMemo(
+    () => (validationState === null ? null : buildValidationMatrix(validationState)),
+    [validationState]
+  );
+  const runsById = useMemo(
+    () => new Map(runs.map((run) => [run.run_id, run])),
+    [runs]
+  );
   const batch = validationState?.validation_batch ?? null;
+
+  function updateInclusion(scope: InclusionScope, included: boolean) {
+    if (validationState === null) return;
+    onStateChange(setValidationInclusion(validationState, scope, included));
+  }
+
+  const allCells = matrix?.rows.flatMap((row) => row.cells) ?? [];
+  const allStatus = aggregateStatus(allCells);
 
   return (
     <section className="validation-panel" aria-label="Validation">
@@ -144,7 +228,7 @@ export function ValidationView({
         </div>
       </div>
 
-      {validationState === null ? (
+      {validationState === null || matrix === null ? (
         <div className="empty-inline">
           {hasRuns
             ? "No validation loaded. Validate the active run to review evidence."
@@ -179,114 +263,292 @@ export function ValidationView({
             </div>
           ) : null}
 
-          {validationState.results.length === 0 ? (
+          {matrix.rows.length === 0 || matrix.columns.length === 0 ? (
             <div className="empty-inline">
               This validation batch has no result artifacts.
             </div>
           ) : (
-            <div className="validation-results">
-              {validationState.results.map((result) => (
-                <article
-                  className="validation-card"
-                  key={result.validation_result_id}
-                >
-                  <div className="validation-card-header">
-                    <label className="validation-include-control">
-                      <input
-                        checked={result.included_in_judge}
-                        disabled={isBusy}
-                        onChange={(event) =>
-                          updateResult(
-                            result.validation_result_id,
-                            event.currentTarget.checked
-                          )
-                        }
-                        type="checkbox"
-                      />
-                      <span>Include result</span>
-                    </label>
-                    <div className="validation-card-title">
-                      <strong>
-                        {validatorTitle(validators, result)}
-                      </strong>
-                      <span>
-                        {result.case_id} · repeat {result.repeat_index} ·{" "}
-                        {result.validator_type}
-                      </span>
-                    </div>
-                    <span
-                      className={`validation-status validation-status-${result.status}`}
-                    >
-                      {result.status}
-                    </span>
-                  </div>
-
-                  {result.execution_error ? (
-                    <div className="validation-error">{result.execution_error}</div>
-                  ) : null}
-
-                  {result.check_results.length === 0 ? (
-                    <div className="validation-empty-checks">
-                      No check results were saved for this validator result.
-                    </div>
-                  ) : (
-                    <div className="validation-checks">
-                      {result.check_results.map((check) => {
-                        const description = checkDescription(
-                          validators,
-                          result,
-                          check
-                        );
-                        return (
-                          <div className="validation-check" key={check.check_id}>
-                            <label className="validation-include-control">
-                              <input
-                                checked={check.included_in_judge}
-                                disabled={isBusy}
-                                onChange={(event) =>
-                                  updateCheck(
-                                    result.validation_result_id,
-                                    check.check_id,
-                                    event.currentTarget.checked
-                                  )
-                                }
-                                type="checkbox"
-                              />
-                              <span>Include check</span>
-                            </label>
-                            <div className="validation-check-body">
-                              <div className="validation-check-heading">
-                                <strong>
-                                  {checkTitle(validators, result, check)}
-                                </strong>
+            <div className="validation-matrix-wrap">
+              <table className="validation-matrix">
+                <thead>
+                  <tr>
+                    <th className="validation-matrix-corner" scope="col">
+                      <div className="validation-corner-summary">
+                        <span>Validation matrix</span>
+                        <span
+                          className={`validation-aggregate-pill ${allStatus.className}`}
+                        >
+                          {allStatus.label}
+                        </span>
+                      </div>
+                    </th>
+                    {matrix.columns.map((column) => {
+                      const columnCells = matrix.rows.map(
+                        (row) =>
+                          row.cells.find((cell) => cell.columnKey === column.key)!
+                      );
+                      const columnStatus = aggregateStatus(columnCells);
+                      return (
+                        <th key={column.key} scope="col">
+                          <div className="validation-column-header">
+                            <MatrixCheckbox
+                              label={`Include ${column.title} in judge`}
+                              onChange={(included) =>
+                                updateInclusion(
+                                  { kind: "column", columnKey: column.key },
+                                  included
+                                )
+                              }
+                              state={inclusionState(columnCells, isBusy)}
+                              title="Include or exclude this case/run in judge"
+                            />
+                            <strong>{column.case_id}</strong>
+                            <span>repeat {column.repeat_index}</span>
+                            <span
+                              className={`validation-aggregate-pill ${columnStatus.className}`}
+                            >
+                              {columnStatus.label}
+                            </span>
+                          </div>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {matrix.rows.map((row, rowIndex) => {
+                    const previous = matrix.rows[rowIndex - 1];
+                    const startsValidator =
+                      previous === undefined ||
+                      previous.validator_id !== row.validator_id;
+                    const validatorRows = matrix.rows.filter(
+                      (candidate) =>
+                        candidate.validator_id === row.validator_id
+                    );
+                    const validatorCells = validatorRows.flatMap(
+                      (candidate) => candidate.cells
+                    );
+                    const validatorStatus = aggregateStatus(validatorCells);
+                    return (
+                      <Fragment key={row.key}>
+                        {startsValidator ? (
+                          <tr
+                            className="validation-validator-row"
+                            key={`${row.validator_id}-group`}
+                          >
+                            <th scope="row">
+                              <div className="validation-validator-header">
+                                <MatrixCheckbox
+                                  label={`Include ${row.validator_title} validator in judge`}
+                                  onChange={(included) =>
+                                    updateInclusion(
+                                      {
+                                        kind: "validator",
+                                        validatorId: row.validator_id
+                                      },
+                                      included
+                                    )
+                                  }
+                                  state={inclusionState(
+                                    validatorCells,
+                                    isBusy
+                                  )}
+                                  title="Include or exclude all checks from this validator in judge"
+                                />
+                                <div>
+                                  <strong>{row.validator_title}</strong>
+                                  <span>{row.validator_type}</span>
+                                </div>
+                              </div>
+                            </th>
+                            <td colSpan={matrix.columns.length}>
+                              <div className="validation-validator-meta">
+                                <p>{row.validator_description}</p>
                                 <span
-                                  className={`verdict-pill verdict-${check.verdict}`}
+                                  className={`validation-aggregate-pill ${validatorStatus.className}`}
                                 >
-                                  {check.verdict}
+                                  {validatorStatus.label}
                                 </span>
                               </div>
-                              {description.trim() ? (
-                                <p className="validation-check-description">
-                                  {description}
-                                </p>
-                              ) : null}
-                              {check.comment.trim() ? (
-                                <p className="validation-check-comment">
-                                  {check.comment}
-                                </p>
-                              ) : null}
+                            </td>
+                          </tr>
+                        ) : null}
+                        <tr className="validation-check-row" key={row.key}>
+                          <th scope="row">
+                            <div className="validation-check-header">
+                              <MatrixCheckbox
+                                label={`Include ${row.check_title} check in judge`}
+                                onChange={(included) =>
+                                  updateInclusion(
+                                    { kind: "row", rowKey: row.key },
+                                    included
+                                  )
+                                }
+                                state={inclusionState(row.cells, isBusy)}
+                                title="Include or exclude this check in judge"
+                              />
+                              <div>
+                                <strong>{row.check_title}</strong>
+                                <p>{row.check_description}</p>
+                              </div>
+                              <span
+                                className={`validation-aggregate-pill ${
+                                  aggregateStatus(row.cells).className
+                                }`}
+                              >
+                                {aggregateStatus(row.cells).label}
+                              </span>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </article>
-              ))}
+                          </th>
+                          {row.cells.map((cell) => {
+                            const run =
+                              cell.result === null
+                                ? null
+                                : runsById.get(cell.result.run_id) ?? null;
+                            const text = outputText(run);
+                            return (
+                              <td
+                                className={
+                                  cell.included_in_judge
+                                    ? "validation-matrix-cell"
+                                    : "validation-matrix-cell validation-matrix-cell-excluded"
+                                }
+                                key={cell.key}
+                                onClick={() => setSelectedCell({ row, cell })}
+                                onKeyDown={(event) => {
+                                  if (
+                                    event.key === "Enter" ||
+                                    event.key === " "
+                                  ) {
+                                    event.preventDefault();
+                                    setSelectedCell({ row, cell });
+                                  }
+                                }}
+                                role="button"
+                                tabIndex={0}
+                              >
+                                <div className="validation-cell-toolbar">
+                                  <span
+                                    className={`verdict-pill verdict-${cell.verdict}`}
+                                  >
+                                    {verdictLabel(cell.verdict)}
+                                  </span>
+                                  <MatrixCheckbox
+                                    label={`Include ${row.check_title} for ${resultTitle(
+                                      cell.result
+                                    )} in judge`}
+                                    onChange={(included) =>
+                                      updateInclusion(
+                                        {
+                                          kind: "cell",
+                                          rowKey: row.key,
+                                          columnKey: cell.columnKey
+                                        },
+                                        included
+                                      )
+                                    }
+                                    state={{
+                                      checked: cell.included_in_judge,
+                                      indeterminate: false,
+                                      disabled:
+                                        isBusy ||
+                                        cell.result === null ||
+                                        cell.check === null
+                                    }}
+                                    title="Include or exclude this check result in judge"
+                                  />
+                                </div>
+                                <p>{snippet(text)}</p>
+                                {cell.comment.trim() ? (
+                                  <span>{snippet(cell.comment, 120)}</span>
+                                ) : null}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
       )}
+
+      {selectedCell !== null ? (
+        <ValidationCellModal
+          cell={selectedCell.cell}
+          onClose={() => setSelectedCell(null)}
+          row={selectedCell.row}
+          run={
+            selectedCell.cell.result === null
+              ? null
+              : runsById.get(selectedCell.cell.result.run_id) ?? null
+          }
+        />
+      ) : null}
     </section>
+  );
+}
+
+function ValidationCellModal({
+  row,
+  cell,
+  run,
+  onClose
+}: {
+  row: ValidationMatrixCheckRow;
+  cell: ValidationMatrixCell;
+  run: RunArtifact | null;
+  onClose: () => void;
+}) {
+  const text = outputText(run);
+  return (
+    <div className="modal-backdrop" onMouseDown={onClose}>
+      <div
+        aria-modal="true"
+        className="validation-detail-modal"
+        onMouseDown={(event) => event.stopPropagation()}
+        role="dialog"
+      >
+        <div className="validation-detail-header">
+          <div>
+            <h2>{row.check_title}</h2>
+            <p>
+              {row.validator_title} · {resultTitle(cell.result)}
+            </p>
+          </div>
+          <span className={`verdict-pill verdict-${cell.verdict}`}>
+            {verdictLabel(cell.verdict)}
+          </span>
+        </div>
+
+        <section>
+          <h3>Run output</h3>
+          <pre>{text}</pre>
+        </section>
+
+        <section>
+          <h3>Validation comment</h3>
+          <p>
+            {cell.comment.trim()
+              ? cell.comment
+              : "No comment was saved for this check."}
+          </p>
+        </section>
+
+        <section>
+          <h3>Check</h3>
+          <p>{row.check_description || "No check description was saved."}</p>
+        </section>
+
+        <div className="modal-actions">
+          <button className="secondary-action" onClick={onClose} type="button">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

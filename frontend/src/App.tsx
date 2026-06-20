@@ -1812,6 +1812,7 @@ function App() {
                         validateDisabled={validateAction.disabled}
                         validateDisabledReason={validateAction.disabledReason}
                         validateLabel={validateAction.label}
+                        runs={detailState.runs.runs}
                         validationState={validationState}
                       />
                     ) : null}
