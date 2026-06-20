@@ -65,7 +65,7 @@ def dry_validator_response_json(check_ids: list[str]) -> str:
             "check_results": [
                 {
                     "check_id": check_id,
-                    "verdict": "yes",
+                    "grade": 5,
                     "comment": f"dry-run validator response for {check_id}",
                 }
                 for check_id in check_ids
