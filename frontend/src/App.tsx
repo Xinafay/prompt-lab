@@ -18,6 +18,10 @@ import {
   getVersionRuns,
   judgeVersion,
   jobEventsStreamUrl,
+  previewJudgePrompts,
+  previewProposalPrompts,
+  previewRunPrompts,
+  previewValidationPrompts,
   runVersion,
   validateVersion,
   updateExperiment,
@@ -31,6 +35,7 @@ import { ComparisonView } from "./components/ComparisonView";
 import { ExperimentSettings } from "./components/ExperimentSettings";
 import { ExperimentsList } from "./components/ExperimentsList";
 import { GlobalSettings } from "./components/GlobalSettings";
+import { PromptPreviewModal } from "./components/PromptPreviewModal";
 import { ProposalView } from "./components/ProposalView";
 import { ReviewView } from "./components/ReviewView";
 import { RunsView } from "./components/RunsView";
@@ -50,6 +55,7 @@ import type {
   GlobalSettings as GlobalSettingsModel,
   JobEvent,
   JobStatus,
+  PromptPreviewResponse,
   ProposalResponse,
   ReviewState,
   RunsResponse,
@@ -72,6 +78,7 @@ import {
   getRunActionLabel,
   getValidateActionState
 } from "./workflowActions";
+import "./components/PromptPreviewModal.css";
 
 type LoadState =
   | { status: "loading" }
@@ -91,6 +98,7 @@ type GlobalSettingsState =
 
 type HistoryMode = "push" | "replace";
 type AppView = "experiment" | "globalSettings";
+type PromptPreviewAction = () => void | Promise<void>;
 
 type PendingNavigation =
   | { kind: "experiment"; experiment: Experiment | null }
@@ -154,6 +162,10 @@ function App() {
   const [candidateVersion, setCandidateVersion] = useState("v001");
   const [workflowBusy, setWorkflowBusy] = useState(false);
   const [workflowMessage, setWorkflowMessage] = useState<string | null>(null);
+  const [promptPreview, setPromptPreview] =
+    useState<PromptPreviewResponse | null>(null);
+  const [promptPreviewAction, setPromptPreviewAction] =
+    useState<PromptPreviewAction | null>(null);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [settingsDirty, setSettingsDirty] = useState(false);
@@ -237,6 +249,8 @@ function App() {
     setComparison(null);
     setVersionSummaries([]);
     setWorkflowMessage(null);
+    setPromptPreview(null);
+    setPromptPreviewAction(null);
     setSettingsMessage(null);
     setWorkflowBusy(false);
     setSettingsBusy(false);
@@ -281,6 +295,8 @@ function App() {
     setComparison(null);
     setVersionSummaries([]);
     setWorkflowMessage(null);
+    setPromptPreview(null);
+    setPromptPreviewAction(null);
     setWorkflowBusy(false);
     setSettingsMessage(null);
     setSettingsBusy(false);
@@ -931,6 +947,132 @@ function App() {
     }
   }
 
+  function handleRejectPromptPreview() {
+    setPromptPreview(null);
+    setPromptPreviewAction(null);
+  }
+
+  function handleAcceptPromptPreview() {
+    const action = promptPreviewAction;
+    setPromptPreview(null);
+    setPromptPreviewAction(null);
+    if (action !== null) {
+      void action();
+    }
+  }
+
+  async function handlePreviewRunPrompts() {
+    if (selectedExperiment === null || detailState.status !== "loaded") {
+      return;
+    }
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    try {
+      setWorkflowBusy(true);
+      setWorkflowMessage("Preparing prompt preview...");
+      const preview = await previewRunPrompts(experimentId, version);
+      setPromptPreview(preview);
+      setPromptPreviewAction(() => handleRunVersion);
+      setWorkflowMessage(null);
+    } catch (error) {
+      setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
+
+  async function handlePreviewValidationPrompts() {
+    if (selectedExperiment === null || detailState.status !== "loaded") {
+      return;
+    }
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
+    if (detailState.runs.runs.length === 0) {
+      setWorkflowMessage("Create a run before validating.");
+      return;
+    }
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    try {
+      setWorkflowBusy(true);
+      setWorkflowMessage("Preparing validation prompt preview...");
+      const preview = await previewValidationPrompts(experimentId, version);
+      setPromptPreview(preview);
+      setPromptPreviewAction(() => handleValidateVersion);
+      setWorkflowMessage(null);
+    } catch (error) {
+      setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
+
+  async function handlePreviewJudgePrompts() {
+    if (selectedExperiment === null) return;
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
+    if (!hasCompletedValidation(validationState)) {
+      setWorkflowMessage("Validate the active run before judging.");
+      return;
+    }
+    if (validationDirty) {
+      setWorkflowMessage("Save validation inclusion before judging.");
+      return;
+    }
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    try {
+      setWorkflowBusy(true);
+      setWorkflowMessage("Preparing judge prompt preview...");
+      const preview = await previewJudgePrompts(experimentId, version);
+      setPromptPreview(preview);
+      setPromptPreviewAction(() => handleJudgeVersion);
+      setWorkflowMessage(null);
+    } catch (error) {
+      setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
+
+  async function handlePreviewProposalPrompts() {
+    if (selectedExperiment === null || reviewState === null) return;
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
+    if (decisionsDirty || humanNotesDirty) {
+      setWorkflowMessage("Save decisions and human notes before generating a proposal.");
+      return;
+    }
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    try {
+      setWorkflowBusy(true);
+      setWorkflowMessage("Preparing proposal prompt preview...");
+      const preview = await previewProposalPrompts(
+        experimentId,
+        version,
+        reviewState.review_id
+      );
+      setPromptPreview(preview);
+      setPromptPreviewAction(() => handleGenerateProposal);
+      setWorkflowMessage(null);
+    } catch (error) {
+      setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
+
   async function handleCancelWorkflowJob() {
     if (jobStatus?.status !== "running") {
       return;
@@ -1494,6 +1636,8 @@ function App() {
     }
     setWorkflowBusy(true);
     setWorkflowMessage(`Switching to ${version}...`);
+    setPromptPreview(null);
+    setPromptPreviewAction(null);
     setValidationState(null);
     setValidationDirty(false);
     setCompareValidationByVersion({});
@@ -1677,6 +1821,60 @@ function App() {
                     showDryRunControls={SHOW_DRY_RUN_CONTROLS}
                     workflowMessage={workflowMessage}
                     workflowMode={workflowMode}
+                    secondaryAction={
+                      activeTab === "runs" ? (
+                        <TooltipButton
+                          className="secondary-action"
+                          disabled={workflowLocked}
+                          disabledReason="Wait for the current run to finish."
+                          onClick={handlePreviewRunPrompts}
+                          type="button"
+                        >
+                          Preview prompts
+                        </TooltipButton>
+                      ) : activeTab === "validation" ? (
+                        <TooltipButton
+                          className="secondary-action"
+                          disabled={validateAction.disabled}
+                          disabledReason={validateAction.disabledReason}
+                          onClick={handlePreviewValidationPrompts}
+                          type="button"
+                        >
+                          Preview prompts
+                        </TooltipButton>
+                      ) : activeTab === "review" ? (
+                        <TooltipButton
+                          className="secondary-action"
+                          disabled={judgeAction.disabled}
+                          disabledReason={judgeAction.disabledReason}
+                          onClick={handlePreviewJudgePrompts}
+                          type="button"
+                        >
+                          Preview prompts
+                        </TooltipButton>
+                      ) : activeTab === "proposal" ? (
+                        <TooltipButton
+                          className="secondary-action"
+                          disabled={
+                            workflowLocked ||
+                            reviewState === null ||
+                            decisionsDirty ||
+                            humanNotesDirty
+                          }
+                          disabledReason={
+                            workflowLocked
+                              ? "Wait for the current workflow action to finish."
+                              : reviewState === null
+                                ? "Judge the active run before generating a proposal."
+                                : "Save review decisions and human notes before generating a proposal."
+                          }
+                          onClick={handlePreviewProposalPrompts}
+                          type="button"
+                        >
+                          Preview prompts
+                        </TooltipButton>
+                      ) : null
+                    }
                     primaryAction={
                       activeTab === "review" ? (
                         <TooltipButton
@@ -1877,6 +2075,15 @@ function App() {
           </div>
         ) : null}
       </section>
+
+      {promptPreview !== null ? (
+        <PromptPreviewModal
+          isAccepting={workflowLocked}
+          onAccept={handleAcceptPromptPreview}
+          onReject={handleRejectPromptPreview}
+          preview={promptPreview}
+        />
+      ) : null}
 
       {pendingNavigation !== null ? (
         <div className="modal-backdrop" role="presentation">

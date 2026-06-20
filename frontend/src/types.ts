@@ -135,6 +135,24 @@ export interface RunVersionRequest {
   dry_run?: boolean;
 }
 
+export interface PromptPreviewItem {
+  kind: string;
+  title: string;
+  model: string;
+  prompt: string;
+  character_count: number;
+  word_count: number;
+  case_id?: string | null;
+  repeat_index?: number | null;
+  validator_id?: string | null;
+}
+
+export interface PromptPreviewResponse {
+  workflow_kind: string;
+  prompts: PromptPreviewItem[];
+  warnings: string[];
+}
+
 export interface GlobalSettings {
   schema_version: "prompt_lab.settings/v1";
   default_generator_model: string;

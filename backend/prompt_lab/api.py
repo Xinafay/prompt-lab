@@ -48,6 +48,7 @@ from prompt_lab.pydantic_loader import load_model_entrypoint
 from prompt_lab.runner import iter_case_major, run_structured_case, run_text_case
 from prompt_lab.settings import PromptLabSettings, load_settings, save_settings
 from prompt_lab.storage import PromptLabStore
+from prompt_lab.template_renderer import render_prompt
 from prompt_lab.errors import NotFoundError
 from prompt_lab.validation import (
     apply_inclusion_update,
@@ -59,6 +60,7 @@ from prompt_lab.validation import (
 
 logger = logging.getLogger(__name__)
 _VALIDATOR_DEFINITION_ADAPTER = TypeAdapter(ValidatorDefinition)
+PROMPT_PREVIEW_MAX_PROMPTS = 100
 
 
 class HumanNotesRequest(BaseModel):
@@ -85,6 +87,51 @@ class DryRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dry_run: bool = False
+
+
+class PromptPreviewItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str
+    title: str
+    model: str
+    prompt: str
+    character_count: int
+    word_count: int
+    case_id: str | None = None
+    repeat_index: int | None = None
+    validator_id: str | None = None
+
+
+class PromptPreviewResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workflow_kind: str
+    prompts: list[PromptPreviewItem]
+    warnings: list[str] = Field(default_factory=list)
+
+
+def _prompt_preview_item(
+    *,
+    kind: str,
+    title: str,
+    model: str,
+    prompt: str,
+    case_id: str | None = None,
+    repeat_index: int | None = None,
+    validator_id: str | None = None,
+) -> PromptPreviewItem:
+    return PromptPreviewItem(
+        kind=kind,
+        title=title,
+        model=model,
+        prompt=prompt,
+        character_count=len(prompt),
+        word_count=len(prompt.split()),
+        case_id=case_id,
+        repeat_index=repeat_index,
+        validator_id=validator_id,
+    )
 
 
 def _validate_case_id_path_segment(case_id: str) -> None:
@@ -1279,6 +1326,40 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             "runs": [run.model_dump(mode="json") for run in run_artifacts],
         }
 
+    @app.post("/api/experiments/{experiment_id}/versions/{version}/runs/preview-prompts")
+    def preview_run_prompts(
+        experiment_id: str,
+        version: str,
+    ) -> dict[str, object]:
+        experiment = store.load_experiment(experiment_id)
+        cases = store.load_cases(experiment_id)
+        if not cases:
+            raise HTTPException(status_code=400, detail="Version has no cases")
+        for case in cases:
+            _validate_case_id_path_segment(case.id)
+        repeat_count = experiment.run_defaults.repeat_count
+        template_text = store.read_text(experiment_id, version, experiment.template.path)
+        prompts: list[PromptPreviewItem] = []
+        for case, repeat_index in iter_case_major(cases, repeat_count=repeat_count):
+            rendered_prompt = render_prompt(
+                template_text,
+                materialize_case_context(case),
+            )
+            prompts.append(
+                _prompt_preview_item(
+                    kind="run",
+                    title=f"Run case {case.id} repeat {repeat_index}",
+                    model=experiment.models.generator_model,
+                    prompt=rendered_prompt,
+                    case_id=case.id,
+                    repeat_index=repeat_index,
+                )
+            )
+        return PromptPreviewResponse(
+            workflow_kind="run_version",
+            prompts=prompts,
+        ).model_dump(mode="json")
+
     @app.get("/api/jobs/active")
     def get_active_job() -> dict[str, object]:
         active_job = job_manager.active_job()
@@ -1488,6 +1569,91 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
 
         background_tasks.add_task(execute_run_job)
         return asdict(job)
+
+    @app.post(
+        "/api/experiments/{experiment_id}/versions/{version}/validations/preview-prompts"
+    )
+    def preview_validation_prompts(
+        experiment_id: str,
+        version: str,
+    ) -> dict[str, object]:
+        experiment = store.load_experiment(experiment_id)
+        version_dir = store.version_dir(experiment_id, version)
+        cases = store.load_cases(experiment_id)
+        case_ids = {case.id for case in cases}
+        cases_by_id = {case.id: case for case in cases}
+        selected_run_batch_id, run_artifacts = _load_latest_validated_run_batch(
+            version_dir=version_dir,
+            version=version,
+            cases=case_ids,
+            repeat_count=experiment.run_defaults.repeat_count,
+        )
+        validators = store.load_validators(experiment_id)
+        active_validators = enabled_validators(validators)
+        if not active_validators:
+            raise HTTPException(
+                status_code=400,
+                detail="Experiment has no enabled validators",
+            )
+        llm_validators = [
+            validator
+            for validator in active_validators
+            if isinstance(validator, LlmQuestionnaireValidatorDefinition)
+        ]
+        warnings: list[str] = []
+        preview_run_artifacts = sorted(
+            run_artifacts,
+            key=lambda item: (item.case_id, item.repeat_index),
+        )
+        total_prompt_count = len(preview_run_artifacts) * len(llm_validators)
+        if total_prompt_count > PROMPT_PREVIEW_MAX_PROMPTS:
+            first_repeat_by_case: dict[str, RunArtifact] = {}
+            for run in preview_run_artifacts:
+                if run.case_id not in first_repeat_by_case:
+                    first_repeat_by_case[run.case_id] = run
+            preview_run_artifacts = list(first_repeat_by_case.values())
+            warnings.append(
+                (
+                    f"Preview has {total_prompt_count} validation prompts, which is "
+                    f"larger than the {PROMPT_PREVIEW_MAX_PROMPTS} prompt limit. "
+                    "Showing every case and LLM validator for the first repeat only."
+                )
+            )
+
+        prompts: list[PromptPreviewItem] = []
+        for run in preview_run_artifacts:
+            case = cases_by_id[run.case_id]
+            case_context = materialize_case_context(case)
+            for validator in llm_validators:
+                validator_prompt = build_llm_validator_prompt(
+                    experiment_id=experiment_id,
+                    version=version,
+                    validation_batch_id="preview",
+                    validator=validator,
+                    run=run,
+                    case=case,
+                    case_context=case_context,
+                )
+                prompts.append(
+                    _prompt_preview_item(
+                        kind="validation",
+                        title=(
+                            f"Validate {run.case_id} repeat {run.repeat_index} "
+                            f"with {validator.validator_id}"
+                        ),
+                        model=experiment.models.validator_model,
+                        prompt=validator_prompt,
+                        case_id=run.case_id,
+                        repeat_index=run.repeat_index,
+                        validator_id=validator.validator_id,
+                    )
+                )
+
+        return PromptPreviewResponse(
+            workflow_kind="validation",
+            prompts=prompts,
+            warnings=warnings,
+        ).model_dump(mode="json")
 
     @app.post("/api/experiments/{experiment_id}/versions/{version}/validations")
     def validate_experiment_version(
@@ -1754,6 +1920,114 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             )
         _remove_runtime_children(version_dir, ["reviews", "comparisons"])
         return _read_validation_state(store, experiment_id, version, validation_dir)
+
+    @app.post("/api/experiments/{experiment_id}/versions/{version}/judgments/preview-prompts")
+    def preview_judge_prompts(
+        experiment_id: str,
+        version: str,
+        run_batch_id: str | None = None,
+    ) -> dict[str, object]:
+        experiment = store.load_experiment(experiment_id)
+        version_dir = store.version_dir(experiment_id, version)
+        runs_dir = version_dir / "runs"
+        validation_dir = _select_latest_validation_dir(version_dir)
+        if validation_dir is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Judgment requires a completed validation batch. "
+                    "Run validation before generating a judgment."
+                ),
+            )
+        validation_batch = ValidationBatchArtifact.model_validate(
+            _read_json(validation_dir / "batch.json")
+        )
+        validation_results = store.load_validation_results(
+            experiment_id,
+            version,
+            validation_batch.validation_batch_id,
+        )
+        validator_snapshots = _read_validation_snapshots(validation_dir)
+        prompt_template = store.read_text(
+            experiment_id, version, experiment.template.path
+        )
+        cases = store.load_cases(experiment_id)
+        case_ids = {case.id for case in cases}
+        selected_run_batch_id = validation_batch.run_batch_id
+        if run_batch_id is not None and run_batch_id != selected_run_batch_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Requested run batch does not match latest completed "
+                    "validation batch"
+                ),
+            )
+        run_batch_dir = (runs_dir / selected_run_batch_id).resolve()
+        resolved_runs_dir = runs_dir.resolve()
+        if (
+            run_batch_dir == resolved_runs_dir
+            or not run_batch_dir.is_relative_to(resolved_runs_dir)
+            or not run_batch_dir.is_dir()
+        ):
+            raise HTTPException(status_code=404, detail="Run batch not found")
+        run_artifacts = _load_run_artifacts_from_batch_dir(run_batch_dir)
+        if not run_artifacts:
+            raise HTTPException(status_code=400, detail="Run batch has no artifacts")
+        _validate_run_artifacts(
+            run_artifacts=run_artifacts,
+            selected_run_batch_id=selected_run_batch_id,
+            version=version,
+            case_ids=case_ids,
+            repeat_count=experiment.run_defaults.repeat_count,
+        )
+        _validate_validation_results_for_judge(
+            validation_batch=validation_batch,
+            validation_results=validation_results,
+            validator_snapshots=validator_snapshots,
+            run_artifacts=run_artifacts,
+        )
+        validation_evidence = _build_validation_evidence(
+            results=validation_results,
+            validators=validator_snapshots,
+        )
+
+        model_source = None
+        if experiment.output.type == "pydantic":
+            model_file = experiment.output.model_file
+            model_entrypoint = experiment.output.model_entrypoint
+            assert model_file is not None
+            assert model_entrypoint is not None
+            model_source = store.read_text(experiment_id, version, model_file)
+            output_declaration = (
+                f"pydantic model: {model_entrypoint}\n"
+                f"model file: {model_file}\n\n{model_source}"
+            )
+        else:
+            output_declaration = "text output"
+
+        judge_prompt = build_judge_prompt(
+            experiment_id=experiment_id,
+            version=version,
+            run_batch_id=selected_run_batch_id,
+            validation_batch_id=validation_batch.validation_batch_id,
+            judge_model=experiment.models.judge_model,
+            output_declaration=output_declaration,
+            prompt_template=prompt_template,
+            model_source=model_source,
+            validation_evidence=validation_evidence,
+            run_errors=_run_errors_from_artifacts(run_artifacts),
+        )
+        return PromptPreviewResponse(
+            workflow_kind="judge",
+            prompts=[
+                _prompt_preview_item(
+                    kind="judge",
+                    title="Judge validated run",
+                    model=experiment.models.judge_model,
+                    prompt=judge_prompt,
+                )
+            ],
+        ).model_dump(mode="json")
 
     @app.post("/api/experiments/{experiment_id}/versions/{version}/judgments")
     def judge_experiment_version(
@@ -2164,6 +2438,74 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         version_dir = store.version_dir(experiment_id, version)
         review_dir = _resolve_existing_review_dir(version_dir, review_id)
         return _read_proposal_response(review_dir / "proposal")
+
+    @app.post(
+        "/api/experiments/{experiment_id}/versions/{version}/reviews/{review_id}/proposal/preview-prompts"
+    )
+    def preview_proposal_prompts(
+        experiment_id: str,
+        version: str,
+        review_id: str,
+    ) -> dict[str, object]:
+        experiment = store.load_experiment(experiment_id)
+        version_dir = store.version_dir(experiment_id, version)
+        review_dir = _resolve_existing_review_dir(version_dir, review_id)
+        judgment = JudgmentArtifact.model_validate(
+            _read_json(review_dir / "judgment.json")
+        )
+        decisions_path = review_dir / "decisions.json"
+        if not decisions_path.is_file():
+            raise HTTPException(status_code=404, detail="Review decisions not found")
+        decisions = FindingDecisionSet.model_validate(_read_json(decisions_path))
+        _validate_decision_keys_match_judgment(
+            judgment=judgment,
+            decisions=decisions,
+        )
+
+        prompt_template = store.read_text(
+            experiment_id, version, experiment.template.path
+        )
+        validation_context_path = review_dir / "validation_context.json"
+        validation_context = (
+            _read_json(validation_context_path)
+            if validation_context_path.is_file()
+            else {}
+        )
+        human_notes_path = review_dir / "human_notes.md"
+        human_notes = (
+            human_notes_path.read_text(encoding="utf-8")
+            if human_notes_path.is_file()
+            else ""
+        )
+        model_source = None
+        if experiment.output.type == "pydantic":
+            model_file = experiment.output.model_file
+            assert model_file is not None
+            model_source = store.read_text(experiment_id, version, model_file)
+
+        proposal_prompt = build_proposal_prompt(
+            experiment_id=experiment_id,
+            version=version,
+            current_model=experiment.models.generator_model,
+            output_type=experiment.output.type,
+            prompt_template=prompt_template,
+            model_source=model_source,
+            validation_context=validation_context,
+            judgment=judgment,
+            decisions=decisions,
+            human_notes=human_notes,
+        )
+        return PromptPreviewResponse(
+            workflow_kind="proposal",
+            prompts=[
+                _prompt_preview_item(
+                    kind="proposal",
+                    title="Generate proposal",
+                    model=experiment.models.judge_model,
+                    prompt=proposal_prompt,
+                )
+            ],
+        ).model_dump(mode="json")
 
     @app.post(
         "/api/experiments/{experiment_id}/versions/{version}/reviews/{review_id}/proposal"

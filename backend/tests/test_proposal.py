@@ -397,6 +397,37 @@ def test_api_reads_existing_proposal_artifacts() -> None:
         assert body["source"]["review_id"] == "review-001"
 
 
+def test_api_previews_proposal_prompt_without_creating_proposal_artifacts() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_review_fixture(root)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        proposal_dir = runtime_review_dir(root) / "proposal"
+
+        response = TestClient(app).post(
+            "/api/experiments/demo/versions/v001/reviews/review-001/proposal/preview-prompts"
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["workflow_kind"] == "proposal"
+        assert body["warnings"] == []
+        assert len(body["prompts"]) == 1
+        prompt = body["prompts"][0]
+        assert prompt["kind"] == "proposal"
+        assert prompt["title"] == "Generate proposal"
+        assert prompt["model"] == "openai/judge"
+        assert prompt["case_id"] is None
+        assert prompt["repeat_index"] is None
+        assert prompt["validator_id"] is None
+        assert "ACCEPTED_FINDINGS_JSON" in prompt["prompt"]
+        assert "REJECTED_FINDINGS_AS_CONSTRAINTS_JSON" in prompt["prompt"]
+        assert "Keep the answer terse" in prompt["prompt"]
+        assert prompt["character_count"] == len(prompt["prompt"])
+        assert prompt["word_count"] == len(prompt["prompt"].split())
+        assert not proposal_dir.exists()
+
+
 def test_api_strips_wrapping_code_fences_from_proposal_files() -> None:
     def fake_generate_structured(
         model: str,
@@ -791,6 +822,7 @@ def main() -> int:
         test_proposal_prompt_template_file_is_used,
         test_api_generates_proposal_artifacts_with_traceable_source,
         test_api_reads_existing_proposal_artifacts,
+        test_api_previews_proposal_prompt_without_creating_proposal_artifacts,
         test_api_strips_wrapping_code_fences_from_proposal_files,
         test_api_generates_dry_run_proposal_without_live_llm,
         test_api_reports_active_proposal_job_and_rejects_second_proposal,

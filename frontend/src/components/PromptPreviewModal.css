@@ -1,0 +1,131 @@
+.prompt-preview-backdrop {
+  align-items: stretch;
+  justify-items: stretch;
+}
+
+.prompt-preview-modal {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  width: min(1320px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgb(16 24 40 / 0.22);
+}
+
+.prompt-preview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #e4e7ec;
+  background: #f9fafb;
+}
+
+.prompt-preview-header h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.prompt-preview-header p {
+  margin: 6px 0 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.prompt-preview-warnings {
+  display: grid;
+  gap: 8px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #fed7aa;
+  background: #fff7ed;
+}
+
+.prompt-preview-warnings p {
+  margin: 0;
+  color: #9a3412;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.prompt-preview-list {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 20px;
+  background: #ffffff;
+}
+
+.prompt-preview-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.prompt-preview-card-header {
+  display: grid;
+  gap: 8px;
+}
+
+.prompt-preview-card h3 {
+  margin: 0;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.prompt-preview-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.prompt-preview-meta span {
+  padding: 4px 7px;
+  border: 1px solid #e4e7ec;
+  border-radius: 999px;
+  background: #f9fafb;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.prompt-preview-body {
+  max-height: 520px;
+  margin: 0;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid #1f2937;
+  border-radius: 6px;
+  background: #101828;
+  color: #f8fafc;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.prompt-preview-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid #e4e7ec;
+  background: #f9fafb;
+}

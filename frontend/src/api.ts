@@ -7,6 +7,7 @@ import type {
   JobEvent,
   JobStatus,
   JudgmentResponse,
+  PromptPreviewResponse,
   ProposalResponse,
   ReviewState,
   RunVersionRequest,
@@ -134,6 +135,17 @@ export function runVersion(
   );
 }
 
+export function previewRunPrompts(
+  experimentId: string,
+  version: string
+): Promise<PromptPreviewResponse> {
+  return apiPost<PromptPreviewResponse>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
+      version
+    )}/runs/preview-prompts`
+  );
+}
+
 export function validateVersion(
   experimentId: string,
   version: string,
@@ -144,6 +156,17 @@ export function validateVersion(
       version
     )}/validations`,
     dryRun ? { dry_run: true } : undefined
+  );
+}
+
+export function previewValidationPrompts(
+  experimentId: string,
+  version: string
+): Promise<PromptPreviewResponse> {
+  return apiPost<PromptPreviewResponse>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
+      version
+    )}/validations/preview-prompts`
   );
 }
 
@@ -178,6 +201,17 @@ export function judgeVersion(
       version
     )}/judgments`,
     dryRun ? { dry_run: true } : undefined
+  );
+}
+
+export function previewJudgePrompts(
+  experimentId: string,
+  version: string
+): Promise<PromptPreviewResponse> {
+  return apiPost<PromptPreviewResponse>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
+      version
+    )}/judgments/preview-prompts`
   );
 }
 
@@ -274,6 +308,18 @@ export function generateProposal(
       version
     )}/reviews/${encodeURIComponent(reviewId)}/proposal`,
     dryRun ? { dry_run: true } : undefined
+  );
+}
+
+export function previewProposalPrompts(
+  experimentId: string,
+  version: string,
+  reviewId: string
+): Promise<PromptPreviewResponse> {
+  return apiPost<PromptPreviewResponse>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
+      version
+    )}/reviews/${encodeURIComponent(reviewId)}/proposal/preview-prompts`
   );
 }
 

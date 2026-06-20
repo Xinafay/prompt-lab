@@ -13,6 +13,8 @@ from prompt_lab.api import create_app
 from prompt_lab.config import PromptLabConfig
 from prompt_lab.models.validators import LlmQuestionnaireResponse
 from prompt_lab.settings import PromptLabSettings, save_settings
+import prompt_lab.api as api_module
+from test_judge import valid_case_payload, valid_run_payload, write_json
 
 
 def demo_experiment_payload(
@@ -132,6 +134,132 @@ def write_quality_validator(root: Path, *, validator_id: str = "quality") -> Non
             ensure_ascii=False,
         ),
         encoding="utf-8",
+    )
+
+
+def write_runtime_preview_experiment(root: Path, *, repeat_count: int = 2) -> Path:
+    experiment_dir = root / "experiments" / "demo"
+    version_dir = experiment_dir / "versions" / "v001"
+    cases_dir = experiment_dir / "cases"
+    cases_dir.mkdir(parents=True)
+    version_dir.mkdir(parents=True)
+    write_json(
+        experiment_dir / "experiment.json",
+        {
+            "schema_version": "prompt_lab.experiment/v1",
+            "id": "demo",
+            "title": "Demo",
+            "description": "",
+            "active_version": "v001",
+            "output": {"type": "text"},
+            "template": {"engine": "jinjax", "path": "prompt.md"},
+            "models": {
+                "generator_model": "local/a",
+                "validator_model": "openai/validator",
+                "judge_model": "openai/judge",
+            },
+            "run_defaults": {
+                "repeat_count": repeat_count,
+                "llm_cache": "disabled",
+                "case_order": "case-major",
+            },
+        },
+    )
+    (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
+    for case_id, value in [("case-a", "alpha"), ("case-b", "bravo")]:
+        write_json(
+            cases_dir / f"{case_id}.json",
+            valid_case_payload(
+                id=case_id,
+                title=f"Case {case_id}",
+                stores={
+                    "case": {
+                        "kind": "flat_file_tree",
+                        "values": {
+                            "value": {
+                                "__carmilla_flat_file_node__": "file",
+                                "value": value,
+                            }
+                        },
+                    }
+                },
+            ),
+        )
+    return version_dir
+
+
+def write_preview_run_batch(version_dir: Path) -> None:
+    batch_id = "run-preview-001"
+    for case_id in ["case-a", "case-b"]:
+        for repeat_index in [1, 2]:
+            write_json(
+                version_dir
+                / "runs"
+                / batch_id
+                / case_id
+                / f"repeat-{repeat_index:03d}.json",
+                valid_run_payload(
+                    run_id=f"{batch_id}-{case_id}-repeat-{repeat_index:03d}",
+                    run_batch_id=batch_id,
+                    version="v001",
+                    case_id=case_id,
+                    repeat_index=repeat_index,
+                    rendered_prompt=f"Rendered {case_id} repeat {repeat_index}",
+                    output_type="text",
+                    output_text=f"Output {case_id} repeat {repeat_index}",
+                    output_json=None,
+                    raw_output=f"Output {case_id} repeat {repeat_index}",
+                ),
+            )
+
+
+def write_preview_validators(root: Path) -> None:
+    validators_dir = root / "experiments" / "demo" / "validators"
+    validators_dir.mkdir(parents=True)
+    for validator_id in ["quality", "style"]:
+        write_json(
+            validators_dir / f"{validator_id}.json",
+            {
+                "schema_version": "prompt_lab.validator/v1",
+                "validator_id": validator_id,
+                "type": "llm_questionnaire",
+                "title": validator_id.title(),
+                "description": "",
+                "enabled": True,
+                "input_scope": "output_only",
+                "checks": [
+                    {
+                        "check_id": "complete",
+                        "title": "Complete",
+                        "question": "Is the output complete?",
+                        "description": "",
+                    }
+                ],
+            },
+        )
+    write_json(
+        validators_dir / "length.json",
+        {
+            "schema_version": "prompt_lab.validator/v1",
+            "validator_id": "length",
+            "type": "automatic",
+            "title": "Length",
+            "description": "",
+            "enabled": True,
+            "input_scope": "output_only",
+            "checks": [
+                {
+                    "check_id": "short",
+                    "title": "Short",
+                    "description": "",
+                    "rule": {
+                        "kind": "word_count",
+                        "source": "output_text",
+                        "comparison": {"op": "gte", "value": 1},
+                    },
+                }
+            ],
+        },
     )
 
 
@@ -776,9 +904,72 @@ def test_api_runs_pydantic_version() -> None:
                 json.loads(path.read_text(encoding="utf-8"))
                 for path in artifact_paths
             ]
-            assert any(artifact.get("output_json") for artifact in artifacts)
+        assert any(artifact.get("output_json") for artifact in artifacts)
     finally:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
+
+
+def test_api_previews_run_prompts_and_preserves_model_marker() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_demo_pydantic_experiment(root)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).post(
+            "/api/experiments/demo/versions/v001/runs/preview-prompts"
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["workflow_kind"] == "run_version"
+        assert body["warnings"] == []
+        assert len(body["prompts"]) == 3
+        prompt = body["prompts"][0]
+        assert prompt["kind"] == "run"
+        assert prompt["title"] == "Run case a repeat 1"
+        assert prompt["case_id"] == "a"
+        assert prompt["repeat_index"] == 1
+        assert prompt["validator_id"] is None
+        assert prompt["prompt"] == "Say hello\n\n<<MODEL>>"
+        assert prompt["character_count"] == len("Say hello\n\n<<MODEL>>")
+        assert prompt["word_count"] == 3
+        assert [item["repeat_index"] for item in body["prompts"]] == [1, 2, 3]
+
+
+def test_api_previews_validation_prompts_with_first_repeat_when_too_large() -> None:
+    original_limit = getattr(api_module, "PROMPT_PREVIEW_MAX_PROMPTS", 100)
+    api_module.PROMPT_PREVIEW_MAX_PROMPTS = 3
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            version_dir = write_runtime_preview_experiment(root, repeat_count=2)
+            write_preview_run_batch(version_dir)
+            write_preview_validators(root)
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+
+            response = TestClient(app).post(
+                "/api/experiments/demo/versions/v001/validations/preview-prompts"
+            )
+
+            assert response.status_code == 200
+            body = response.json()
+            assert body["workflow_kind"] == "validation"
+            assert len(body["warnings"]) == 1
+            assert "first repeat" in body["warnings"][0]
+            prompts = body["prompts"]
+            assert len(prompts) == 4
+            assert {prompt["case_id"] for prompt in prompts} == {"case-a", "case-b"}
+            assert {prompt["validator_id"] for prompt in prompts} == {
+                "quality",
+                "style",
+            }
+            assert {prompt["repeat_index"] for prompt in prompts} == {1}
+            assert {prompt["kind"] for prompt in prompts} == {"validation"}
+            assert all(prompt["model"] == "openai/validator" for prompt in prompts)
+            assert all("<<MODEL>>" in prompt["prompt"] for prompt in prompts)
+            assert "length" not in {prompt["validator_id"] for prompt in prompts}
+    finally:
+        api_module.PROMPT_PREVIEW_MAX_PROMPTS = original_limit
 
 
 def test_api_dry_run_pydantic_version_avoids_live_llm() -> None:
@@ -1182,6 +1373,8 @@ def main() -> int:
         test_api_starting_run_clears_existing_runtime_chain,
         test_api_dry_run_text_version_avoids_live_llm,
         test_api_runs_pydantic_version,
+        test_api_previews_run_prompts_and_preserves_model_marker,
+        test_api_previews_validation_prompts_with_first_repeat_when_too_large,
         test_api_dry_run_pydantic_version_avoids_live_llm,
         test_api_dry_run_validation_for_pydantic_experiment,
         test_api_rejects_unsafe_validator_id_before_writing_artifacts,
