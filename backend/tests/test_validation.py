@@ -112,7 +112,6 @@ def test_build_llm_validator_prompt_respects_output_only_input_scope() -> None:
     assert "Return only JSON matching <<MODEL>>" not in prompt
     assert prompt.index("<<<OUTPUT_JSON") < prompt.index("<<MODEL>>")
     assert prompt.index("<<<VALIDATOR_JSON") < prompt.index("<<MODEL>>")
-    assert "RESPONSE_SCHEMA_JSON" in prompt
     assert "Rendered prompt should stay hidden" not in prompt
     assert "secret_context" not in prompt
 

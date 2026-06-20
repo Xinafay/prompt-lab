@@ -93,11 +93,6 @@ def build_llm_validator_prompt(
             ),
             "rendered_prompt_section": rendered_prompt_section,
             "case_context_section": case_context_section,
-            "response_schema_section": fenced_section(
-                "RESPONSE_SCHEMA_JSON",
-                "<<MODEL>>",
-                fence="json",
-            ),
         },
     )
 
