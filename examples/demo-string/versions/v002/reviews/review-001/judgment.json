@@ -12,8 +12,8 @@
       "finding_id": "ok-answer",
       "description": "The answer gives a concrete location and next step.",
       "evidence": [
-        "reply-quality/answers-question returned yes",
-        "reply-stats/word-count returned yes"
+        "reply-quality/answers-question returned grade 5",
+        "reply-stats/word-count returned grade 5"
       ]
     }
   ],

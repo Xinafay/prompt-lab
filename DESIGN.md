@@ -133,11 +133,13 @@ Validators are experiment-level JSON definitions under `validators/`. They state
 what should be checked after a run. Enabled validators run in the explicit
 `Validate active run` stage before judging.
 
-LLM questionnaire validators ask `validator_model` to answer concrete
-yes/no/unknown checks over configured input scope. Automatic validators run local
-rules such as word counts or JSON-path counts without calling an LLM. Each
-validation batch stores validator snapshots, so historical validation results
-remain understandable even if validator definitions change later.
+LLM questionnaire validators ask `validator_model` to grade concrete checks on
+the global `grade: 1..5 | null` scale over configured input scope. Automatic
+validators run local rules such as word counts or JSON-path counts without
+calling an LLM; binary local rules currently map passing evidence to high grades
+and failing evidence to low grades. Each validation batch stores validator
+snapshots, so historical validation results remain understandable even if
+validator definitions change later.
 
 ### Judgment
 
@@ -552,16 +554,26 @@ uses validation results, not an LLM prompt.
           "cells": {
             "v001": {
               "status": "mixed",
-              "yes": 7,
-              "no": 2,
-              "unknown": 0,
+              "grade_5": 6,
+              "grade_4": 1,
+              "grade_3": 2,
+              "grade_2": 0,
+              "grade_1": 0,
+              "not_assessable": 0,
+              "missing": 0,
+              "error": 0,
               "total": 9
             },
             "v002": {
               "status": "pass",
-              "yes": 9,
-              "no": 0,
-              "unknown": 0,
+              "grade_5": 8,
+              "grade_4": 1,
+              "grade_3": 0,
+              "grade_2": 0,
+              "grade_1": 0,
+              "not_assessable": 0,
+              "missing": 0,
+              "error": 0,
               "total": 9
             }
           }
@@ -829,7 +841,7 @@ Show:
 - baseline version selector;
 - candidate version selector;
 - deterministic validation matrix grouped by validator/check;
-- per-version counts and status for yes/no/unknown evidence.
+- per-version grade distributions and status for validation evidence.
 
 ## Carmilla Export Boundary
 

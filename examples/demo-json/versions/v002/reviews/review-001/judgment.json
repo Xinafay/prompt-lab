@@ -12,8 +12,8 @@
       "finding_id": "ok-json-shape",
       "description": "The output satisfies the automatic JSON shape checks.",
       "evidence": [
-        "report-shape/three-tags returned yes",
-        "report-shape/risk-count returned yes"
+        "report-shape/three-tags returned grade 5",
+        "report-shape/risk-count returned grade 5"
       ]
     }
   ],

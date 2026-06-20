@@ -328,10 +328,11 @@ Each cell includes aggregate counts over included validation evidence:
 
 Initial cell status rules:
 
-- green/pass: all included results are `5`
-- red/fail: at least one included result is `1`
-- yellow/mixed: grades `2`, `3`, or `4`, not assessable data, missing data,
-  future `pending` data, or errors without `1`
+- green/pass: all assessable included grades are `4` or `5`, with no null,
+  missing, pending, or error data
+- red/fail: at least one included result is grade `1` or `2`
+- yellow/mixed: grade `3`, not assessable data, missing data, future `pending`
+  data, or errors, when no grade `1` or `2` is present
 - gray/empty: no included data
 
 The UI can show compact grade distributions in the table cell, such as
