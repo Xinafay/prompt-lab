@@ -16,11 +16,6 @@ Operational rules:
 
 - Do not ask for raw outputs; judge only from validation evidence and run errors provided here.
 
-Return only JSON matching this response model:
-```json
-<<MODEL>>
-```
-
 Experiment id: {{ experiment_id }}
 
 Version: {{ version }}
@@ -43,4 +38,10 @@ Use these exact metadata values in the JSON response. Do not infer them from run
 
 {{ run_errors_section }}
 
+Return only JSON matching this response model:
+
 {{ judgment_schema_section }}
+
+```json
+<<MODEL>>
+```

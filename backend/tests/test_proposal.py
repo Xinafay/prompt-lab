@@ -243,7 +243,7 @@ def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
     )
 
     assert "human notes override all judge findings" in prompt
-    assert "<<MODEL>>" in prompt
+    assert prompt.count("<<MODEL>>") == 1
     assert "accepted findings are requested changes" in prompt
     assert "rejected findings are constraints" in prompt
     assert "deferred findings are ignored" in prompt
@@ -254,6 +254,8 @@ def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
     assert "Keep the answer terse" in prompt
     assert "VALIDATION_CONTEXT_JSON" in prompt
     assert "validation-001" in prompt
+    assert prompt.index("<<<VALIDATION_CONTEXT_JSON") < prompt.index("<<MODEL>>")
+    assert prompt.index("<<<REJECTED_FINDINGS_AS_CONSTRAINTS_JSON") < prompt.index("<<MODEL>>")
     assert "RUBRIC_SNAPSHOT_MD" not in prompt
     assert "f-accepted" in prompt
     assert "Missing summary." in prompt

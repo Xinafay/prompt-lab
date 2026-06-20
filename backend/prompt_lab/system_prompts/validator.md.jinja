@@ -2,7 +2,7 @@ You are validating one Prompt Lab run result.
 
 Rules:
 - Validate only the single run result provided in this prompt.
-- Return only JSON matching <<MODEL>>.
+- Return only JSON matching the response schema at the end of this prompt.
 - Answer every check exactly once.
 - Use only the provided validation context.
 - Do not suggest prompt changes, model changes, or workflow changes.
@@ -26,4 +26,6 @@ Rules:
 {{ case_context_section }}
 
 {% endif %}
+Return only JSON matching this response schema:
+
 {{ response_schema_section }}

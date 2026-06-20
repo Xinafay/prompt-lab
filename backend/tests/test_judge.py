@@ -476,7 +476,7 @@ def test_build_judge_prompt_uses_validation_evidence_without_raw_outputs_or_rubr
     assert "distinguish recurring problems from one-off deviations" in prompt
     assert "cite case/repeat evidence" in prompt
     assert "JSON matching JudgmentArtifact" in prompt
-    assert "<<MODEL>>" in prompt
+    assert prompt.count("<<MODEL>>") == 1
     assert "avoid numeric scorecards as primary output" in prompt
     assert "validation evidence as primary analysis of run outputs" in prompt
     assert "Do not ask for raw outputs" in prompt
@@ -493,6 +493,8 @@ def test_build_judge_prompt_uses_validation_evidence_without_raw_outputs_or_rubr
     assert "<<<VALIDATION_METADATA_JSON" in prompt
     assert "<<<VALIDATION_EVIDENCE_JSON" in prompt
     assert "<<<JUDGMENT_SCHEMA_JSON" in prompt
+    assert prompt.index("<<<VALIDATION_EVIDENCE_JSON") < prompt.index("<<MODEL>>")
+    assert prompt.index("<<<RUN_ERRORS_JSON") < prompt.index("<<MODEL>>")
     assert "case-a" in prompt
     assert '"repeat_index": 1' in prompt
     assert "answer must be a string" in prompt
