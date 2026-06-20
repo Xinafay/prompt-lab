@@ -64,8 +64,9 @@ an LLM. These values use the
 Each example can include a top-level `validators/` directory. Validator
 definition files use `prompt_lab.validator/v1` and are seeded into runtime
 experiments with the rest of the starter template. LLM questionnaire validators
-ask explicit yes/no/unknown checks over configured input scope. Automatic
-validators run local rules such as word counts or JSON-path counts.
+assign `grade: 1..5 | null` to explicit checks over configured input scope.
+Automatic validators run local rules such as word counts or JSON-path counts
+and currently map binary rule outcomes to grade `5` or `1`.
 
 The running app does not write into `examples/`. At backend startup, examples are
 copied into `experiments/` only when the runtime workspace is missing or has no
