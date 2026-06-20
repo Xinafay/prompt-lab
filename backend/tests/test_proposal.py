@@ -137,7 +137,7 @@ def write_review_fixture(root: Path, *, output_type: str = "pydantic") -> Path:
                     "check_title": "Complete answer",
                     "case_id": "case-a",
                     "repeat_index": 1,
-                    "verdict": "no",
+                    "grade": 1,
                     "comment": "The output misses the required summary.",
                 }
             ],
@@ -198,7 +198,7 @@ def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
                     "check_id": "complete",
                     "case_id": "case-a",
                     "repeat_index": 1,
-                    "verdict": "no",
+                    "grade": 1,
                     "comment": "Missing summary.",
                 }
             ],
@@ -254,6 +254,8 @@ def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
     assert "Keep the answer terse" in prompt
     assert "VALIDATION_CONTEXT_JSON" in prompt
     assert "validation-001" in prompt
+    assert '"grade": 1' in prompt
+    assert '"verdict"' not in prompt
     assert "<<<PROPOSAL_SCHEMA_JSON" not in prompt
     assert prompt.index("<<<VALIDATION_CONTEXT_JSON") < prompt.index("<<MODEL>>")
     assert prompt.index("<<<REJECTED_FINDINGS_AS_CONSTRAINTS_JSON") < prompt.index("<<MODEL>>")

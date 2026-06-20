@@ -279,7 +279,7 @@ def write_run_batch(
                     "check_results": [
                         {
                             "check_id": "complete",
-                            "verdict": "yes",
+                            "grade": 5,
                             "comment": (
                                 f"Validation evidence for {case_id} "
                                 f"repeat {repeat_index}"
@@ -458,7 +458,7 @@ def test_build_judge_prompt_uses_validation_evidence_without_raw_outputs_or_rubr
                 "check_title": "Complete answer",
                 "case_id": "case-a",
                 "repeat_index": 1,
-                "verdict": "no",
+                "grade": 1,
                 "comment": "evidence comment",
             }
         ],
@@ -477,7 +477,7 @@ def test_build_judge_prompt_uses_validation_evidence_without_raw_outputs_or_rubr
     assert "cite case/repeat evidence" in prompt
     assert "JSON matching JudgmentArtifact" in prompt
     assert prompt.count("<<MODEL>>") == 1
-    assert "avoid numeric scorecards as primary output" in prompt
+    assert "validation grades are evidence, not your final output format" in prompt
     assert "validation evidence as primary analysis of run outputs" in prompt
     assert "Do not ask for raw outputs" in prompt
     assert "Say {{ value }}" in prompt
@@ -497,6 +497,8 @@ def test_build_judge_prompt_uses_validation_evidence_without_raw_outputs_or_rubr
     assert prompt.index("<<<RUN_ERRORS_JSON") < prompt.index("<<MODEL>>")
     assert "case-a" in prompt
     assert '"repeat_index": 1' in prompt
+    assert '"grade": 1' in prompt
+    assert '"verdict"' not in prompt
     assert "answer must be a string" in prompt
     assert '"version": "v001"' in prompt
     assert '"run_batch_ids": [' in prompt
@@ -604,7 +606,7 @@ def test_api_creates_judgment_and_default_accepted_decisions() -> None:
                     "check_results": [
                         {
                             "check_id": "complete",
-                            "verdict": "no",
+                            "grade": 1,
                             "comment": "EXCLUDED CHECK",
                             "included_in_judge": False,
                             "metrics": {},
@@ -636,7 +638,7 @@ def test_api_creates_judgment_and_default_accepted_decisions() -> None:
                     "check_results": [
                         {
                             "check_id": "complete",
-                            "verdict": "no",
+                            "grade": 1,
                             "comment": "EXCLUDED RESULT",
                             "included_in_judge": True,
                             "metrics": {},
@@ -816,7 +818,7 @@ def test_api_rejects_contaminated_validation_result_before_judging() -> None:
                     "check_results": [
                         {
                             "check_id": "complete",
-                            "verdict": "no",
+                            "grade": 1,
                             "comment": "CONTAMINATED EVIDENCE",
                             "included_in_judge": True,
                             "metrics": {},

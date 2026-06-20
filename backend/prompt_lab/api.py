@@ -626,7 +626,7 @@ def _build_validation_evidence(
                 "check_id": check.check_id,
                 "case_id": result.case_id,
                 "repeat_index": result.repeat_index,
-                "verdict": check.verdict,
+                "grade": check.grade,
                 "comment": check.comment,
             }
             validator_title = validator_snapshot.get("validator_title")
