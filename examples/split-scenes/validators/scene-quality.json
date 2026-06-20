@@ -5,13 +5,13 @@
   "title": "Scene quality",
   "description": "Checks whether structured scenes preserve source content and useful boundaries.",
   "enabled": true,
-  "input_scope": "output_and_case",
+  "input_scope": "output_and_prompt",
   "checks": [
     {
       "check_id": "coverage",
       "title": "Coverage",
       "question": "Does the scene list cover every important source event without omission?",
-      "description": "Compare the output to the source case context."
+      "description": "Compare the output to the source text in the rendered prompt."
     },
     {
       "check_id": "order",
