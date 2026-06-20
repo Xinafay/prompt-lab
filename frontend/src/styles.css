@@ -1464,15 +1464,17 @@ select {
   overflow-wrap: anywhere;
 }
 
-.validation-unsaved {
-  padding: 10px 12px;
-  border: 1px solid #fed7aa;
-  border-radius: 6px;
-  background: #fff7ed;
+.validation-unsaved-inline {
+  align-self: center;
   color: #c2410c;
   font-size: 13px;
   font-weight: 750;
   line-height: 1.35;
+  white-space: nowrap;
+}
+
+.validation-unsaved-inline-hidden {
+  visibility: hidden;
 }
 
 .validation-results,

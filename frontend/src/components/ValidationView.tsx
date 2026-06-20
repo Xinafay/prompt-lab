@@ -28,10 +28,6 @@ interface ValidationViewProps {
   isBusy: boolean;
   hasRuns: boolean;
   hasUnsavedChanges: boolean;
-  validateDisabled: boolean;
-  validateDisabledReason: string | null;
-  validateLabel: string;
-  onValidate: () => void;
   onStateChange: (state: ValidationState) => void;
   onSaveInclusion: () => void;
 }
@@ -228,10 +224,6 @@ export function ValidationView({
   isBusy,
   hasRuns,
   hasUnsavedChanges,
-  validateDisabled,
-  validateDisabledReason,
-  validateLabel,
-  onValidate,
   onStateChange,
   onSaveInclusion
 }: ValidationViewProps) {
@@ -259,15 +251,15 @@ export function ValidationView({
       <div className="section-heading">
         <h3>Validation</h3>
         <div className="section-actions">
-          <TooltipButton
-            className="secondary-action"
-            disabled={validateDisabled}
-            disabledReason={validateDisabledReason}
-            onClick={onValidate}
-            type="button"
+          <span
+            className={
+              hasUnsavedChanges
+                ? "validation-unsaved-inline"
+                : "validation-unsaved-inline validation-unsaved-inline-hidden"
+            }
           >
-            {validateLabel}
-          </TooltipButton>
+            Unsaved inclusion changes.
+          </span>
           <TooltipButton
             className="secondary-action"
             disabled={isBusy || !hasUnsavedChanges || validationState === null}
@@ -312,12 +304,6 @@ export function ValidationView({
               <strong>{formatTimestamp(batch?.finished_at)}</strong>
             </div>
           </div>
-
-          {hasUnsavedChanges ? (
-            <div className="validation-unsaved">
-              Unsaved validation inclusion changes.
-            </div>
-          ) : null}
 
           {matrix.rows.length === 0 || matrix.columns.length === 0 ? (
             <div className="empty-inline">
