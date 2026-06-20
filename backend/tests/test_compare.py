@@ -100,7 +100,7 @@ def validation_result(
     *,
     version: str,
     check_id: str = "coverage",
-    verdict: str = "yes",
+    grade: int | None = 5,
     included: bool = True,
     result_included: bool = True,
     status: str = "ok",
@@ -124,8 +124,8 @@ def validation_result(
             "check_results": [
                 {
                     "check_id": check_id,
-                    "verdict": verdict,
-                    "comment": f"{verdict} evidence",
+                    "grade": grade,
+                    "comment": f"grade {grade} evidence",
                     "included_in_judge": included,
                     "metrics": {},
                 }
@@ -208,7 +208,7 @@ def write_validation_batch(
     validation_batch_id: str,
     run_batch_id: str,
     version: str,
-    verdict: str,
+    grade: int | None,
     status: str = "completed",
 ) -> None:
     write_json(
@@ -235,7 +235,7 @@ def write_validation_batch(
         / "quality.json",
         validator_snapshot(),
     )
-    result = validation_result(version=version, verdict=verdict).model_dump(mode="json")
+    result = validation_result(version=version, grade=grade).model_dump(mode="json")
     result["validation_batch_id"] = validation_batch_id
     result["run_batch_id"] = run_batch_id
     result["run_id"] = f"{run_batch_id}-case-a-repeat-001"
@@ -344,8 +344,8 @@ def add_style_validator_to_batch(
             "check_results": [
                 {
                     "check_id": "tone",
-                    "verdict": "yes",
-                    "comment": "yes evidence",
+                    "grade": 5,
+                    "comment": "grade 5 evidence",
                     "included_in_judge": True,
                     "metrics": {},
                 }
@@ -371,7 +371,7 @@ def corrupt_validation_result(
     write_json(path, payload)
 
 
-def test_compare_matrix_marks_any_no_as_fail() -> None:
+def test_compare_matrix_marks_low_grades_as_fail() -> None:
     matrix = build_compare_matrix(
         experiment_id="demo",
         versions=["v001", "v002"],
@@ -380,15 +380,14 @@ def test_compare_matrix_marks_any_no_as_fail() -> None:
             "v002": [validator_snapshot()],
         },
         results_by_version={
-            "v001": [validation_result(version="v001", verdict="yes")],
-            "v002": [validation_result(version="v002", verdict="no")],
+            "v001": [validation_result(version="v001", grade=5)],
+            "v002": [validation_result(version="v002", grade=1)],
         },
     )
 
-    assert matrix.rows[0].cells[0].status == "pass"
-    assert matrix.rows[0].cells[0].yes == 1
+    assert matrix.rows[0].cells[0].grade_5 == 1
+    assert matrix.rows[0].cells[1].grade_1 == 1
     assert matrix.rows[0].cells[1].status == "fail"
-    assert matrix.rows[0].cells[1].no == 1
     assert matrix.rows[0].cells[1].total == 1
 
 
@@ -402,12 +401,12 @@ def test_compare_matrix_ignores_excluded_checks_and_results() -> None:
         },
         results_by_version={
             "v001": [
-                validation_result(version="v001", verdict="no", included=False)
+                validation_result(version="v001", grade=1, included=False)
             ],
             "v002": [
                 validation_result(
                     version="v002",
-                    verdict="no",
+                    grade=1,
                     result_included=False,
                 )
             ],
@@ -420,7 +419,7 @@ def test_compare_matrix_ignores_excluded_checks_and_results() -> None:
     assert matrix.rows[0].cells[1].total == 0
 
 
-def test_compare_matrix_marks_unknown_and_errors_as_mixed() -> None:
+def test_compare_matrix_marks_null_grade_and_errors_as_mixed() -> None:
     matrix = build_compare_matrix(
         experiment_id="demo",
         versions=["v001", "v002"],
@@ -429,7 +428,7 @@ def test_compare_matrix_marks_unknown_and_errors_as_mixed() -> None:
             "v002": [validator_snapshot()],
         },
         results_by_version={
-            "v001": [validation_result(version="v001", verdict="unknown")],
+            "v001": [validation_result(version="v001", grade=None)],
             "v002": [
                 validation_result(
                     version="v002",
@@ -440,12 +439,26 @@ def test_compare_matrix_marks_unknown_and_errors_as_mixed() -> None:
         },
     )
 
+    assert matrix.rows[0].cells[0].not_assessable == 1
     assert matrix.rows[0].cells[0].status == "mixed"
-    assert matrix.rows[0].cells[0].unknown == 1
-    assert matrix.rows[0].cells[1].status == "mixed"
     assert matrix.rows[0].cells[1].error == 1
-    assert matrix.rows[0].cells[1].details[0].verdict == "error"
-    assert matrix.rows[0].cells[1].details[0].comment == "Validator timed out"
+    assert matrix.rows[0].cells[1].details[0].status == "error"
+    assert matrix.rows[0].cells[1].details[0].grade is None
+
+
+def test_compare_matrix_marks_grade_three_as_mixed() -> None:
+    matrix = build_compare_matrix(
+        experiment_id="demo",
+        versions=["v001"],
+        validator_snapshots_by_version={"v001": [validator_snapshot()]},
+        results_by_version={"v001": [validation_result(version="v001", grade=3)]},
+    )
+
+    cell = matrix.rows[0].cells[0]
+
+    assert cell.grade_3 == 1
+    assert cell.status == "mixed"
+    assert cell.total == 1
 
 
 def test_compare_matrix_uses_snapshot_rows_across_versions() -> None:
@@ -484,14 +497,14 @@ def test_api_returns_compare_matrix_from_latest_completed_validation_batches() -
                 validation_batch_id="validation-001",
                 run_batch_id="baseline-run-001",
                 version="v001",
-                verdict="no",
+                grade=1,
             )
             write_validation_batch(
                 baseline_dir,
                 validation_batch_id="validation-999",
                 run_batch_id="baseline-run-001",
                 version="v001",
-                verdict="yes",
+                grade=5,
                 status="running",
             )
             write_validation_batch(
@@ -499,7 +512,7 @@ def test_api_returns_compare_matrix_from_latest_completed_validation_batches() -
                 validation_batch_id="validation-002",
                 run_batch_id="candidate-run-001",
                 version="v002",
-                verdict="yes",
+                grade=5,
             )
             app = create_app(PromptLabConfig.from_env(project_root=root))
 
@@ -516,7 +529,7 @@ def test_api_returns_compare_matrix_from_latest_completed_validation_batches() -
                 "fail",
                 "pass",
             ]
-            assert body["rows"][0]["cells"][0]["no"] == 1
+            assert body["rows"][0]["cells"][0]["grade_1"] == 1
             comparison_dir = (
                 runtime_version_dir(root, "v002") / "comparisons" / "comparison-001"
             )
@@ -538,7 +551,7 @@ def test_api_rejects_compare_without_completed_validation_batch() -> None:
             validation_batch_id="validation-001",
             run_batch_id="baseline-run-001",
             version="v001",
-            verdict="yes",
+            grade=5,
         )
         app = create_app(PromptLabConfig.from_env(project_root=root))
 
@@ -563,14 +576,14 @@ def test_api_rejects_compare_result_with_mismatched_batch_metadata() -> None:
             validation_batch_id="validation-001",
             run_batch_id="baseline-run-001",
             version="v001",
-            verdict="yes",
+            grade=5,
         )
         write_validation_batch(
             candidate_dir,
             validation_batch_id="validation-002",
             run_batch_id="candidate-run-001",
             version="v002",
-            verdict="yes",
+            grade=5,
         )
         corrupted_path = validation_result_path(
             candidate_dir,
@@ -604,14 +617,14 @@ def test_api_rejects_compare_result_with_unknown_snapshot_check_id() -> None:
             validation_batch_id="validation-001",
             run_batch_id="baseline-run-001",
             version="v001",
-            verdict="yes",
+            grade=5,
         )
         write_validation_batch(
             candidate_dir,
             validation_batch_id="validation-002",
             run_batch_id="candidate-run-001",
             version="v002",
-            verdict="yes",
+            grade=5,
         )
         corrupted_path = validation_result_path(
             candidate_dir,
@@ -644,14 +657,14 @@ def test_api_rejects_compare_result_with_mismatched_run_batch_id() -> None:
             validation_batch_id="validation-001",
             run_batch_id="baseline-run-001",
             version="v001",
-            verdict="yes",
+            grade=5,
         )
         write_validation_batch(
             candidate_dir,
             validation_batch_id="validation-002",
             run_batch_id="candidate-run-001",
             version="v002",
-            verdict="yes",
+            grade=5,
         )
         corrupted_path = validation_result_path(
             candidate_dir,
@@ -685,14 +698,14 @@ def test_api_rejects_compare_result_with_unknown_snapshot_validator_id() -> None
             validation_batch_id="validation-001",
             run_batch_id="baseline-run-001",
             version="v001",
-            verdict="yes",
+            grade=5,
         )
         write_validation_batch(
             candidate_dir,
             validation_batch_id="validation-002",
             run_batch_id="candidate-run-001",
             version="v002",
-            verdict="yes",
+            grade=5,
         )
         corrupted_path = validation_result_path(
             candidate_dir,
@@ -724,14 +737,14 @@ def test_api_rejects_compare_with_missing_validation_result_file() -> None:
             validation_batch_id="validation-001",
             run_batch_id="baseline-run-001",
             version="v001",
-            verdict="yes",
+            grade=5,
         )
         write_validation_batch(
             candidate_dir,
             validation_batch_id="validation-002",
             run_batch_id="candidate-run-001",
             version="v002",
-            verdict="yes",
+            grade=5,
         )
         validation_result_path(
             candidate_dir,
@@ -760,14 +773,14 @@ def test_api_rejects_compare_with_duplicate_validation_result_id() -> None:
             validation_batch_id="validation-001",
             run_batch_id="baseline-run-001",
             version="v001",
-            verdict="yes",
+            grade=5,
         )
         write_validation_batch(
             candidate_dir,
             validation_batch_id="validation-002",
             run_batch_id="candidate-run-001",
             version="v002",
-            verdict="yes",
+            grade=5,
         )
         add_style_validator_to_batch(
             baseline_dir,
@@ -812,14 +825,14 @@ def test_api_rejects_compare_with_duplicate_logical_validation_result() -> None:
             validation_batch_id="validation-001",
             run_batch_id="baseline-run-001",
             version="v001",
-            verdict="yes",
+            grade=5,
         )
         write_validation_batch(
             candidate_dir,
             validation_batch_id="validation-002",
             run_batch_id="candidate-run-001",
             version="v002",
-            verdict="yes",
+            grade=5,
         )
         add_style_validator_to_batch(
             baseline_dir,
@@ -867,14 +880,14 @@ def test_api_rejects_compare_ok_result_missing_snapshot_check() -> None:
             validation_batch_id="validation-001",
             run_batch_id="baseline-run-001",
             version="v001",
-            verdict="yes",
+            grade=5,
         )
         write_validation_batch(
             candidate_dir,
             validation_batch_id="validation-002",
             run_batch_id="candidate-run-001",
             version="v002",
-            verdict="yes",
+            grade=5,
         )
         corrupted_path = validation_result_path(
             candidate_dir,
@@ -908,14 +921,14 @@ def test_api_rejects_compare_result_with_unknown_run_case_repeat() -> None:
             validation_batch_id="validation-001",
             run_batch_id="baseline-run-001",
             version="v001",
-            verdict="yes",
+            grade=5,
         )
         write_validation_batch(
             candidate_dir,
             validation_batch_id="validation-002",
             run_batch_id="candidate-run-001",
             version="v002",
-            verdict="yes",
+            grade=5,
         )
         corrupt_validation_result(
             candidate_dir,
@@ -950,14 +963,14 @@ def test_api_rejects_compare_result_with_mismatched_run_id() -> None:
             validation_batch_id="validation-001",
             run_batch_id="baseline-run-001",
             version="v001",
-            verdict="yes",
+            grade=5,
         )
         write_validation_batch(
             candidate_dir,
             validation_batch_id="validation-002",
             run_batch_id="candidate-run-001",
             version="v002",
-            verdict="yes",
+            grade=5,
         )
         corrupt_validation_result(
             candidate_dir,
@@ -1013,14 +1026,14 @@ def test_api_rejects_compare_missing_expected_logical_result() -> None:
             validation_batch_id="validation-001",
             run_batch_id="baseline-run-001",
             version="v001",
-            verdict="yes",
+            grade=5,
         )
         write_validation_batch(
             candidate_dir,
             validation_batch_id="validation-002",
             run_batch_id="candidate-run-001",
             version="v002",
-            verdict="yes",
+            grade=5,
         )
         app = create_app(PromptLabConfig.from_env(project_root=root))
 
@@ -1045,21 +1058,21 @@ def test_api_rejects_compare_validation_batch_id_mismatching_directory_name() ->
             validation_batch_id="validation-001",
             run_batch_id="baseline-run-001",
             version="v001",
-            verdict="yes",
+            grade=5,
         )
         write_validation_batch(
             candidate_dir,
             validation_batch_id="validation-001",
             run_batch_id="candidate-run-001",
             version="v002",
-            verdict="yes",
+            grade=5,
         )
         write_validation_batch(
             candidate_dir,
             validation_batch_id="validation-999",
             run_batch_id="candidate-run-001",
             version="v002",
-            verdict="no",
+            grade=1,
         )
         batch_path = validation_batch_path(
             candidate_dir,
@@ -1094,14 +1107,14 @@ def test_api_rejects_compare_ok_result_with_duplicate_check_ids() -> None:
             validation_batch_id="validation-001",
             run_batch_id="baseline-run-001",
             version="v001",
-            verdict="yes",
+            grade=5,
         )
         write_validation_batch(
             candidate_dir,
             validation_batch_id="validation-002",
             run_batch_id="candidate-run-001",
             version="v002",
-            verdict="yes",
+            grade=5,
         )
         result_path = validation_result_path(
             candidate_dir,
@@ -1133,14 +1146,14 @@ def test_api_rejects_compare_error_result_with_duplicate_check_ids() -> None:
             validation_batch_id="validation-001",
             run_batch_id="baseline-run-001",
             version="v001",
-            verdict="yes",
+            grade=5,
         )
         write_validation_batch(
             candidate_dir,
             validation_batch_id="validation-002",
             run_batch_id="candidate-run-001",
             version="v002",
-            verdict="yes",
+            grade=5,
         )
         result_path = validation_result_path(
             candidate_dir,
@@ -1174,14 +1187,14 @@ def test_api_rejects_compare_result_with_mismatched_validator_type() -> None:
             validation_batch_id="validation-001",
             run_batch_id="baseline-run-001",
             version="v001",
-            verdict="yes",
+            grade=5,
         )
         write_validation_batch(
             candidate_dir,
             validation_batch_id="validation-002",
             run_batch_id="candidate-run-001",
             version="v002",
-            verdict="yes",
+            grade=5,
         )
         corrupt_validation_result(
             candidate_dir,
@@ -1213,14 +1226,14 @@ def test_api_rejects_compare_completed_batch_with_no_validators() -> None:
             validation_batch_id="validation-001",
             run_batch_id="baseline-run-001",
             version="v001",
-            verdict="yes",
+            grade=5,
         )
         write_validation_batch(
             candidate_dir,
             validation_batch_id="validation-002",
             run_batch_id="candidate-run-001",
             version="v002",
-            verdict="yes",
+            grade=5,
         )
         validation_result_path(
             candidate_dir,
@@ -1254,9 +1267,10 @@ def test_api_rejects_compare_completed_batch_with_no_validators() -> None:
 
 def main() -> int:
     tests = [
-        test_compare_matrix_marks_any_no_as_fail,
+        test_compare_matrix_marks_low_grades_as_fail,
         test_compare_matrix_ignores_excluded_checks_and_results,
-        test_compare_matrix_marks_unknown_and_errors_as_mixed,
+        test_compare_matrix_marks_null_grade_and_errors_as_mixed,
+        test_compare_matrix_marks_grade_three_as_mixed,
         test_compare_matrix_uses_snapshot_rows_across_versions,
         test_api_returns_compare_matrix_from_latest_completed_validation_batches,
         test_api_rejects_compare_without_completed_validation_batch,

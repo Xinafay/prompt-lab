@@ -106,7 +106,8 @@ def _cell_for_version(
                     case_id=result.case_id,
                     repeat_index=result.repeat_index,
                     validation_result_id=result.validation_result_id,
-                    verdict="error",
+                    status="error",
+                    grade=None,
                     comment=result.execution_error or "Validation result failed.",
                 )
             )
@@ -114,23 +115,32 @@ def _cell_for_version(
         for check in result.check_results:
             if check.check_id != check_id or not check.included_in_judge:
                 continue
-            counts[check.verdict] += 1
+            if check.grade is None:
+                counts["not_assessable"] += 1
+                detail_status = "not_assessable"
+            else:
+                counts[f"grade_{check.grade}"] += 1
+                detail_status = "graded"
             details.append(
                 CompareCellDetail(
                     case_id=result.case_id,
                     repeat_index=result.repeat_index,
                     validation_result_id=result.validation_result_id,
-                    verdict=check.verdict,
+                    status=detail_status,
+                    grade=check.grade,
                     comment=check.comment,
                 )
             )
-    total = counts["yes"] + counts["no"] + counts["unknown"] + counts["error"]
+    total = _total(counts)
     return CompareMatrixCell(
         version=version,
         status=_status(counts),
-        yes=counts["yes"],
-        no=counts["no"],
-        unknown=counts["unknown"],
+        grade_5=counts["grade_5"],
+        grade_4=counts["grade_4"],
+        grade_3=counts["grade_3"],
+        grade_2=counts["grade_2"],
+        grade_1=counts["grade_1"],
+        not_assessable=counts["not_assessable"],
         missing=counts["missing"],
         error=counts["error"],
         total=total,
@@ -138,13 +148,29 @@ def _cell_for_version(
     )
 
 
+def _total(counts: Counter[str]) -> int:
+    return (
+        counts["grade_5"]
+        + counts["grade_4"]
+        + counts["grade_3"]
+        + counts["grade_2"]
+        + counts["grade_1"]
+        + counts["not_assessable"]
+        + counts["error"]
+    )
+
+
 def _status(counts: Counter[str]) -> Literal["pass", "fail", "mixed", "empty"]:
-    total = counts["yes"] + counts["no"] + counts["unknown"] + counts["error"]
+    total = _total(counts)
     if total == 0:
         return "empty"
-    if counts["no"] > 0:
+    if counts["grade_1"] > 0 or counts["grade_2"] > 0:
         return "fail"
-    if counts["unknown"] > 0 or counts["error"] > 0:
+    if (
+        counts["grade_3"] > 0
+        or counts["not_assessable"] > 0
+        or counts["error"] > 0
+    ):
         return "mixed"
     return "pass"
 
