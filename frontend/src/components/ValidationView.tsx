@@ -1,6 +1,5 @@
 import {
   Fragment,
-  type ReactNode,
   useEffect,
   useMemo,
   useRef,
@@ -12,6 +11,7 @@ import type {
   ValidationResult,
   ValidationState
 } from "../types";
+import { MatrixItem } from "./MatrixItem";
 import { TooltipButton } from "./TooltipButton";
 import {
   buildValidationMatrix,
@@ -188,42 +188,6 @@ function validationComment(cell: ValidationMatrixCell): string {
   return cell.comment.trim()
     ? cell.comment
     : "No validation comment was saved for this check.";
-}
-
-function MatrixItem({
-  checkbox,
-  badge,
-  title,
-  meta,
-  description,
-  className = ""
-}: {
-  checkbox?: ReactNode;
-  badge?: ReactNode;
-  title?: ReactNode;
-  meta?: ReactNode;
-  description?: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={`validation-matrix-item ${className}`.trim()}>
-      {checkbox !== undefined || badge !== undefined ? (
-        <div className="validation-matrix-item-toolbar">
-          <span>{checkbox}</span>
-          <span>{badge}</span>
-        </div>
-      ) : null}
-      {title !== undefined ? (
-        <strong className="validation-matrix-item-title">{title}</strong>
-      ) : null}
-      {meta !== undefined ? (
-        <span className="validation-matrix-item-meta">{meta}</span>
-      ) : null}
-      {description !== undefined ? (
-        <p className="validation-matrix-item-description">{description}</p>
-      ) : null}
-    </div>
-  );
 }
 
 export function ValidationView({

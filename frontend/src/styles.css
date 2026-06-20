@@ -2210,6 +2210,31 @@ select {
   border-radius: 8px;
 }
 
+.comparison-matrix-wrap {
+  max-height: calc(100vh - 320px);
+}
+
+.comparison-matrix-cell-pass {
+  background: #fbfffd;
+}
+
+.comparison-matrix-cell-fail {
+  background: #fffafa;
+}
+
+.comparison-matrix-cell-mixed {
+  background: #fffdf7;
+}
+
+.comparison-matrix-cell-empty {
+  background: #f8fafc;
+}
+
+.comparison-matrix-cell:hover,
+.comparison-matrix-cell:focus {
+  background: #f9fafb;
+}
+
 .compare-matrix {
   width: 100%;
   min-width: 820px;
