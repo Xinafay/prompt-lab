@@ -130,6 +130,14 @@ function verdictLabel(value: ValidationMatrixCell["verdict"]): string {
         : value;
 }
 
+function validatorTypeLabel(
+  value: ValidationMatrixCheckRow["validator_type"]
+): string {
+  if (value === "llm_questionnaire") return "LLM questionnaire";
+  if (value === "automatic") return "Automatic";
+  return value;
+}
+
 function MatrixCheckbox({
   label,
   title,
@@ -413,7 +421,7 @@ export function ValidationView({
                                     title="Include or exclude all checks from this validator in judge"
                                   />
                                 }
-                                meta={row.validator_type}
+                                meta={validatorTypeLabel(row.validator_type)}
                                 title={row.validator_title}
                               />
                             </th>
