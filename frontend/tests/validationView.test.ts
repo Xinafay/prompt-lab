@@ -123,6 +123,139 @@ test("buildValidationMatrix groups checks by validator rows and case-repeat colu
   );
 });
 
+test("buildValidationMatrix keeps ok validation cells with null grades", () => {
+  const matrix = buildValidationMatrix({
+    ...validationState(),
+    results: [
+      {
+        ...validationState().results[0],
+        check_results: [
+          {
+            check_id: "coverage",
+            grade: null,
+            comment: "Not assessable.",
+            included_in_judge: true,
+            metrics: {}
+          }
+        ]
+      }
+    ]
+  });
+
+  const cell = matrix.rows[0].cells[0];
+
+  assert.equal(cell.status, "ok");
+  assert.equal(cell.grade, null);
+  assert.equal(cell.comment, "Not assessable.");
+});
+
+test("buildValidationMatrix preserves intermediate grades", () => {
+  const matrix = buildValidationMatrix({
+    ...validationState(),
+    results: [
+      {
+        ...validationState().results[0],
+        check_results: [
+          {
+            check_id: "coverage",
+            grade: 3,
+            comment: "Partially covered.",
+            included_in_judge: true,
+            metrics: {}
+          }
+        ]
+      }
+    ]
+  });
+
+  const cell = matrix.rows[0].cells[0];
+
+  assert.equal(cell.status, "ok");
+  assert.equal(cell.grade, 3);
+  assert.equal(cell.comment, "Partially covered.");
+});
+
+test("buildValidationMatrix clears grades for validation result errors", () => {
+  const matrix = buildValidationMatrix({
+    ...validationState(),
+    results: [
+      {
+        ...validationState().results[0],
+        status: "error",
+        execution_error: "Validator failed.",
+        check_results: [
+          {
+            check_id: "coverage",
+            grade: 4,
+            comment: "Stale check comment.",
+            included_in_judge: true,
+            metrics: {}
+          }
+        ]
+      }
+    ]
+  });
+
+  const cell = matrix.rows[0].cells[0];
+
+  assert.equal(cell.status, "error");
+  assert.equal(cell.grade, null);
+  assert.equal(cell.comment, "Validator failed.");
+});
+
+test("buildValidationMatrix uses null grades for missing checks and results", () => {
+  const matrix = buildValidationMatrix({
+    ...validationState(),
+    validators: [
+      {
+        ...validationState().validators[0],
+        checks: [
+          ...validationState().validators[0].checks,
+          {
+            check_id: "specificity",
+            title: "Specificity",
+            question: "Is the answer specific?",
+            description: "Answer should be concrete."
+          }
+        ]
+      },
+      {
+        schema_version: "prompt_lab.validator/v1",
+        validator_id: "style",
+        type: "llm_questionnaire",
+        title: "Style",
+        description: "Checks answer style.",
+        enabled: true,
+        input_scope: "output_only",
+        checks: [
+          {
+            check_id: "tone",
+            title: "Tone",
+            question: "Is the tone suitable?",
+            description: "Answer should use suitable tone."
+          }
+        ]
+      }
+    ]
+  });
+
+  const missingCheckCell = matrix.rows.find(
+    (row) => row.check_id === "specificity"
+  )?.cells[0];
+  const missingResultCell = matrix.rows.find(
+    (row) => row.validator_id === "style"
+  )?.cells[0];
+
+  assert.equal(missingCheckCell?.status, "missing");
+  assert.equal(missingCheckCell?.grade, null);
+  assert.equal(missingCheckCell?.check, null);
+  assert.equal(missingCheckCell?.result?.validation_result_id, "result-001");
+  assert.equal(missingResultCell?.status, "missing");
+  assert.equal(missingResultCell?.grade, null);
+  assert.equal(missingResultCell?.check, null);
+  assert.equal(missingResultCell?.result, null);
+});
+
 test("buildValidationMatrix shows skipped validation results as non-includable cells", () => {
   const matrix = buildValidationMatrix({
     ...validationState(),

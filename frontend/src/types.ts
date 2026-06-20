@@ -175,7 +175,9 @@ export type ValidationBatchStatus =
   | "failed"
   | "cancelled";
 
-export type ValidationGrade = 1 | 2 | 3 | 4 | 5 | null;
+export type NonNullValidationGrade = 1 | 2 | 3 | 4 | 5;
+
+export type ValidationGrade = NonNullValidationGrade | null;
 
 export type ValidationResultStatus = "ok" | "error" | "skipped";
 
@@ -389,14 +391,26 @@ export type ComparisonStatus = "pass" | "fail" | "mixed" | "empty";
 
 export type CompareDetailStatus = "graded" | "not_assessable" | "error";
 
-export interface CompareCellDetail {
+interface BaseCompareCellDetail {
   case_id: string;
   repeat_index: number;
   validation_result_id: string;
-  status: CompareDetailStatus;
-  grade: ValidationGrade;
   comment: string;
 }
+
+export type CompareCellDetail =
+  | (BaseCompareCellDetail & {
+      status: "graded";
+      grade: NonNullValidationGrade;
+    })
+  | (BaseCompareCellDetail & {
+      status: "error";
+      grade: null;
+    })
+  | (BaseCompareCellDetail & {
+      status: "not_assessable";
+      grade: null;
+    });
 
 export interface CompareMatrixCell {
   version: string;
