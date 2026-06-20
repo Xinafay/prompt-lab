@@ -31,9 +31,12 @@ function emptyCell(version: string): CompareMatrixCell {
   return {
     version,
     status: "empty",
-    yes: 0,
-    no: 0,
-    unknown: 0,
+    grade_5: 0,
+    grade_4: 0,
+    grade_3: 0,
+    grade_2: 0,
+    grade_1: 0,
+    not_assessable: 0,
     missing: 0,
     error: 0,
     total: 0,
@@ -48,9 +51,10 @@ function cellForVersion(row: CompareMatrixRow, version: string): CompareMatrixCe
 function statusLabel(cell: CompareMatrixCell): string {
   if (cell.total === 0) return "empty";
   if (cell.status === "pass") return "pass";
-  if (cell.status === "fail") return `${cell.no} fail`;
+  if (cell.status === "fail") return `${cell.grade_1 + cell.grade_2} low`;
   if (cell.error > 0) return `${cell.error} error`;
-  if (cell.unknown > 0) return `${cell.unknown} unknown`;
+  if (cell.not_assessable > 0) return `${cell.not_assessable} n/a`;
+  if (cell.grade_3 > 0) return `${cell.grade_3} mixed`;
   return "mixed";
 }
 
@@ -82,10 +86,13 @@ function aggregateCompareStatus(cells: CompareMatrixCell[]): {
 
 function detailSnippet(cell: CompareMatrixCell): string {
   const failing = cell.details.find(
-    (detail) => detail.verdict === "no" || detail.verdict === "error"
+    (detail) =>
+      detail.status === "error" || detail.grade === 1 || detail.grade === 2
   );
-  const unknown = cell.details.find((detail) => detail.verdict === "unknown");
-  const candidate = failing ?? unknown ?? cell.details[0] ?? null;
+  const mixed = cell.details.find(
+    (detail) => detail.grade === 3 || detail.status === "not_assessable"
+  );
+  const candidate = failing ?? mixed ?? cell.details[0] ?? null;
   if (candidate === null || candidate.comment.trim() === "") {
     if (cell.total === 0) return "No included validation evidence.";
     return "No comment was saved for this evidence.";
@@ -101,12 +108,24 @@ function snippet(value: string, limit = 150): string {
 
 function countSummary(cell: CompareMatrixCell): string {
   if (cell.total === 0) return "0 included checks";
-  const parts = [`${cell.yes}/${cell.total} yes`];
-  if (cell.no > 0) parts.push(`${cell.no} no`);
-  if (cell.unknown > 0) parts.push(`${cell.unknown} unknown`);
+  const parts: string[] = [];
+  if (cell.grade_5 > 0) parts.push(`${cell.grade_5} grade 5`);
+  if (cell.grade_4 > 0) parts.push(`${cell.grade_4} grade 4`);
+  if (cell.grade_3 > 0) parts.push(`${cell.grade_3} grade 3`);
+  if (cell.grade_2 > 0) parts.push(`${cell.grade_2} grade 2`);
+  if (cell.grade_1 > 0) parts.push(`${cell.grade_1} grade 1`);
+  if (cell.not_assessable > 0) parts.push(`${cell.not_assessable} n/a`);
   if (cell.error > 0) parts.push(`${cell.error} error`);
   if (cell.missing > 0) parts.push(`${cell.missing} missing`);
   return parts.join(" · ");
+}
+
+function detailLabel(
+  detail: CompareMatrixCell["details"][number]
+): string {
+  if (detail.status === "error") return "error";
+  if (detail.grade === null) return "n/a";
+  return `grade ${detail.grade}`;
 }
 
 export function ComparisonView({
@@ -414,9 +433,9 @@ function CompareCellModal({
               {cell.details.map((detail, index) => (
                 <div
                   className="compare-cell-detail"
-                  key={`${detail.validation_result_id}:${detail.case_id}:${detail.repeat_index}:${detail.verdict}:${index}`}
+                  key={`${detail.validation_result_id}:${detail.case_id}:${detail.repeat_index}:${detail.status}:${detail.grade ?? "na"}:${index}`}
                 >
-                  <strong>{detail.verdict}</strong>
+                  <strong>{detailLabel(detail)}</strong>
                   <span>
                     {detail.case_id} · repeat {detail.repeat_index}
                   </span>

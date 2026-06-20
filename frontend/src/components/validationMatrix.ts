@@ -1,8 +1,8 @@
 import type {
   ValidationCheckResult,
+  ValidationGrade,
   ValidationResult,
   ValidationState,
-  ValidationVerdict,
   ValidatorDefinition,
   ValidatorType
 } from "../types";
@@ -19,7 +19,7 @@ export interface ValidationMatrixCell {
   columnKey: string;
   result: ValidationResult | null;
   check: ValidationCheckResult | null;
-  verdict: ValidationVerdict | "error" | "missing" | "skipped";
+  grade: ValidationGrade;
   result_included_in_judge: boolean;
   check_included_in_judge: boolean;
   included_in_judge: boolean;
@@ -198,7 +198,7 @@ function buildCell({
       columnKey: column.key,
       result,
       check: null,
-      verdict: "skipped",
+      grade: null,
       result_included_in_judge: false,
       check_included_in_judge: false,
       included_in_judge: false,
@@ -215,7 +215,7 @@ function buildCell({
       columnKey: column.key,
       result,
       check,
-      verdict: "missing",
+      grade: null,
       result_included_in_judge: false,
       check_included_in_judge: false,
       included_in_judge: false,
@@ -229,7 +229,7 @@ function buildCell({
       columnKey: column.key,
       result,
       check,
-      verdict: "error",
+      grade: null,
       result_included_in_judge: result.included_in_judge,
       check_included_in_judge: check.included_in_judge,
       included_in_judge: result.included_in_judge && check.included_in_judge,
@@ -242,7 +242,7 @@ function buildCell({
     columnKey: column.key,
     result,
     check,
-    verdict: check.verdict,
+    grade: check.grade,
     result_included_in_judge: result.included_in_judge,
     check_included_in_judge: check.included_in_judge,
     included_in_judge: result.included_in_judge && check.included_in_judge,

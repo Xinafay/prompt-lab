@@ -74,22 +74,26 @@ function aggregateStatus(cells: ValidationMatrixCell[]): {
   }
   const missingOrError = cells.filter(
     (cell) =>
-      cell.verdict === "missing" ||
-      cell.verdict === "error" ||
-      cell.verdict === "skipped"
+      cell.status === "missing" ||
+      cell.status === "error" ||
+      cell.status === "skipped"
   ).length;
-  const failed = cells.filter((cell) => cell.verdict === "no").length;
-  const unknown = cells.filter((cell) => cell.verdict === "unknown").length;
+  const failed = cells.filter(
+    (cell) => cell.grade === 1 || cell.grade === 2
+  ).length;
+  const mixed = cells.filter(
+    (cell) => cell.grade === 3 || cell.grade === null
+  ).length;
   if (missingOrError > 0 || failed > 0) {
     return {
       className: "compare-cell-fail",
       label: `${missingOrError + failed} fail`
     };
   }
-  if (unknown > 0) {
+  if (mixed > 0) {
     return {
       className: "compare-cell-mixed",
-      label: `${unknown} unknown`
+      label: `${mixed} mixed`
     };
   }
   return { className: "compare-cell-pass", label: "pass" };
@@ -123,14 +127,25 @@ function snippet(value: string, limit = 180): string {
   return `${compact.slice(0, limit - 1)}...`;
 }
 
-function verdictLabel(value: ValidationMatrixCell["verdict"]): string {
-  return value === "yes"
-    ? "yes"
-    : value === "no"
-      ? "no"
-      : value === "unknown"
-        ? "unknown"
-        : value;
+function gradeLabel(
+  value: ValidationMatrixCell["grade"],
+  status: ValidationMatrixCell["status"]
+): string {
+  if (status === "skipped") return "skipped";
+  if (status === "missing") return "missing";
+  if (status === "error") return "error";
+  if (value === null) return "n/a";
+  return String(value);
+}
+
+function gradeClassName(
+  value: ValidationMatrixCell["grade"],
+  status: ValidationMatrixCell["status"]
+): string {
+  if (status === "skipped") return "verdict-skipped";
+  if (status === "missing") return "verdict-missing";
+  if (status === "error") return "verdict-error";
+  return `grade-${value ?? "na"}`;
 }
 
 function validatorTypeLabel(
@@ -455,9 +470,12 @@ export function ValidationView({
                                 <MatrixItem
                                   badge={
                                     <span
-                                      className={`verdict-pill verdict-${cell.verdict}`}
+                                      className={`verdict-pill ${gradeClassName(
+                                        cell.grade,
+                                        cell.status
+                                      )}`}
                                     >
-                                      {verdictLabel(cell.verdict)}
+                                      {gradeLabel(cell.grade, cell.status)}
                                     </span>
                                   }
                                   checkbox={
@@ -548,8 +566,13 @@ function ValidationCellModal({
               {row.validator_title} · {resultTitle(cell.result)}
             </p>
           </div>
-          <span className={`verdict-pill verdict-${cell.verdict}`}>
-            {verdictLabel(cell.verdict)}
+          <span
+            className={`verdict-pill ${gradeClassName(
+              cell.grade,
+              cell.status
+            )}`}
+          >
+            {gradeLabel(cell.grade, cell.status)}
           </span>
         </div>
 

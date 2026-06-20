@@ -58,7 +58,7 @@ function validationState(): ValidationState {
         check_results: [
           {
             check_id: "coverage",
-            verdict: "yes",
+            grade: 5,
             comment: "Good.",
             included_in_judge: false,
             metrics: {}
@@ -100,7 +100,7 @@ test("buildValidationMatrix groups checks by validator rows and case-repeat colu
         check_results: [
           {
             check_id: "coverage",
-            verdict: "no",
+            grade: 1,
             comment: "Missing.",
             included_in_judge: true,
             metrics: {}
@@ -118,8 +118,8 @@ test("buildValidationMatrix groups checks by validator rows and case-repeat colu
   assert.equal(matrix.rows[0].validator_title, "Quality");
   assert.equal(matrix.rows[0].check_title, "Coverage");
   assert.deepEqual(
-    matrix.rows[0].cells.map((cell) => cell.verdict),
-    ["yes", "no"]
+    matrix.rows[0].cells.map((cell) => cell.grade),
+    [5, 1]
   );
 });
 
@@ -139,7 +139,7 @@ test("buildValidationMatrix shows skipped validation results as non-includable c
 
   const cell = matrix.rows[0].cells[0];
 
-  assert.equal(cell.verdict, "skipped");
+  assert.equal(cell.grade, null);
   assert.equal(cell.status, "skipped");
   assert.equal(cell.result_included_in_judge, false);
   assert.equal(cell.check_included_in_judge, false);
@@ -162,7 +162,7 @@ test("setValidationInclusion toggles a whole check row", () => {
           check_results: [
             {
               check_id: "coverage",
-              verdict: "no",
+              grade: 1,
               comment: "Missing.",
               included_in_judge: true,
               metrics: {}
@@ -195,7 +195,7 @@ test("setValidationInclusion toggles a whole output column", () => {
           check_results: [
             {
               check_id: "coverage",
-              verdict: "no",
+              grade: 1,
               comment: "Missing.",
               included_in_judge: true,
               metrics: {}
@@ -212,11 +212,11 @@ test("setValidationInclusion toggles a whole output column", () => {
     updated.results.map((result) => ({
       result: result.included_in_judge,
       check: result.check_results[0].included_in_judge,
-      verdict: result.check_results[0].verdict
+      grade: result.check_results[0].grade
     })),
     [
-      { result: true, check: false, verdict: "yes" },
-      { result: false, check: false, verdict: "no" }
+      { result: true, check: false, grade: 5 },
+      { result: false, check: false, grade: 1 }
     ]
   );
 });
@@ -248,5 +248,5 @@ test("setValidationInclusion re-includes the result when a single cell is enable
 
   assert.equal(updated.results[0].included_in_judge, true);
   assert.equal(updated.results[0].check_results[0].included_in_judge, true);
-  assert.equal(updated.results[0].check_results[0].verdict, "yes");
+  assert.equal(updated.results[0].check_results[0].grade, 5);
 });

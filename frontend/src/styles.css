@@ -1723,23 +1723,30 @@ select {
   text-transform: uppercase;
 }
 
-.verdict-yes,
+.grade-5,
 .validation-status-ok,
 .compare-cell-pass {
   background: #ecfdf3;
   color: #027a48;
 }
 
-.verdict-no,
+.grade-4 {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.grade-2,
+.grade-1,
 .validation-status-error,
 .compare-cell-fail {
-  background: #fff1f0;
+  background: #fef3f2;
   color: #b42318;
 }
 
-.verdict-unknown,
+.grade-3,
+.grade-na,
 .compare-cell-mixed {
-  background: #fff8e6;
+  background: #fffaeb;
   color: #b54708;
 }
 

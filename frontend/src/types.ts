@@ -175,7 +175,7 @@ export type ValidationBatchStatus =
   | "failed"
   | "cancelled";
 
-export type ValidationVerdict = "yes" | "no" | "unknown";
+export type ValidationGrade = 1 | 2 | 3 | 4 | 5 | null;
 
 export type ValidationResultStatus = "ok" | "error" | "skipped";
 
@@ -253,7 +253,7 @@ export interface ValidationBatch {
 
 export interface ValidationCheckResult {
   check_id: string;
-  verdict: ValidationVerdict;
+  grade: ValidationGrade;
   comment: string;
   included_in_judge: boolean;
   metrics: Record<string, unknown>;
@@ -387,25 +387,26 @@ export interface CreatedVersionResponse {
 
 export type ComparisonStatus = "pass" | "fail" | "mixed" | "empty";
 
-export type CompareCellVerdict =
-  | ValidationVerdict
-  | "missing"
-  | "error";
+export type CompareDetailStatus = "graded" | "not_assessable" | "error";
 
 export interface CompareCellDetail {
   case_id: string;
   repeat_index: number;
   validation_result_id: string;
-  verdict: CompareCellVerdict;
+  status: CompareDetailStatus;
+  grade: ValidationGrade;
   comment: string;
 }
 
 export interface CompareMatrixCell {
   version: string;
   status: ComparisonStatus;
-  yes: number;
-  no: number;
-  unknown: number;
+  grade_5: number;
+  grade_4: number;
+  grade_3: number;
+  grade_2: number;
+  grade_1: number;
+  not_assessable: number;
   missing: number;
   error: number;
   total: number;
