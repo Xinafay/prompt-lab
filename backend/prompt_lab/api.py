@@ -1340,7 +1340,15 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         repeat_count = experiment.run_defaults.repeat_count
         template_text = store.read_text(experiment_id, version, experiment.template.path)
         prompts: list[PromptPreviewItem] = []
-        for case, repeat_index in iter_case_major(cases, repeat_count=repeat_count):
+        warnings: list[str] = []
+        if repeat_count > 1:
+            warnings.append(
+                (
+                    "Run prompts are identical across repeats. "
+                    "Showing one prompt per case."
+                )
+            )
+        for case in cases:
             rendered_prompt = render_prompt(
                 template_text,
                 materialize_case_context(case),
@@ -1348,16 +1356,16 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             prompts.append(
                 _prompt_preview_item(
                     kind="run",
-                    title=f"Run case {case.id} repeat {repeat_index}",
+                    title=f"Run case {case.id}",
                     model=experiment.models.generator_model,
                     prompt=rendered_prompt,
                     case_id=case.id,
-                    repeat_index=repeat_index,
                 )
             )
         return PromptPreviewResponse(
             workflow_kind="run_version",
             prompts=prompts,
+            warnings=warnings,
         ).model_dump(mode="json")
 
     @app.get("/api/jobs/active")

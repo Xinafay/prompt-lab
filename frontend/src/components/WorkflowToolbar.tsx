@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { Experiment, JobStatus, WorkflowMode } from "../types";
+import "./WorkflowToolbar.css";
 
 interface WorkflowToolbarProps {
   experiment: Experiment;

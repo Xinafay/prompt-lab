@@ -1,0 +1,12 @@
+.workflow-toolbar .workflow-actions .secondary-action {
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+@media (max-width: 760px) {
+  .workflow-toolbar .workflow-actions .disabled-tooltip-wrapper,
+  .workflow-toolbar .workflow-actions .secondary-action {
+    width: 100%;
+  }
+}

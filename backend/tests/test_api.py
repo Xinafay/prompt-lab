@@ -922,18 +922,18 @@ def test_api_previews_run_prompts_and_preserves_model_marker() -> None:
         assert response.status_code == 200
         body = response.json()
         assert body["workflow_kind"] == "run_version"
-        assert body["warnings"] == []
-        assert len(body["prompts"]) == 3
+        assert len(body["warnings"]) == 1
+        assert "identical across repeats" in body["warnings"][0]
+        assert len(body["prompts"]) == 1
         prompt = body["prompts"][0]
         assert prompt["kind"] == "run"
-        assert prompt["title"] == "Run case a repeat 1"
+        assert prompt["title"] == "Run case a"
         assert prompt["case_id"] == "a"
-        assert prompt["repeat_index"] == 1
+        assert prompt["repeat_index"] is None
         assert prompt["validator_id"] is None
         assert prompt["prompt"] == "Say hello\n\n<<MODEL>>"
         assert prompt["character_count"] == len("Say hello\n\n<<MODEL>>")
         assert prompt["word_count"] == 3
-        assert [item["repeat_index"] for item in body["prompts"]] == [1, 2, 3]
 
 
 def test_api_previews_validation_prompts_with_first_repeat_when_too_large() -> None:
