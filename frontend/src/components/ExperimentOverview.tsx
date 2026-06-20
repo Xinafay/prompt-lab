@@ -1,4 +1,5 @@
 import type { Case, VersionOverview } from "../types";
+import { ValidatorsPreview } from "./ValidatorsPreview";
 
 interface ExperimentOverviewProps {
   overview: VersionOverview;
@@ -53,6 +54,14 @@ export function ExperimentOverview({
           <span>{overview.version}</span>
         </div>
         <pre className="code-block">{overview.prompt}</pre>
+      </div>
+
+      <div className="overview-section overview-section-wide">
+        <div className="section-heading">
+          <h3>Validators</h3>
+          <span>{(overview.validators ?? []).length}</span>
+        </div>
+        <ValidatorsPreview validators={overview.validators ?? []} />
       </div>
 
       <div className="overview-section overview-section-wide">

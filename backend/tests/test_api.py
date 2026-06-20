@@ -349,6 +349,7 @@ def test_api_gets_version_overview() -> None:
             encoding="utf-8",
         )
         (example / "rubric.md").write_text("Prefer concise answers.", encoding="utf-8")
+        write_quality_validator(root)
         (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
         (example / "cases" / "a.json").write_text(
             json.dumps(demo_case_payload(), ensure_ascii=False),
@@ -365,6 +366,8 @@ def test_api_gets_version_overview() -> None:
         assert body["prompt"] == "Say {{ value }}"
         assert body["rubric"] == "Prefer concise answers."
         assert body["cases"][0]["id"] == "a"
+        assert body["validators"][0]["validator_id"] == "quality"
+        assert body["validators"][0]["checks"][0]["check_id"] == "has-answer"
 
 
 def test_api_lists_experiment_versions() -> None:

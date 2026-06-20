@@ -12,3 +12,5 @@ __pycache__/
 node_modules/
 dist/
 build/
+frontend/playwright-report/
+frontend/test-results/

@@ -39,6 +39,7 @@ import {
   buildValidationInclusionUpdate,
   ValidationView
 } from "./components/ValidationView";
+import { ValidatorsPreview } from "./components/ValidatorsPreview";
 import { WorkbenchTabs } from "./components/WorkbenchTabs";
 import { WorkflowToolbar } from "./components/WorkflowToolbar";
 import type {
@@ -1772,6 +1773,18 @@ function App() {
                             <span>{detailState.overview.version}</span>
                           </div>
                           <pre className="code-block">{detailState.overview.prompt}</pre>
+                        </div>
+
+                        <div className="overview-section overview-section-wide">
+                          <div className="section-heading">
+                            <h3>Validators</h3>
+                            <span>
+                              {(detailState.overview.validators ?? []).length}
+                            </span>
+                          </div>
+                          <ValidatorsPreview
+                            validators={detailState.overview.validators ?? []}
+                          />
                         </div>
 
                       </section>

@@ -111,6 +111,7 @@ export interface VersionOverview {
   prompt: string;
   rubric: string;
   cases: Case[];
+  validators: ValidatorDefinition[];
 }
 
 export interface VersionSummary {

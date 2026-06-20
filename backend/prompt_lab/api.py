@@ -1257,12 +1257,14 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             experiment_id, version, experiment.template.path
         )
         cases = store.load_cases(experiment_id)
+        validators = store.load_validators(experiment_id)
         return {
             "experiment": experiment.model_dump(mode="json"),
             "version": version,
             "prompt": prompt_template,
             "rubric": _read_optional_text(experiment_dir / "rubric.md"),
             "cases": [case.model_dump(mode="json") for case in cases],
+            "validators": [validator.model_dump(mode="json") for validator in validators],
         }
 
     @app.get("/api/experiments/{experiment_id}/versions/{version}/runs")

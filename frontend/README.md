@@ -33,7 +33,12 @@ http://127.0.0.1:5173/?experiment=split-scenes
 ```bash
 pnpm lint
 pnpm build
+pnpm test:e2e
 ```
+
+Playwright e2e tests use `demo-string` and `demo-json` examples. The Playwright
+config starts the backend on `127.0.0.1:8000` and the Vite frontend on
+`127.0.0.1:5173` when they are not already running.
 
 ## Workflow
 
