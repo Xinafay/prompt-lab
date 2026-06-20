@@ -478,6 +478,8 @@ def test_build_judge_prompt_uses_validation_evidence_without_raw_outputs_or_rubr
     assert "JSON matching JudgmentArtifact" in prompt
     assert prompt.count("<<MODEL>>") == 1
     assert "validation grades are evidence, not your final output format" in prompt
+    assert "`5` very good" in prompt
+    assert "`null` not assessable" in prompt
     assert "validation evidence as primary analysis of run outputs" in prompt
     assert "Do not ask for raw outputs" in prompt
     assert "Say {{ value }}" in prompt
@@ -677,7 +679,10 @@ def test_api_creates_judgment_and_default_accepted_decisions() -> None:
             )
             assert validation_context["validation_batch_id"] == "validation-batch-001"
             assert validation_context["run_batch_id"] == "batch-001"
-            assert validation_context["validation_evidence"][0]["comment"] == (
+            evidence = validation_context["validation_evidence"][0]
+            assert evidence["grade"] == 5
+            assert "verdict" not in evidence
+            assert evidence["comment"] == (
                 "Validation evidence for case-a repeat 1"
             )
             assert "EXCLUDED CHECK" not in json.dumps(validation_context)
