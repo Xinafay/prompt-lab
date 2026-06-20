@@ -130,6 +130,11 @@ one subject section: `OUTPUT_TEXT`, `OUTPUT_JSON`, or `INVALID_OUTPUT_TEXT` with
 `VALIDATION_ERROR`. Runs with `execution_error` are not sent to LLM validators;
 their validation results are saved as `skipped`. Automatic validators ignore
 extra prompt/case scope and read the configured `source`.
+
+Validation check results use `grade: 1..5 | null`, not pass/fail verdicts.
+`5` means very good, `4` good, `3` acceptable but improvable, `2` weak,
+`1` bad, and `null` not assessable from the provided evidence.
+
 Supported automatic rule kinds include `word_count`, `sentence_count`,
 `character_count`, `json_path_count`, and `json_path_exists`.
 

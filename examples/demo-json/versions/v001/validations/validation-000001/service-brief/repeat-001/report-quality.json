@@ -13,14 +13,14 @@
   "check_results": [
     {
       "check_id": "grounded-summary",
-      "verdict": "yes",
+      "grade": 5,
       "comment": "The summary uses details from the brief.",
       "included_in_judge": true,
       "metrics": {}
     },
     {
       "check_id": "actionable-risks",
-      "verdict": "no",
+      "grade": 1,
       "comment": "The output leaves risks empty, so the judge should recommend requesting concrete launch risks.",
       "included_in_judge": true,
       "metrics": {}

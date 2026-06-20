@@ -5,13 +5,13 @@
     {
       "validator_id": "report-shape",
       "check_id": "three-tags",
-      "verdict": "yes",
+      "grade": 5,
       "comment": "JSON path $.tags contains 3 items."
     },
     {
       "validator_id": "report-quality",
       "check_id": "actionable-risks",
-      "verdict": "yes",
+      "grade": 5,
       "comment": "Risks are concrete."
     }
   ]

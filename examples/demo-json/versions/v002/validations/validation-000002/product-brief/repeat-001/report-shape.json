@@ -13,7 +13,7 @@
   "check_results": [
     {
       "check_id": "summary-present",
-      "verdict": "yes",
+      "grade": 5,
       "comment": "JSON path $.summary exists.",
       "included_in_judge": true,
       "metrics": {
@@ -22,7 +22,7 @@
     },
     {
       "check_id": "three-tags",
-      "verdict": "yes",
+      "grade": 5,
       "comment": "JSON path $.tags contains 3 items.",
       "included_in_judge": true,
       "metrics": {
@@ -32,7 +32,7 @@
     },
     {
       "check_id": "risk-count",
-      "verdict": "yes",
+      "grade": 5,
       "comment": "JSON path $.risks contains 2 items.",
       "included_in_judge": true,
       "metrics": {

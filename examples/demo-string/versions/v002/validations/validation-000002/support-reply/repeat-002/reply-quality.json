@@ -13,14 +13,14 @@
   "check_results": [
     {
       "check_id": "answers-question",
-      "verdict": "yes",
+      "grade": 5,
       "comment": "The reply gives a concrete location or next step for the customer.",
       "included_in_judge": true,
       "metrics": {}
     },
     {
       "check_id": "calm-tone",
-      "verdict": "yes",
+      "grade": 5,
       "comment": "The reply is calm and customer friendly.",
       "included_in_judge": true,
       "metrics": {}

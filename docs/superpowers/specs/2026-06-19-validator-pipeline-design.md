@@ -207,16 +207,17 @@ Each validation result records:
 Each check result records:
 
 - check id
-- verdict: `yes`, `no`, or `unknown`
+- grade: `1`, `2`, `3`, `4`, `5`, or `null`
 - comment
 - metrics for automatic validators
 - `included_in_judge`
 
-Automatic validators should normally produce only `yes` or `no`. LLM validators
-may produce `unknown`. If the generator run has `execution_error`, validators are
-not executed and the result is saved as `skipped` with `included_in_judge=false`.
-If the generator run has `validation_error`, LLM validators receive the invalid
-raw output and validation error as the subject being checked.
+Automatic validators should normally produce only `5` or `1`. LLM validators
+may produce `null` when the evidence is not assessable. If the generator run has
+`execution_error`, validators are not executed and the result is saved as
+`skipped` with `included_in_judge=false`. If the generator run has
+`validation_error`, LLM validators receive the invalid raw output and validation
+error as the subject being checked.
 
 `pending` should be reserved for the future `human_questionnaire` type and
 should not be emitted by the MVP implementation.
@@ -314,24 +315,27 @@ validator, with rows for checks and columns for versions.
 
 Each cell includes aggregate counts over included validation evidence:
 
-- yes count
-- no count
-- unknown count
+- grade 5 count
+- grade 4 count
+- grade 3 count
+- grade 2 count
+- grade 1 count
+- not assessable count
 - missing count, with room for future pending human-validator data
 - error count
 - total count
-- detail rows with case id, repeat index, verdict, and comment
+- detail rows with case id, repeat index, grade, and comment
 
 Initial cell status rules:
 
-- green/pass: all included results are `yes`
-- red/fail: at least one included result is `no`
-- yellow/mixed: `unknown`, missing data, future `pending` data, or errors
-  without `no`
+- green/pass: all included results are `5`
+- red/fail: at least one included result is `1`
+- yellow/mixed: grades `2`, `3`, or `4`, not assessable data, missing data,
+  future `pending` data, or errors without `1`
 - gray/empty: no included data
 
-The UI can show compact counts in the table cell, such as `8/9 yes, 1 no`, and
-expand or click through to case/repeat details.
+The UI can show compact grade distributions in the table cell, such as
+`8/9 grade 5, 1 grade 1`, and expand or click through to case/repeat details.
 
 No LLM call is made for compare.
 
@@ -355,7 +359,7 @@ The Validation tab shows:
 - latest validation batch metadata
 - enabled validator list and statuses
 - grouped validation results by case/repeat and validator
-- check verdicts and comments
+- check grades and comments
 - result-level and check-level `included in judge` checkboxes
 - save action for inclusion edits
 

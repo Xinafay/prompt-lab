@@ -5,13 +5,13 @@
     {
       "validator_id": "reply-quality",
       "check_id": "answers-question",
-      "verdict": "yes",
+      "grade": 5,
       "comment": "The reply names the dashboard header, Download icon, and Export CSV action."
     },
     {
       "validator_id": "reply-stats",
       "check_id": "sentence-count",
-      "verdict": "yes",
+      "grade": 5,
       "comment": "The output contains 3 sentences."
     }
   ]

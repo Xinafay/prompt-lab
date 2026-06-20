@@ -13,7 +13,7 @@
   "check_results": [
     {
       "check_id": "word-count",
-      "verdict": "yes",
+      "grade": 5,
       "comment": "The output contains 5 words.",
       "included_in_judge": true,
       "metrics": {
@@ -22,7 +22,7 @@
     },
     {
       "check_id": "sentence-count",
-      "verdict": "no",
+      "grade": 1,
       "comment": "The output contains 1 sentences.",
       "included_in_judge": true,
       "metrics": {

@@ -13,14 +13,14 @@
   "check_results": [
     {
       "check_id": "answers-question",
-      "verdict": "no",
+      "grade": 1,
       "comment": "The reply is too vague and does not give a concrete next step.",
       "included_in_judge": true,
       "metrics": {}
     },
     {
       "check_id": "calm-tone",
-      "verdict": "yes",
+      "grade": 5,
       "comment": "The reply is calm and customer friendly.",
       "included_in_judge": true,
       "metrics": {}

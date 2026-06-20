@@ -447,7 +447,7 @@ case/repeat/validator.
 }
 ```
 
-Validation results include check verdicts and `included_in_judge` flags. Users
+Validation results include check grades and `included_in_judge` flags. Users
 can exclude a whole validator result or individual checks before the judge prompt
 is built. Runs with generator `execution_error` create `skipped` validation
 results with `included_in_judge=false`; no validator LLM call is made because no
@@ -675,7 +675,7 @@ Comparison input:
 - validator snapshots and included validation results.
 
 Comparison output is a grouped matrix by validator and check. It is intended for
-human comparison of pass/fail/unknown rates across versions.
+human comparison of grade distributions across versions.
 
 ### Proposal Generator
 
