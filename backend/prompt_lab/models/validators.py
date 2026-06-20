@@ -16,7 +16,7 @@ InputScope = Literal[
 ]
 ValidatorType = Literal["llm_questionnaire", "automatic"]
 ValidationBatchStatus = Literal["running", "completed", "failed", "cancelled"]
-ValidationResultStatus = Literal["ok", "error"]
+ValidationResultStatus = Literal["ok", "error", "skipped"]
 ValidationVerdict = Literal["yes", "no", "unknown"]
 ComparisonStatus = Literal["pass", "fail", "mixed", "empty"]
 
@@ -205,6 +205,13 @@ class ValidationResultArtifact(BaseModel):
             raise ValueError("ok status cannot include execution_error")
         if self.status == "error" and self.execution_error is None:
             raise ValueError("error status requires execution_error")
+        if self.status == "skipped":
+            if self.execution_error is None:
+                raise ValueError("skipped status requires execution_error")
+            if self.included_in_judge:
+                raise ValueError("skipped status cannot be included in judge")
+            if self.check_results:
+                raise ValueError("skipped status cannot include check_results")
         return self
 
 

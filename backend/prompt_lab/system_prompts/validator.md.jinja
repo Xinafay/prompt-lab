@@ -6,15 +6,15 @@ Rules:
 - Answer every check exactly once.
 - Use only the provided validation context.
 - Do not suggest prompt changes, model changes, or workflow changes.
+- Treat QUESTIONNAIRE_JSON as the checklist you must answer.
+- Treat OUTPUT_TEXT, OUTPUT_JSON, or INVALID_OUTPUT_TEXT as the run result being validated.
+- If VALIDATION_ERROR is present, the generator produced INVALID_OUTPUT_TEXT but it failed the structured-output contract.
+- Use RENDERED_PROMPT or CASE_CONTEXT_JSON only as supporting evidence when present.
 - Use `yes` when the provided context clearly satisfies the check.
 - Use `no` when the provided context clearly fails the check.
 - Use `unknown` when the provided context is insufficient or ambiguous.
 
 {{ validator_section }}
-
-{{ run_metadata_section }}
-
-{{ run_status_section }}
 
 {{ output_section }}
 

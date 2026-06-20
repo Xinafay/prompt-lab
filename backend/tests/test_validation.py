@@ -11,6 +11,7 @@ from prompt_lab.models.validators import (
 from prompt_lab.validation import (
     apply_inclusion_update,
     build_llm_validator_prompt,
+    build_skipped_validation_result,
     validate_llm_check_ids,
 )
 
@@ -111,9 +112,60 @@ def test_build_llm_validator_prompt_respects_output_only_input_scope() -> None:
     assert prompt.count("<<MODEL>>") == 1
     assert "Return only JSON matching <<MODEL>>" not in prompt
     assert prompt.index("<<<OUTPUT_JSON") < prompt.index("<<MODEL>>")
-    assert prompt.index("<<<VALIDATOR_JSON") < prompt.index("<<MODEL>>")
+    assert prompt.index("<<<QUESTIONNAIRE_JSON") < prompt.index("<<MODEL>>")
+    assert "<<<VALIDATOR_JSON" not in prompt
+    assert "<<<RUN_METADATA_JSON" not in prompt
+    assert "<<<RUN_STATUS_JSON" not in prompt
     assert "Rendered prompt should stay hidden" not in prompt
     assert "secret_context" not in prompt
+
+
+def test_build_llm_validator_prompt_renders_text_output_as_text() -> None:
+    prompt = build_llm_validator_prompt(
+        experiment_id="demo",
+        version="v001",
+        validation_batch_id="validation-001",
+        validator=_validator(),
+        run=_run_artifact(
+            output_type="text",
+            output_text="Visible text output",
+            output_json=None,
+            raw_output="Visible text output",
+        ),
+        case=_case_artifact(),
+        case_context={},
+    )
+
+    assert "<<<OUTPUT_TEXT" in prompt
+    assert "Visible text output" in prompt
+    assert "<<<OUTPUT_JSON" not in prompt
+    assert '"output_text"' not in prompt
+    assert '"raw_output"' not in prompt
+
+
+def test_build_llm_validator_prompt_renders_validation_error_with_raw_output() -> None:
+    prompt = build_llm_validator_prompt(
+        experiment_id="demo",
+        version="v001",
+        validation_batch_id="validation-001",
+        validator=_validator(),
+        run=_run_artifact(
+            status="validation_error",
+            output_type="pydantic",
+            output_json=None,
+            raw_output='{"answer": 123}',
+            validation_error="answer must be a string",
+        ),
+        case=_case_artifact(),
+        case_context={},
+    )
+
+    assert "<<<INVALID_OUTPUT_TEXT" in prompt
+    assert '{"answer": 123}' in prompt
+    assert "<<<VALIDATION_ERROR" in prompt
+    assert "answer must be a string" in prompt
+    assert "<<<RUN_STATUS_JSON" not in prompt
+    assert "<<<OUTPUT_JSON" not in prompt
 
 
 def test_build_llm_validator_prompt_includes_only_materialized_case_context() -> None:
@@ -159,6 +211,21 @@ def test_build_llm_validator_prompt_includes_only_materialized_case_context() ->
     assert '"stores"' not in prompt
     assert '"bindings"' not in prompt
     assert "Rendered prompt should stay hidden" not in prompt
+
+
+def test_build_skipped_validation_result_records_non_included_result() -> None:
+    result = build_skipped_validation_result(
+        "validation-001",
+        _run_artifact(status="execution_error", execution_error="transport failed"),
+        _validator(),
+        reason="Generator execution_error; validator skipped.",
+    )
+
+    assert result.status == "skipped"
+    assert result.included_in_judge is False
+    assert result.check_results == []
+    assert result.usage == {}
+    assert result.execution_error == "Generator execution_error; validator skipped."
 
 
 def test_validate_llm_check_ids_rejects_missing_check_ids() -> None:
@@ -265,14 +332,45 @@ def test_apply_inclusion_update_rejects_duplicate_ids() -> None:
         raise AssertionError("Expected duplicate check_id to be rejected")
 
 
+def test_apply_inclusion_update_rejects_included_skipped_result() -> None:
+    skipped = _validation_result(
+        status="skipped",
+        included_in_judge=False,
+        check_results=[],
+        execution_error="Generator execution_error; validator skipped.",
+    )
+    update = ValidationInclusionUpdate.model_validate(
+        {
+            "results": [
+                {
+                    "validation_result_id": "validation-001-case-a-repeat-001-quality",
+                    "included_in_judge": True,
+                    "check_results": [],
+                }
+            ]
+        }
+    )
+
+    try:
+        apply_inclusion_update([skipped], update)
+    except ValueError as exc:
+        assert "skipped validation result cannot be included in judge" in str(exc)
+    else:
+        raise AssertionError("Expected skipped result inclusion to be rejected")
+
+
 def main() -> int:
     tests = [
         test_build_llm_validator_prompt_respects_output_only_input_scope,
+        test_build_llm_validator_prompt_renders_text_output_as_text,
+        test_build_llm_validator_prompt_renders_validation_error_with_raw_output,
         test_build_llm_validator_prompt_includes_only_materialized_case_context,
+        test_build_skipped_validation_result_records_non_included_result,
         test_validate_llm_check_ids_rejects_missing_check_ids,
         test_apply_inclusion_update_rejects_unknown_result_id,
         test_apply_inclusion_update_rejects_unknown_check_id,
         test_apply_inclusion_update_rejects_duplicate_ids,
+        test_apply_inclusion_update_rejects_included_skipped_result,
     ]
     for test in tests:
         test()

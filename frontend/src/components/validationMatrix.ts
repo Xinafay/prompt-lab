@@ -19,12 +19,12 @@ export interface ValidationMatrixCell {
   columnKey: string;
   result: ValidationResult | null;
   check: ValidationCheckResult | null;
-  verdict: ValidationVerdict | "error" | "missing";
+  verdict: ValidationVerdict | "error" | "missing" | "skipped";
   result_included_in_judge: boolean;
   check_included_in_judge: boolean;
   included_in_judge: boolean;
   comment: string;
-  status: "ok" | "error" | "missing";
+  status: "ok" | "error" | "missing" | "skipped";
 }
 
 export interface ValidationMatrixCheckRow {
@@ -192,6 +192,20 @@ function buildCell({
   rowKey: string;
   checkId: string;
 }): ValidationMatrixCell {
+  if (result?.status === "skipped") {
+    return {
+      key: cellKey(rowKey, column.key),
+      columnKey: column.key,
+      result,
+      check: null,
+      verdict: "skipped",
+      result_included_in_judge: false,
+      check_included_in_judge: false,
+      included_in_judge: false,
+      comment: result.execution_error ?? "Validation was skipped.",
+      status: "skipped"
+    };
+  }
   const check =
     result?.check_results.find((candidate) => candidate.check_id === checkId) ??
     null;

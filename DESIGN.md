@@ -449,7 +449,9 @@ case/repeat/validator.
 
 Validation results include check verdicts and `included_in_judge` flags. Users
 can exclude a whole validator result or individual checks before the judge prompt
-is built.
+is built. Runs with generator `execution_error` create `skipped` validation
+results with `included_in_judge=false`; no validator LLM call is made because no
+model output exists to validate.
 
 ### Judgment JSON
 

@@ -177,7 +177,7 @@ export type ValidationBatchStatus =
 
 export type ValidationVerdict = "yes" | "no" | "unknown";
 
-export type ValidationResultStatus = "ok" | "error";
+export type ValidationResultStatus = "ok" | "error" | "skipped";
 
 export interface LlmValidatorCheck {
   check_id: string;

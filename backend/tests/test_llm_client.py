@@ -130,6 +130,7 @@ def test_structured_fake_response_wraps_validation_errors() -> None:
     except llm_client.PromptLabStructuredValidationError as exc:
         assert "name" in str(exc)
         assert "Input should be a valid string" in str(exc)
+        assert exc.raw_output == '{"name": 1}'
     else:
         raise AssertionError("Expected PromptLabStructuredValidationError")
 

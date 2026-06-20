@@ -73,7 +73,10 @@ function aggregateStatus(cells: ValidationMatrixCell[]): {
     return { className: "compare-cell-empty", label: "empty" };
   }
   const missingOrError = cells.filter(
-    (cell) => cell.verdict === "missing" || cell.verdict === "error"
+    (cell) =>
+      cell.verdict === "missing" ||
+      cell.verdict === "error" ||
+      cell.verdict === "skipped"
   ).length;
   const failed = cells.filter((cell) => cell.verdict === "no").length;
   const unknown = cells.filter((cell) => cell.verdict === "unknown").length;

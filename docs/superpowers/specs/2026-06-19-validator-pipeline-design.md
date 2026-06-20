@@ -198,11 +198,11 @@ Each validation result records:
 - repeat index
 - validator id
 - validator type
-- status: `ok` or `error` in the MVP
+- status: `ok`, `error`, or `skipped`
 - `included_in_judge`
 - check results
 - usage metadata for LLM validators
-- optional execution error
+- optional execution error or skip reason
 
 Each check result records:
 
@@ -213,7 +213,10 @@ Each check result records:
 - `included_in_judge`
 
 Automatic validators should normally produce only `yes` or `no`. LLM validators
-may produce `unknown`.
+may produce `unknown`. If the generator run has `execution_error`, validators are
+not executed and the result is saved as `skipped` with `included_in_judge=false`.
+If the generator run has `validation_error`, LLM validators receive the invalid
+raw output and validation error as the subject being checked.
 
 `pending` should be reserved for the future `human_questionnaire` type and
 should not be emitted by the MVP implementation.

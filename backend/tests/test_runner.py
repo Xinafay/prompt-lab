@@ -142,7 +142,10 @@ def test_run_structured_case_stores_validation_errors() -> None:
         response_model: type[BaseModel],
         validation_context: dict[str, object] | None,
     ) -> object:
-        raise PromptLabStructuredValidationError("invalid structured output")
+        raise PromptLabStructuredValidationError(
+            "invalid structured output",
+            raw_output='{"name": 123}',
+        )
 
     run = run_structured_case(
         version="v001",
@@ -158,6 +161,7 @@ def test_run_structured_case_stores_validation_errors() -> None:
     assert run.status == "validation_error"
     assert run.validation_error is not None
     assert "invalid structured output" in run.validation_error
+    assert run.raw_output == '{"name": 123}'
 
 
 def test_run_structured_case_stores_execution_errors() -> None:

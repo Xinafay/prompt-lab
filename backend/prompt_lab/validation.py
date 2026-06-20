@@ -19,6 +19,41 @@ def enabled_validators(validators: list[ValidatorDefinition]) -> list[ValidatorD
     return [validator for validator in validators if validator.enabled]
 
 
+def _questionnaire_payload(validator: LlmQuestionnaireValidatorDefinition) -> dict[str, Any]:
+    return {
+        "validator_id": validator.validator_id,
+        "title": validator.title,
+        "description": validator.description,
+        "checks": [
+            {
+                "check_id": check.check_id,
+                "title": check.title,
+                "question": check.question,
+                "description": check.description,
+            }
+            for check in validator.checks
+        ],
+    }
+
+
+def _validator_output_section(run: RunArtifact) -> str:
+    if run.status == "execution_error":
+        raise ValueError("LLM validator prompts cannot be built for execution_error runs")
+    if run.status == "validation_error":
+        return (
+            fenced_section("INVALID_OUTPUT_TEXT", run.raw_output or "")
+            + "\n\n"
+            + fenced_section("VALIDATION_ERROR", run.validation_error or "")
+        )
+    if run.output_type == "text":
+        return fenced_section("OUTPUT_TEXT", run.output_text or run.raw_output or "")
+    return fenced_section(
+        "OUTPUT_JSON",
+        json_block(run.output_json),
+        fence="json",
+    )
+
+
 def build_llm_validator_prompt(
     *,
     experiment_id: str,
@@ -29,17 +64,6 @@ def build_llm_validator_prompt(
     case: CaseArtifact,
     case_context: dict[str, Any],
 ) -> str:
-    output_payload = {
-        "raw_output": run.raw_output,
-        "output_type": run.output_type,
-        "output_text": run.output_text,
-        "output_json": run.output_json,
-    }
-    status_payload = {
-        "status": run.status,
-        "validation_error": run.validation_error,
-        "execution_error": run.execution_error,
-    }
     rendered_prompt_section = ""
     if validator.input_scope in {"output_and_prompt", "output_prompt_and_case"}:
         rendered_prompt_section = fenced_section(
@@ -57,35 +81,11 @@ def build_llm_validator_prompt(
         "validator.md.jinja",
         {
             "validator_section": fenced_section(
-                "VALIDATOR_JSON",
-                json_block(validator.model_dump(mode="json")),
+                "QUESTIONNAIRE_JSON",
+                json_block(_questionnaire_payload(validator)),
                 fence="json",
             ),
-            "run_metadata_section": fenced_section(
-                "RUN_METADATA_JSON",
-                json_block(
-                    {
-                        "experiment_id": experiment_id,
-                        "version": version,
-                        "validation_batch_id": validation_batch_id,
-                        "run_batch_id": run.run_batch_id,
-                        "run_id": run.run_id,
-                        "case_id": run.case_id,
-                        "repeat_index": run.repeat_index,
-                    }
-                ),
-                fence="json",
-            ),
-            "run_status_section": fenced_section(
-                "RUN_STATUS_JSON",
-                json_block(status_payload),
-                fence="json",
-            ),
-            "output_section": fenced_section(
-                "OUTPUT_JSON",
-                json_block(output_payload),
-                fence="json",
-            ),
+            "output_section": _validator_output_section(run),
             "rendered_prompt_section": rendered_prompt_section,
             "case_context_section": case_context_section,
         },
@@ -163,6 +163,36 @@ def build_llm_validation_result(
     )
 
 
+def build_skipped_validation_result(
+    validation_batch_id: str,
+    run: RunArtifact,
+    validator: ValidatorDefinition,
+    *,
+    reason: str,
+) -> ValidationResultArtifact:
+    return ValidationResultArtifact.model_validate(
+        {
+            "schema_version": "prompt_lab.validation_result/v1",
+            "validation_result_id": (
+                f"{validation_batch_id}-{run.case_id}-"
+                f"repeat-{run.repeat_index:03d}-{validator.validator_id}"
+            ),
+            "validation_batch_id": validation_batch_id,
+            "run_batch_id": run.run_batch_id,
+            "run_id": run.run_id,
+            "case_id": run.case_id,
+            "repeat_index": run.repeat_index,
+            "validator_id": validator.validator_id,
+            "validator_type": validator.type,
+            "status": "skipped",
+            "included_in_judge": False,
+            "check_results": [],
+            "usage": {},
+            "execution_error": reason,
+        }
+    )
+
+
 def apply_inclusion_update(
     results: list[ValidationResultArtifact],
     update: ValidationInclusionUpdate,
@@ -193,6 +223,11 @@ def apply_inclusion_update(
 
     for item in update.results:
         result = results_by_id[item.validation_result_id]
+        if result.status == "skipped" and item.included_in_judge:
+            raise ValueError(
+                "skipped validation result cannot be included in judge: "
+                f"{item.validation_result_id}"
+            )
         expected_check_ids = {check.check_id for check in result.check_results}
         seen_check_ids: set[str] = set()
         duplicate_check_ids: list[str] = []

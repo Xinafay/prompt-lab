@@ -213,6 +213,28 @@ def write_preview_run_batch(version_dir: Path) -> None:
             )
 
 
+def write_execution_error_run_batch(version_dir: Path) -> None:
+    batch_id = "run-execution-error-001"
+    for case_id in ["case-a", "case-b"]:
+        write_json(
+            version_dir / "runs" / batch_id / case_id / "repeat-001.json",
+            valid_run_payload(
+                run_id=f"{batch_id}-{case_id}-repeat-001",
+                run_batch_id=batch_id,
+                version="v001",
+                case_id=case_id,
+                repeat_index=1,
+                rendered_prompt=f"Rendered {case_id} repeat 1",
+                status="execution_error",
+                output_type="text",
+                output_text=None,
+                output_json=None,
+                raw_output=None,
+                execution_error="transport failed",
+            ),
+        )
+
+
 def write_preview_validators(root: Path) -> None:
     validators_dir = root / "experiments" / "demo" / "validators"
     validators_dir.mkdir(parents=True)
@@ -1061,6 +1083,45 @@ def test_api_dry_run_validation_for_pydantic_experiment() -> None:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
 
 
+def test_api_validation_skips_llm_validator_for_execution_error_runs() -> None:
+    def fail_live_generate_structured(
+        model: str,
+        prompt: str,
+        response_model: Any,
+        validation_context: dict[str, Any] | None,
+    ) -> object:
+        raise AssertionError("execution_error runs must not call validator LLM")
+
+    original_generate_structured = llm_client.generate_structured
+    llm_client.generate_structured = fail_live_generate_structured  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            version_dir = write_runtime_preview_experiment(root, repeat_count=1)
+            write_execution_error_run_batch(version_dir)
+            write_preview_validators(root)
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+
+            response = TestClient(app, raise_server_exceptions=False).post(
+                "/api/experiments/demo/versions/v001/validations",
+                json={"dry_run": False},
+            )
+
+            assert response.status_code == 200
+            body = response.json()
+            assert {result["status"] for result in body["results"]} == {"skipped"}
+            assert all(
+                result["included_in_judge"] is False for result in body["results"]
+            )
+            assert all(result["check_results"] == [] for result in body["results"])
+            assert all(
+                "transport failed" in result["execution_error"]
+                for result in body["results"]
+            )
+    finally:
+        llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
+
+
 def test_api_rejects_unsafe_validator_id_before_writing_artifacts() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -1377,6 +1438,7 @@ def main() -> int:
         test_api_previews_validation_prompts_with_first_repeat_when_too_large,
         test_api_dry_run_pydantic_version_avoids_live_llm,
         test_api_dry_run_validation_for_pydantic_experiment,
+        test_api_validation_skips_llm_validator_for_execution_error_runs,
         test_api_rejects_unsafe_validator_id_before_writing_artifacts,
         test_api_validation_inclusion_rejects_unknown_ids,
         test_api_latest_validation_ignores_non_completed_batches,

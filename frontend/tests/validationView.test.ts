@@ -123,6 +123,31 @@ test("buildValidationMatrix groups checks by validator rows and case-repeat colu
   );
 });
 
+test("buildValidationMatrix shows skipped validation results as non-includable cells", () => {
+  const matrix = buildValidationMatrix({
+    ...validationState(),
+    results: [
+      {
+        ...validationState().results[0],
+        status: "skipped",
+        included_in_judge: false,
+        check_results: [],
+        execution_error: "Generator execution_error; validator skipped."
+      }
+    ]
+  });
+
+  const cell = matrix.rows[0].cells[0];
+
+  assert.equal(cell.verdict, "skipped");
+  assert.equal(cell.status, "skipped");
+  assert.equal(cell.result_included_in_judge, false);
+  assert.equal(cell.check_included_in_judge, false);
+  assert.equal(cell.included_in_judge, false);
+  assert.equal(cell.check, null);
+  assert.equal(cell.comment, "Generator execution_error; validator skipped.");
+});
+
 test("setValidationInclusion toggles a whole check row", () => {
   const updated = setValidationInclusion(
     {

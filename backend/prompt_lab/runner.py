@@ -92,7 +92,7 @@ def run_structured_case(
             context,
         )
         output = getattr(result, "output")
-    except PromptLabStructuredValidationError:
+    except PromptLabStructuredValidationError as exc:
         return RunArtifact(
             schema_version="prompt_lab.run/v1",
             run_id=run_id,
@@ -104,6 +104,7 @@ def run_structured_case(
             status="validation_error",
             rendered_prompt=rendered_prompt,
             output_type="pydantic",
+            raw_output=exc.raw_output,
             validation_error=traceback.format_exc(),
         )
     except Exception:

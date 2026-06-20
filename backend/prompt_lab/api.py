@@ -53,6 +53,7 @@ from prompt_lab.errors import NotFoundError
 from prompt_lab.validation import (
     apply_inclusion_update,
     build_llm_validation_result,
+    build_skipped_validation_result,
     build_llm_validator_prompt,
     enabled_validators,
 )
@@ -1609,10 +1610,23 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             if isinstance(validator, LlmQuestionnaireValidatorDefinition)
         ]
         warnings: list[str] = []
-        preview_run_artifacts = sorted(
+        all_preview_run_artifacts = sorted(
             run_artifacts,
             key=lambda item: (item.case_id, item.repeat_index),
         )
+        skipped_prompt_count = sum(
+            1 for run in all_preview_run_artifacts if run.status == "execution_error"
+        )
+        preview_run_artifacts = [
+            run for run in all_preview_run_artifacts if run.status != "execution_error"
+        ]
+        if skipped_prompt_count > 0:
+            warnings.append(
+                (
+                    f"Skipping {skipped_prompt_count} validation prompt previews "
+                    "for execution_error runs because no model output exists."
+                )
+            )
         total_prompt_count = len(preview_run_artifacts) * len(llm_validators)
         if total_prompt_count > PROMPT_PREVIEW_MAX_PROMPTS:
             first_repeat_by_case: dict[str, RunArtifact] = {}
@@ -1776,7 +1790,17 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                             f"{run.repeat_index} with {validator.validator_id}"
                         ),
                     )
-                    if isinstance(validator, LlmQuestionnaireValidatorDefinition):
+                    if run.status == "execution_error":
+                        result = build_skipped_validation_result(
+                            job_id,
+                            run,
+                            validator,
+                            reason=(
+                                "Generator execution_error; validator skipped. "
+                                f"{run.execution_error or ''}"
+                            ).strip(),
+                        )
+                    elif isinstance(validator, LlmQuestionnaireValidatorDefinition):
                         case_context = materialize_case_context(case)
                         validator_prompt = build_llm_validator_prompt(
                             experiment_id=experiment_id,

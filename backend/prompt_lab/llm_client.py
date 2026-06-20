@@ -20,6 +20,17 @@ from shared.llm.structured_lite import structured_lite
 class PromptLabStructuredValidationError(Exception):
     """Raised when structured generation exhausts validation repair attempts."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        raw_output: str | None = None,
+        conversation: list[dict[str, Any]] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.raw_output = raw_output
+        self.conversation = conversation or []
+
 
 class PromptLabLlmCancelled(Exception):
     """Raised when a Prompt Lab workflow cancels an active LLM request."""
@@ -47,6 +58,16 @@ def _raw_response(result: Any) -> Any:
     if hasattr(result, "conversation"):
         return result.conversation
     raise AttributeError("LLM result has neither non-None response nor conversation.")
+
+
+def _last_assistant_content(conversation: list[dict[str, Any]]) -> str | None:
+    for message in reversed(conversation):
+        if message.get("role") != "assistant":
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+    return None
 
 
 def cancellation_callbacks(is_cancelled: Callable[[], bool]) -> StreamCallbacks:
@@ -105,7 +126,11 @@ def generate_structured(
     except LlmRequestCancelled as exc:
         raise PromptLabLlmCancelled(str(exc)) from exc
     except StructuredLiteExhaustedError as exc:
-        raise PromptLabStructuredValidationError(str(exc)) from exc
+        raise PromptLabStructuredValidationError(
+            str(exc),
+            raw_output=_last_assistant_content(exc.conversation),
+            conversation=exc.conversation,
+        ) from exc
     return GeneratedStructured(
         output=result.output,
         usage=result.usage or {},
@@ -161,7 +186,11 @@ def generate_structured_from_fake_response(
             fix_retry=0,
         )
     except StructuredLiteExhaustedError as exc:
-        raise PromptLabStructuredValidationError(str(exc)) from exc
+        raise PromptLabStructuredValidationError(
+            str(exc),
+            raw_output=_last_assistant_content(exc.conversation),
+            conversation=exc.conversation,
+        ) from exc
 
     return GeneratedStructured(
         output=output,

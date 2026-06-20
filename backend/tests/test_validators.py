@@ -159,6 +159,57 @@ def test_validation_batch_and_result_artifacts_accept_expected_fields() -> None:
     assert result.check_results[0].metrics == {"word_count": 42}
 
 
+def test_validation_result_artifact_accepts_skipped_status() -> None:
+    result = ValidationResultArtifact.model_validate(
+        {
+            "schema_version": "prompt_lab.validation_result/v1",
+            "validation_result_id": "result-skipped",
+            "validation_batch_id": "validation-001",
+            "run_batch_id": "run-001",
+            "run_id": "run-001-case-a-1",
+            "case_id": "case-a",
+            "repeat_index": 1,
+            "validator_id": "clarity",
+            "validator_type": "llm_questionnaire",
+            "status": "skipped",
+            "included_in_judge": False,
+            "check_results": [],
+            "usage": {},
+            "execution_error": "Generator execution_error; validator skipped.",
+        }
+    )
+
+    assert result.status == "skipped"
+    assert result.included_in_judge is False
+    assert result.check_results == []
+
+
+def test_validation_result_artifact_rejects_included_skipped_status() -> None:
+    try:
+        ValidationResultArtifact.model_validate(
+            {
+                "schema_version": "prompt_lab.validation_result/v1",
+                "validation_result_id": "result-skipped",
+                "validation_batch_id": "validation-001",
+                "run_batch_id": "run-001",
+                "run_id": "run-001-case-a-1",
+                "case_id": "case-a",
+                "repeat_index": 1,
+                "validator_id": "clarity",
+                "validator_type": "llm_questionnaire",
+                "status": "skipped",
+                "included_in_judge": True,
+                "check_results": [],
+                "usage": {},
+                "execution_error": "Generator execution_error; validator skipped.",
+            }
+        )
+    except ValidationError as exc:
+        assert "skipped status cannot be included in judge" in str(exc)
+    else:
+        raise AssertionError("Expected included skipped result to be rejected")
+
+
 def test_validation_state_rejects_malformed_validator_definitions() -> None:
     batch = {
         "schema_version": "prompt_lab.validation_batch/v1",
@@ -202,6 +253,8 @@ def main() -> int:
         test_automatic_validator_definition_accepts_word_count_rule,
         test_count_comparison_rejects_inverted_between_range,
         test_validation_batch_and_result_artifacts_accept_expected_fields,
+        test_validation_result_artifact_accepts_skipped_status,
+        test_validation_result_artifact_rejects_included_skipped_status,
         test_validation_state_rejects_malformed_validator_definitions,
     ]
     for test in tests:
