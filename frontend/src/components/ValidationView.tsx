@@ -475,6 +475,7 @@ export function ValidationView({
                                 }}
                                 role="button"
                                 tabIndex={0}
+                                title="Click to view run output and validation details"
                               >
                                 <MatrixItem
                                   badge={
@@ -511,7 +512,6 @@ export function ValidationView({
                                     />
                                   }
                                   description={snippet(validationComment(cell))}
-                                  meta="Click for run output"
                                 />
                               </td>
                             );
@@ -522,6 +522,9 @@ export function ValidationView({
                   })}
                 </tbody>
               </table>
+              <p className="validation-matrix-note">
+                Click a cell to view run output and validation details.
+              </p>
             </div>
           )}
         </div>
