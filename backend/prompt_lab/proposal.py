@@ -132,10 +132,5 @@ def build_proposal_prompt(
                 json_block(rejected_findings),
                 fence="json",
             ),
-            "proposal_schema_section": fenced_section(
-                "PROPOSAL_SCHEMA_JSON",
-                json_block(ProposalDraft.model_json_schema()),
-                fence="json",
-            ),
         },
     )

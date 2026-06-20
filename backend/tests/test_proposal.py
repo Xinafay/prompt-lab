@@ -254,6 +254,7 @@ def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
     assert "Keep the answer terse" in prompt
     assert "VALIDATION_CONTEXT_JSON" in prompt
     assert "validation-001" in prompt
+    assert "<<<PROPOSAL_SCHEMA_JSON" not in prompt
     assert prompt.index("<<<VALIDATION_CONTEXT_JSON") < prompt.index("<<MODEL>>")
     assert prompt.index("<<<REJECTED_FINDINGS_AS_CONSTRAINTS_JSON") < prompt.index("<<MODEL>>")
     assert "RUBRIC_SNAPSHOT_MD" not in prompt

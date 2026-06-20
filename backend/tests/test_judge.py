@@ -492,7 +492,7 @@ def test_build_judge_prompt_uses_validation_evidence_without_raw_outputs_or_rubr
     assert "<<<OUTPUT_DECLARATION" in prompt
     assert "<<<VALIDATION_METADATA_JSON" in prompt
     assert "<<<VALIDATION_EVIDENCE_JSON" in prompt
-    assert "<<<JUDGMENT_SCHEMA_JSON" in prompt
+    assert "<<<JUDGMENT_SCHEMA_JSON" not in prompt
     assert prompt.index("<<<VALIDATION_EVIDENCE_JSON") < prompt.index("<<MODEL>>")
     assert prompt.index("<<<RUN_ERRORS_JSON") < prompt.index("<<MODEL>>")
     assert "case-a" in prompt

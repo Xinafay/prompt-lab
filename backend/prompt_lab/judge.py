@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from prompt_lab.models.judgments import JudgmentArtifact
 from prompt_lab.prompt_sections import fenced_section, json_block
 from prompt_lab.prompt_templates import render_system_prompt
 
@@ -18,7 +17,6 @@ def build_judge_prompt(
     validation_evidence: list[dict[str, object]],
     run_errors: list[dict[str, object]],
 ) -> str:
-    schema = json_block(JudgmentArtifact.model_json_schema())
     model_source_section = (
         fenced_section("CURRENT_MODEL_PY", model_source, fence="python")
         if model_source is not None
@@ -63,9 +61,6 @@ def build_judge_prompt(
             ),
             "run_errors_section": fenced_section(
                 "RUN_ERRORS_JSON", json_block(run_errors), fence="json"
-            ),
-            "judgment_schema_section": fenced_section(
-                "JUDGMENT_SCHEMA_JSON", schema, fence="json"
             ),
         },
     )
