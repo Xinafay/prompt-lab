@@ -11,7 +11,7 @@ Use this skill when an experiment uses `output.type = "pydantic"` or when a text
 
 1. Treat the current prompt/rubric as the semantic source of truth.
 2. Define or update `model.py` with explicit Pydantic fields and descriptions.
-3. Keep the prompt's output instruction minimal and include `<<MODEL>>`.
+3. Keep the prompt's output instruction minimal and include exactly one literal `<<MODEL>>`.
 4. Set `experiment.json`:
 
 ```json
@@ -31,6 +31,9 @@ Use this skill when an experiment uses `output.type = "pydantic"` or when a text
 
 ## Contract Rules
 
+- `<<MODEL>>` is the only place where the response model schema should enter the prompt. Do not also render `model_json_schema()` or a `*_SCHEMA_JSON` section for the same response model.
+- Keep `<<MODEL>>` visible in the prompt template itself, not hidden in a Jinja variable supplied by Python code.
+- Put the `<<MODEL>>` block near the end of the prompt, after contextual/evidence sections.
 - Field order can affect LLM behavior; put fields in the order you want the model to reason about them.
 - Field descriptions are prompt text. Keep them concrete and aligned with `prompt.md`.
 - Validators should enforce hard constraints, not subjective quality preferences.
