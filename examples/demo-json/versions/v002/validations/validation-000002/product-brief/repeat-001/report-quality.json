@@ -14,21 +14,21 @@
     {
       "check_id": "grounded-summary",
       "verdict": "yes",
-      "comment": "The summary uses the product, audience, lighting, and home studio context from the brief.",
+      "comment": "The summary uses details from the brief.",
       "included_in_judge": true,
       "metrics": {}
     },
     {
       "check_id": "actionable-risks",
       "verdict": "yes",
-      "comment": "The risks identify missing price and power details, both of which can guide prompt or case changes.",
+      "comment": "The risks are concrete and guide prompt or case changes.",
       "included_in_judge": true,
       "metrics": {}
     }
   ],
   "usage": {
-    "prompt_tokens": 230,
-    "completion_tokens": 62,
-    "total_tokens": 292
+    "prompt_tokens": 181,
+    "completion_tokens": 41,
+    "total_tokens": 222
   }
 }

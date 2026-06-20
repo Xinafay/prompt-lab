@@ -1,0 +1,31 @@
+{
+  "schema_version": "prompt_lab.case/v2",
+  "id": "service-brief",
+  "title": "Service brief",
+  "stores": {
+    "case": {
+      "kind": "flat_file_tree",
+      "values": {
+        "brief": {
+          "__carmilla_flat_file_node__": "file",
+          "value": {
+            "product": "Nimbus Backup",
+            "audience": "small finance teams",
+            "requirements": [
+              "summarize reliability benefit",
+              "include three tags",
+              "list adoption risks"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "bindings": {
+    "brief": {
+      "kind": "store_scope",
+      "store": "case",
+      "path": "brief"
+    }
+  }
+}

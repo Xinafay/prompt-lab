@@ -1,7 +1,7 @@
 {
   "schema_version": "prompt_lab.validation_result/v1",
-  "validation_batch_id": "validation-000002",
   "validation_result_id": "validation-000002-product-brief-repeat-001-report-shape",
+  "validation_batch_id": "validation-000002",
   "run_batch_id": "run-000002",
   "run_id": "run-000002-product-brief-repeat-001",
   "case_id": "product-brief",

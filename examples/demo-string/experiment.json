@@ -17,7 +17,7 @@
     "judge_model": "openai/demo-judge"
   },
   "run_defaults": {
-    "repeat_count": 1,
+    "repeat_count": 2,
     "llm_cache": "disabled",
     "case_order": "case-major"
   }

@@ -23,7 +23,7 @@
     {
       "check_id": "sentence-count",
       "verdict": "no",
-      "comment": "The output contains 1 sentence; expected at least 2.",
+      "comment": "The output contains 1 sentences.",
       "included_in_judge": true,
       "metrics": {
         "count": 1

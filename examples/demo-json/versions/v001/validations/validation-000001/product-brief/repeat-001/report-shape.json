@@ -23,7 +23,7 @@
     {
       "check_id": "three-tags",
       "verdict": "no",
-      "comment": "JSON path $.tags contains 2 items; expected exactly 3.",
+      "comment": "JSON path $.tags contains 2 items.",
       "included_in_judge": true,
       "metrics": {
         "path": "$.tags",
@@ -33,7 +33,7 @@
     {
       "check_id": "risk-count",
       "verdict": "no",
-      "comment": "JSON path $.risks contains 0 items; expected between 1 and 3.",
+      "comment": "JSON path $.risks contains 0 items.",
       "included_in_judge": true,
       "metrics": {
         "path": "$.risks",

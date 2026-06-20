@@ -14,7 +14,7 @@
     {
       "check_id": "grounded-summary",
       "verdict": "yes",
-      "comment": "The summary names the lamp, audience, and ergonomic benefit from the brief.",
+      "comment": "The summary uses details from the brief.",
       "included_in_judge": true,
       "metrics": {}
     },
@@ -27,8 +27,8 @@
     }
   ],
   "usage": {
-    "prompt_tokens": 210,
-    "completion_tokens": 56,
-    "total_tokens": 266
+    "prompt_tokens": 181,
+    "completion_tokens": 41,
+    "total_tokens": 222
   }
 }

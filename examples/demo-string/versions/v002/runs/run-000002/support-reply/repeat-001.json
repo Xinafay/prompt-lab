@@ -7,13 +7,13 @@
   "repeat_index": 1,
   "generator_model": "local/demo-generator",
   "status": "ok",
-  "rendered_prompt": "Reply in two or three calm sentences and include where the export button moved.",
+  "rendered_prompt": "Reply to support-reply repeat 1.",
   "raw_output": "The export button is now in the dashboard header under the Download icon. Open the project, choose Download, then select Export CSV. If it is still missing, refresh once and tell us which browser you are using.",
   "output_type": "text",
-  "output_text": "The export button is now in the dashboard header under the Download icon. Open the project, choose Download, then select Export CSV. If it is still missing, refresh once and tell us which browser you are using.",
   "usage": {
-    "prompt_tokens": 70,
-    "completion_tokens": 39,
-    "total_tokens": 109
-  }
+    "prompt_tokens": 101,
+    "completion_tokens": 31,
+    "total_tokens": 132
+  },
+  "output_text": "The export button is now in the dashboard header under the Download icon. Open the project, choose Download, then select Export CSV. If it is still missing, refresh once and tell us which browser you are using."
 }

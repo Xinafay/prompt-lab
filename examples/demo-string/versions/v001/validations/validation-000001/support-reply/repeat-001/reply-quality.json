@@ -14,21 +14,21 @@
     {
       "check_id": "answers-question",
       "verdict": "no",
-      "comment": "The reply says to check the dashboard but does not identify the export button location.",
+      "comment": "The reply is too vague and does not give a concrete next step.",
       "included_in_judge": true,
       "metrics": {}
     },
     {
       "check_id": "calm-tone",
       "verdict": "yes",
-      "comment": "The wording is neutral, but too terse.",
+      "comment": "The reply is calm and customer friendly.",
       "included_in_judge": true,
       "metrics": {}
     }
   ],
   "usage": {
-    "prompt_tokens": 180,
-    "completion_tokens": 44,
-    "total_tokens": 224
+    "prompt_tokens": 181,
+    "completion_tokens": 41,
+    "total_tokens": 222
   }
 }

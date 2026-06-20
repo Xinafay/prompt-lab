@@ -14,21 +14,21 @@
     {
       "check_id": "answers-question",
       "verdict": "yes",
-      "comment": "The reply names the dashboard header, Download icon, and Export CSV action.",
+      "comment": "The reply gives a concrete location or next step for the customer.",
       "included_in_judge": true,
       "metrics": {}
     },
     {
       "check_id": "calm-tone",
       "verdict": "yes",
-      "comment": "The reply is calm, specific, and gives a fallback question.",
+      "comment": "The reply is calm and customer friendly.",
       "included_in_judge": true,
       "metrics": {}
     }
   ],
   "usage": {
-    "prompt_tokens": 190,
-    "completion_tokens": 48,
-    "total_tokens": 238
+    "prompt_tokens": 181,
+    "completion_tokens": 41,
+    "total_tokens": 222
   }
 }

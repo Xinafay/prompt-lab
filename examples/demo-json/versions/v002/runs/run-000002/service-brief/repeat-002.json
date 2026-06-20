@@ -1,0 +1,31 @@
+{
+  "schema_version": "prompt_lab.run/v1",
+  "run_id": "run-000002-service-brief-repeat-002",
+  "run_batch_id": "run-000002",
+  "version": "v002",
+  "case_id": "service-brief",
+  "repeat_index": 2,
+  "generator_model": "local/demo-generator",
+  "status": "ok",
+  "rendered_prompt": "Create launch-readiness report for service-brief repeat 2.",
+  "raw_output": "{\"summary\":\"Nimbus Backup positions recovery reliability for small finance teams.\",\"tags\":[\"backup\",\"risk\",\"finance\"],\"risks\":[\"No retention policy is provided.\",\"No audit workflow is described.\"],\"launch_ready\":false}",
+  "output_type": "pydantic",
+  "usage": {
+    "prompt_tokens": 102,
+    "completion_tokens": 32,
+    "total_tokens": 134
+  },
+  "output_json": {
+    "summary": "Nimbus Backup positions recovery reliability for small finance teams.",
+    "tags": [
+      "backup",
+      "risk",
+      "finance"
+    ],
+    "risks": [
+      "No retention policy is provided.",
+      "No audit workflow is described."
+    ],
+    "launch_ready": false
+  }
+}

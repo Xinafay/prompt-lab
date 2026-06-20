@@ -1,0 +1,19 @@
+{
+  "schema_version": "prompt_lab.run/v1",
+  "run_id": "run-000002-billing-reply-repeat-002",
+  "run_batch_id": "run-000002",
+  "version": "v002",
+  "case_id": "billing-reply",
+  "repeat_index": 2,
+  "generator_model": "local/demo-generator",
+  "status": "ok",
+  "rendered_prompt": "Reply to billing-reply repeat 2.",
+  "raw_output": "I understand why a duplicate charge is frustrating. Send the invoice numbers or the last four digits and timestamps, and we will verify the duplicate before refunding or correcting the workspace plan.",
+  "output_type": "text",
+  "usage": {
+    "prompt_tokens": 102,
+    "completion_tokens": 32,
+    "total_tokens": 134
+  },
+  "output_text": "I understand why a duplicate charge is frustrating. Send the invoice numbers or the last four digits and timestamps, and we will verify the duplicate before refunding or correcting the workspace plan."
+}

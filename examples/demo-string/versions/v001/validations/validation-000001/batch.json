@@ -6,8 +6,8 @@
   "status": "completed",
   "started_at": "2026-06-19T11:00:00Z",
   "finished_at": "2026-06-19T11:00:05Z",
-  "total_results": 2,
-  "completed_results": 2,
+  "total_results": 8,
+  "completed_results": 8,
   "validator_model": "openai/demo-validator",
   "validator_ids": [
     "reply-quality",

@@ -228,12 +228,25 @@ def test_repository_demo_examples_seed_for_ui_testing() -> None:
         assert "demo-json" in experiment_ids
 
         for experiment_id in ("demo-string", "demo-json"):
+            cases = client.get(f"/api/experiments/{experiment_id}/versions/v002")
+            assert cases.status_code == 200
+            case_ids = [case["id"] for case in cases.json()["cases"]]
+            assert len(case_ids) >= 2
+
             runs = client.get(
                 f"/api/experiments/{experiment_id}/versions/v002/runs"
             )
             assert runs.status_code == 200
             assert runs.json()["run_batch_id"] == "run-000002"
-            assert len(runs.json()["runs"]) == 1
+            runs_by_case = {
+                case_id: [
+                    run
+                    for run in runs.json()["runs"]
+                    if run["case_id"] == case_id
+                ]
+                for case_id in case_ids
+            }
+            assert all(len(case_runs) >= 2 for case_runs in runs_by_case.values())
 
             validation = client.get(
                 f"/api/experiments/{experiment_id}/versions/v002/validations/latest"
@@ -243,7 +256,7 @@ def test_repository_demo_examples_seed_for_ui_testing() -> None:
                 "validation-000002"
             )
             assert len(validation.json()["validators"]) == 2
-            assert len(validation.json()["results"]) == 2
+            assert len(validation.json()["results"]) >= len(case_ids) * 2 * 2
 
             review = client.get(
                 f"/api/experiments/{experiment_id}/versions/v002/reviews/latest"

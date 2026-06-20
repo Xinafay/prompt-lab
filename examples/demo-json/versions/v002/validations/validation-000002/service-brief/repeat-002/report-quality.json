@@ -1,0 +1,34 @@
+{
+  "schema_version": "prompt_lab.validation_result/v1",
+  "validation_result_id": "validation-000002-service-brief-repeat-002-report-quality",
+  "validation_batch_id": "validation-000002",
+  "run_batch_id": "run-000002",
+  "run_id": "run-000002-service-brief-repeat-002",
+  "case_id": "service-brief",
+  "repeat_index": 2,
+  "validator_id": "report-quality",
+  "validator_type": "llm_questionnaire",
+  "status": "ok",
+  "included_in_judge": true,
+  "check_results": [
+    {
+      "check_id": "grounded-summary",
+      "verdict": "yes",
+      "comment": "The summary uses details from the brief.",
+      "included_in_judge": true,
+      "metrics": {}
+    },
+    {
+      "check_id": "actionable-risks",
+      "verdict": "yes",
+      "comment": "The risks are concrete and guide prompt or case changes.",
+      "included_in_judge": true,
+      "metrics": {}
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 182,
+    "completion_tokens": 42,
+    "total_tokens": 224
+  }
+}

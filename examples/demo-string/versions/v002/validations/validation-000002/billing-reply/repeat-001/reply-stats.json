@@ -1,0 +1,34 @@
+{
+  "schema_version": "prompt_lab.validation_result/v1",
+  "validation_result_id": "validation-000002-billing-reply-repeat-001-reply-stats",
+  "validation_batch_id": "validation-000002",
+  "run_batch_id": "run-000002",
+  "run_id": "run-000002-billing-reply-repeat-001",
+  "case_id": "billing-reply",
+  "repeat_index": 1,
+  "validator_id": "reply-stats",
+  "validator_type": "automatic",
+  "status": "ok",
+  "included_in_judge": true,
+  "check_results": [
+    {
+      "check_id": "word-count",
+      "verdict": "yes",
+      "comment": "The output contains 36 words.",
+      "included_in_judge": true,
+      "metrics": {
+        "count": 36
+      }
+    },
+    {
+      "check_id": "sentence-count",
+      "verdict": "yes",
+      "comment": "The output contains 3 sentences.",
+      "included_in_judge": true,
+      "metrics": {
+        "count": 3
+      }
+    }
+  ],
+  "usage": {}
+}
