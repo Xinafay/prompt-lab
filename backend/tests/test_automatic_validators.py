@@ -63,8 +63,26 @@ def test_word_count_rule_passes_lte_limit() -> None:
     assert result.status == "ok"
     assert result.included_in_judge is True
     assert result.execution_error is None
-    assert result.check_results[0].verdict == "yes"
+    assert result.check_results[0].grade == 5
     assert result.check_results[0].metrics == {"value": 3}
+
+
+def test_word_count_rule_failure_maps_to_min_grade() -> None:
+    result = execute_automatic_validator(
+        "validation-001",
+        _run_artifact(output_text="one two three four", raw_output="one two three four"),
+        _automatic_validator(
+            {
+                "kind": "word_count",
+                "source": "output_text",
+                "comparison": {"op": "lte", "value": 3},
+            }
+        ),
+    )
+
+    assert result.status == "ok"
+    assert result.check_results[0].grade == 1
+    assert result.check_results[0].metrics == {"value": 4}
 
 
 def test_json_path_count_counts_list_items_at_path() -> None:
@@ -86,7 +104,7 @@ def test_json_path_count_counts_list_items_at_path() -> None:
     )
 
     assert result.status == "ok"
-    assert result.check_results[0].verdict == "yes"
+    assert result.check_results[0].grade == 5
     assert result.check_results[0].metrics == {"value": 2}
 
 
@@ -119,6 +137,7 @@ def test_unavailable_output_json_source_records_error_result() -> None:
 def main() -> int:
     tests = [
         test_word_count_rule_passes_lte_limit,
+        test_word_count_rule_failure_maps_to_min_grade,
         test_json_path_count_counts_list_items_at_path,
         test_unavailable_output_json_source_records_error_result,
     ]

@@ -84,14 +84,14 @@ def _execute_check(
 ) -> ValidationCheckResult:
     value = _measure(run, rule)
     if rule.kind == "json_path_exists":
-        verdict = "yes" if value == 1 else "no"
+        passed = value == 1
     else:
         if rule.comparison is None:
             raise ValueError(f"{rule.kind} requires comparison")
-        verdict = "yes" if _compare(value, rule.comparison) else "no"
+        passed = _compare(value, rule.comparison)
     return ValidationCheckResult(
         check_id=check_id,
-        verdict=verdict,
+        grade=5 if passed else 1,
         included_in_judge=True,
         metrics={"value": value},
     )
