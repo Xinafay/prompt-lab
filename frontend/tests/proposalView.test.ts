@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test, { after, before } from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -119,4 +120,15 @@ test("pydantic proposal diff shows unavailable state when current model is missi
   assert.match(html, /Current model source unavailable; diff cannot be shown\./);
   assert.doesNotMatch(html, /Model diff/);
   assert.doesNotMatch(html, /class ProposedAnswer\(BaseModel\)/);
+});
+
+test("production proposal create-version flow switches to new overview version", () => {
+  const source = readFileSync(
+    new URL("../src/App.tsx", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(source, /active_version: response\.version/);
+  assert.match(source, /Created \$\{response\.version\} and switched to it\./);
+  assert.match(source, /activateTab\("overview"\)/);
 });

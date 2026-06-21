@@ -116,6 +116,24 @@ export interface VersionOverview {
   validators: ValidatorDefinition[];
 }
 
+export type VersionSourceSaveMode = "create_next" | "overwrite_current";
+
+export interface VersionSourceDraft {
+  prompt: string;
+  model_py?: string | null;
+}
+
+export interface VersionSourceUpdateRequest extends VersionSourceDraft {
+  mode: VersionSourceSaveMode;
+}
+
+export interface VersionSourceUpdateResponse {
+  version: string;
+  source_version: string;
+  mode: VersionSourceSaveMode;
+  version_dir: string;
+}
+
 export interface VersionSummary {
   version: string;
   is_active: boolean;

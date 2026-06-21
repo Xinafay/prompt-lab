@@ -45,6 +45,10 @@
   padding: 12px 0;
 }
 
+.code-viewer.code-editor .cm-content {
+  caret-color: auto;
+}
+
 .code-viewer .cm-line {
   padding: 0 12px;
 }
@@ -132,6 +136,18 @@
   font-size: 12px;
   line-height: 1.55;
   white-space: pre-wrap;
+}
+
+.code-editor-fallback-input {
+  width: 100%;
+  min-height: 180px;
+  border: 0;
+  resize: vertical;
+}
+
+.code-editor-fallback-input:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
 }
 
 .code-viewer-fallback-diff {

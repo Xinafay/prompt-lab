@@ -8,6 +8,7 @@ import time
 from collections.abc import Iterator
 from dataclasses import asdict
 from pathlib import Path, PureWindowsPath
+from typing import Literal
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -68,6 +69,7 @@ from prompt_lab.validation import (
 logger = logging.getLogger(__name__)
 _VALIDATOR_DEFINITION_ADAPTER = TypeAdapter(ValidatorDefinition)
 PROMPT_PREVIEW_MAX_PROMPTS = 100
+_MODEL_PLACEHOLDER = "<<MODEL>>"
 
 
 class HumanNotesRequest(BaseModel):
@@ -94,6 +96,14 @@ class DryRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dry_run: bool = False
+
+
+class VersionSourceUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["create_next", "overwrite_current"]
+    prompt: str = Field(min_length=1)
+    model_py: str | None = Field(default=None, min_length=1)
 
 
 class PromptPreviewItem(BaseModel):
@@ -1067,6 +1077,58 @@ def _remove_generated_version_dirs(version_dir: Path) -> None:
             shutil.rmtree(path)
 
 
+def _validate_version_source_update(
+    *, experiment: ExperimentArtifact, request: VersionSourceUpdateRequest
+) -> None:
+    if experiment.output.type == "pydantic":
+        if request.prompt.count(_MODEL_PLACEHOLDER) != 1:
+            raise HTTPException(
+                status_code=400,
+                detail="pydantic prompt must contain exactly one <<MODEL>>",
+            )
+        if request.model_py is None or not request.model_py.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="pydantic source update must include model_py",
+            )
+        return
+
+    if _MODEL_PLACEHOLDER in request.prompt:
+        raise HTTPException(
+            status_code=400,
+            detail="text prompt cannot contain <<MODEL>>",
+        )
+    if request.model_py is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="text source update cannot include model_py",
+        )
+
+
+def _write_version_source_files(
+    *,
+    version_dir: Path,
+    experiment: ExperimentArtifact,
+    prompt: str,
+    model_py: str | None,
+) -> None:
+    prompt_target = _resolve_version_local_write_path(
+        version_dir, experiment.template.path
+    )
+    model_target: Path | None = None
+    if experiment.output.type == "pydantic":
+        model_file = experiment.output.model_file
+        assert model_file is not None
+        model_target = _resolve_version_local_write_path(version_dir, model_file)
+
+    prompt_target.parent.mkdir(parents=True, exist_ok=True)
+    prompt_target.write_text(prompt, encoding="utf-8")
+    if model_target is not None:
+        assert model_py is not None
+        model_target.parent.mkdir(parents=True, exist_ok=True)
+        model_target.write_text(model_py, encoding="utf-8")
+
+
 def _load_validated_proposal_source(
     *,
     proposal_dir: Path,
@@ -1351,6 +1413,62 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             "rubric": _read_optional_text(experiment_dir / "rubric.md"),
             "cases": [case.model_dump(mode="json") for case in cases],
             "validators": [validator.model_dump(mode="json") for validator in validators],
+        }
+
+    @app.post("/api/experiments/{experiment_id}/versions/{version}/source")
+    def update_version_source(
+        experiment_id: str,
+        version: str,
+        request: VersionSourceUpdateRequest,
+    ) -> dict[str, object]:
+        experiment = store.load_experiment(experiment_id)
+        source_version_dir = store.version_dir(experiment_id, version)
+        _validate_version_source_update(experiment=experiment, request=request)
+
+        if request.mode == "create_next":
+            versions_root = source_version_dir.parent
+            new_version, new_version_dir = _next_numeric_version_dir(versions_root)
+            staging_dir = versions_root / f".{new_version}.tmp"
+            if staging_dir.exists():
+                shutil.rmtree(staging_dir)
+            try:
+                shutil.copytree(source_version_dir, staging_dir)
+                _remove_generated_version_dirs(staging_dir)
+                legacy_cases_dir = staging_dir / "cases"
+                if legacy_cases_dir.exists():
+                    shutil.rmtree(legacy_cases_dir)
+                _write_version_source_files(
+                    version_dir=staging_dir,
+                    experiment=experiment,
+                    prompt=request.prompt,
+                    model_py=request.model_py,
+                )
+                staging_dir.rename(new_version_dir)
+            except Exception:
+                if staging_dir.exists():
+                    shutil.rmtree(staging_dir)
+                if new_version_dir.exists():
+                    shutil.rmtree(new_version_dir)
+                raise
+            return {
+                "version": new_version,
+                "source_version": version,
+                "mode": request.mode,
+                "version_dir": str(new_version_dir),
+            }
+
+        _write_version_source_files(
+            version_dir=source_version_dir,
+            experiment=experiment,
+            prompt=request.prompt,
+            model_py=request.model_py,
+        )
+        _remove_generated_version_dirs(source_version_dir)
+        return {
+            "version": version,
+            "source_version": version,
+            "mode": request.mode,
+            "version_dir": str(source_version_dir),
         }
 
     @app.get("/api/experiments/{experiment_id}/versions/{version}/runs")
@@ -2768,26 +2886,22 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             if legacy_cases_dir.exists():
                 shutil.rmtree(legacy_cases_dir)
 
-            prompt_target = _resolve_version_local_write_path(
-                staging_dir, experiment.template.path
-            )
-            prompt_target.parent.mkdir(parents=True, exist_ok=True)
-            prompt_target.write_text(
-                proposal_prompt_path.read_text(encoding="utf-8"),
-                encoding="utf-8",
-            )
             proposal_model_path = proposal_dir / "model.py"
-            if experiment.output.type == "pydantic" and proposal_model_path.is_file():
+            proposal_model_source: str | None = None
+            if experiment.output.type == "pydantic":
                 model_file = experiment.output.model_file
                 assert model_file is not None
-                model_target = _resolve_version_local_write_path(
-                    staging_dir, model_file
+                proposal_model_source = (
+                    proposal_model_path.read_text(encoding="utf-8")
+                    if proposal_model_path.is_file()
+                    else store.read_text(experiment_id, version, model_file)
                 )
-                model_target.parent.mkdir(parents=True, exist_ok=True)
-                model_target.write_text(
-                    proposal_model_path.read_text(encoding="utf-8"),
-                    encoding="utf-8",
-                )
+            _write_version_source_files(
+                version_dir=staging_dir,
+                experiment=experiment,
+                prompt=proposal_prompt_path.read_text(encoding="utf-8"),
+                model_py=proposal_model_source,
+            )
             staging_dir.rename(new_version_dir)
         except Exception:
             if staging_dir.exists():

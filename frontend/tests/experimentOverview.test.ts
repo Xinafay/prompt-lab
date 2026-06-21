@@ -112,6 +112,41 @@ test("overview can hide its local run action for workbench toolbar layouts", () 
   assert.doesNotMatch(html, /Run version/);
 });
 
+test("editable overview renders source editing actions and diff mode", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(ExperimentOverview, {
+      overview: buildOverview("pydantic", {
+        model_py: "from pydantic import BaseModel\n\nclass Answer(BaseModel):\n    value: str\n"
+      }),
+      isRunning: false,
+      isSourceEditing: true,
+      onRunVersion: () => undefined,
+      onSourceDraftChange: () => undefined,
+      onSourceEdit: () => undefined,
+      onSourceOverwriteCurrent: () => undefined,
+      onSourceReset: () => undefined,
+      onSourceSaveAsNext: () => undefined,
+      onSourceViewModeChange: () => undefined,
+      showRunAction: false,
+      sourceDraft: {
+        prompt: "Write a clearer response for {{ topic }}.",
+        model_py:
+          "from pydantic import BaseModel\n\nclass Answer(BaseModel):\n    value: str\n    confidence: float\n"
+      },
+      sourceViewMode: "diff"
+    })
+  );
+
+  assert.match(html, /Edit/);
+  assert.match(html, /Diff/);
+  assert.match(html, /Reset/);
+  assert.match(html, /Overwrite current version/);
+  assert.match(html, /Save as next version/);
+  assert.match(html, /Prompt diff/);
+  assert.match(html, /Model diff/);
+  assert.match(html, /confidence: float/);
+});
+
 test("production workbench overview delegates to ExperimentOverview", () => {
   const source = readFileSync(
     new URL("../src/App.tsx", import.meta.url),

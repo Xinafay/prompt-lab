@@ -15,6 +15,8 @@ import type {
   ValidationInclusionUpdate,
   ValidationState,
   VersionOverview,
+  VersionSourceUpdateRequest,
+  VersionSourceUpdateResponse,
   VersionsResponse
 } from "./types";
 
@@ -347,6 +349,19 @@ export function createProposalVersion(
     `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
       version
     )}/reviews/${encodeURIComponent(reviewId)}/proposal/create-version`
+  );
+}
+
+export function updateVersionSource(
+  experimentId: string,
+  version: string,
+  request: VersionSourceUpdateRequest
+): Promise<VersionSourceUpdateResponse> {
+  return apiPost<VersionSourceUpdateResponse>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
+      version
+    )}/source`,
+    request
   );
 }
 

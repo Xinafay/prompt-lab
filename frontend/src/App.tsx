@@ -28,7 +28,8 @@ import {
   updateGlobalSettings,
   updateHumanNotes,
   updateReviewDecisions,
-  updateValidationInclusion
+  updateValidationInclusion,
+  updateVersionSource
 } from "./api";
 import { CaseBrowser } from "./components/CaseBrowser";
 import { ComparisonView } from "./components/ComparisonView";
@@ -63,6 +64,8 @@ import type {
   RunsResponse,
   ValidationState,
   VersionOverview,
+  VersionSourceDraft,
+  VersionSourceSaveMode,
   VersionSummary,
   WorkflowMode
 } from "./types";
@@ -101,6 +104,7 @@ type GlobalSettingsState =
 type HistoryMode = "push" | "replace";
 type AppView = "experiment" | "globalSettings";
 type PromptPreviewAction = () => void | Promise<void>;
+type SourceViewMode = "edit" | "diff";
 
 type PendingNavigation =
   | { kind: "experiment"; experiment: Experiment | null }
@@ -108,6 +112,10 @@ type PendingNavigation =
   | { kind: "route"; route: ReturnType<typeof currentExperimentRoute> }
   | { kind: "tab"; tab: WorkbenchTab }
   | { kind: "version"; version: string };
+
+type PendingSourceOverwrite = {
+  navigation: PendingNavigation | null;
+};
 
 function currentExperimentRoute() {
   return parseExperimentRoute(new URL(window.location.href));
@@ -127,6 +135,26 @@ function workflowCompletionMessage(kind: string): string {
 
 function hasCompletedValidation(state: ValidationState | null): boolean {
   return state?.validation_batch.status === "completed";
+}
+
+function sourceDraftFromOverview(overview: VersionOverview): VersionSourceDraft {
+  return {
+    prompt: overview.prompt,
+    model_py:
+      overview.experiment.output.type === "pydantic"
+        ? overview.model_py ?? ""
+        : null
+  };
+}
+
+function sourceDraftsMatch(
+  left: VersionSourceDraft,
+  right: VersionSourceDraft
+): boolean {
+  return (
+    left.prompt === right.prompt &&
+    (left.model_py ?? null) === (right.model_py ?? null)
+  );
 }
 
 function App() {
@@ -174,6 +202,11 @@ function App() {
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<Experiment | null>(null);
+  const [sourceEditing, setSourceEditing] = useState(false);
+  const [sourceDraft, setSourceDraft] = useState<VersionSourceDraft | null>(null);
+  const [sourceViewMode, setSourceViewMode] = useState<SourceViewMode>("edit");
+  const [pendingSourceOverwrite, setPendingSourceOverwrite] =
+    useState<PendingSourceOverwrite | null>(null);
   const [globalSettingsBusy, setGlobalSettingsBusy] = useState(false);
   const [globalSettingsMessage, setGlobalSettingsMessage] =
     useState<string | null>(null);
@@ -192,6 +225,15 @@ function App() {
   const workflowRequestIdRef = useRef(0);
   const baselineVersionRef = useRef("v001");
   const candidateVersionRef = useRef("v001");
+  const sourceDirty = useMemo(() => {
+    if (detailState.status !== "loaded" || sourceDraft === null) {
+      return false;
+    }
+    return !sourceDraftsMatch(
+      sourceDraft,
+      sourceDraftFromOverview(detailState.overview)
+    );
+  }, [detailState, sourceDraft]);
 
   function writeExperimentRoute(
     experimentId: string,
@@ -221,6 +263,13 @@ function App() {
     if (selectedExperiment !== null) {
       writeExperimentRoute(selectedExperiment.id, activeTab, historyMode);
     }
+  }
+
+  function clearSourceEditor() {
+    setSourceEditing(false);
+    setSourceDraft(null);
+    setSourceViewMode("edit");
+    setPendingSourceOverwrite(null);
   }
 
   function activateTab(tab: WorkbenchTab, historyMode: HistoryMode = "replace") {
@@ -259,6 +308,7 @@ function App() {
     setSettingsBusy(false);
     setSettingsDirty(false);
     setSettingsDraft(null);
+    clearSourceEditor();
     setPendingNavigation(null);
     setNavigationError(null);
     setNavigationSaving(false);
@@ -302,13 +352,27 @@ function App() {
     setSettingsBusy(false);
     setSettingsDirty(false);
     setSettingsDraft(null);
+    clearSourceEditor();
     setPendingNavigation(null);
     setNavigationError(null);
     setNavigationSaving(false);
     writeGlobalSettingsRoute(options?.historyMode ?? "replace");
   }
 
-  function unsavedNavigationKind(): "settings" | "validation" | "review" | null {
+  function unsavedNavigationKind():
+    | "settings"
+    | "source"
+    | "validation"
+    | "review"
+    | null {
+    if (
+      appView === "experiment" &&
+      activeTab === "overview" &&
+      sourceDirty &&
+      !workflowBusy
+    ) {
+      return "source";
+    }
     if (
       appView === "experiment" &&
       activeTab === "validation" &&
@@ -355,6 +419,9 @@ function App() {
     if (kind === "review") {
       return reviewState !== null;
     }
+    if (kind === "source") {
+      return sourceDraft !== null;
+    }
     if (appView === "globalSettings") {
       return globalSettingsDraft !== null;
     }
@@ -374,6 +441,13 @@ function App() {
         title: "Unsaved review changes",
         body:
           "Save review changes before leaving this view, or discard the unsaved changes."
+      };
+    }
+    if (unsavedNavigationKind() === "source") {
+      return {
+        title: "Unsaved source changes",
+        body:
+          "Save the prompt and model as a new version, overwrite the current version, or discard the draft changes."
       };
     }
     return {
@@ -471,6 +545,8 @@ function App() {
       restoreCommittedValidationState();
     } else if (kind === "review") {
       restoreCommittedReviewState();
+    } else if (kind === "source") {
+      clearSourceEditor();
     } else if (appView === "globalSettings") {
       setGlobalSettingsDirty(false);
       setGlobalSettingsDraft(null);
@@ -496,6 +572,13 @@ function App() {
         await handleSaveValidationInclusion({ rethrow: true });
       } else if (kind === "review") {
         await handleSaveReviewChanges({ rethrow: true });
+      } else if (kind === "source") {
+        await handleSaveVersionSource("create_next", {
+          navigation,
+          rethrow: true
+        });
+        setPendingNavigation(null);
+        return;
       } else if (appView === "globalSettings") {
         if (globalSettingsDraft === null) {
           return;
@@ -779,6 +862,7 @@ function App() {
     selectedExperiment,
     settingsBusy,
     settingsDirty,
+    sourceDirty,
     validationDirty,
     validationState,
     workflowBusy,
@@ -791,7 +875,8 @@ function App() {
       !globalSettingsDirty &&
       !validationDirty &&
       !decisionsDirty &&
-      !humanNotesDirty
+      !humanNotesDirty &&
+      !sourceDirty
     ) {
       return;
     }
@@ -810,6 +895,7 @@ function App() {
     globalSettingsDirty,
     humanNotesDirty,
     settingsDirty,
+    sourceDirty,
     validationDirty
   ]);
 
@@ -974,6 +1060,161 @@ function App() {
     const count = state.experiments.length;
     return `${count} experiment${count === 1 ? "" : "s"} available`;
   }, [appView, state]);
+
+  function handleSourceEdit() {
+    if (detailState.status !== "loaded") {
+      return;
+    }
+    setSourceDraft(sourceDraftFromOverview(detailState.overview));
+    setSourceEditing(true);
+    setSourceViewMode("edit");
+    setWorkflowMessage(null);
+  }
+
+  function handleSourceDraftChange(draft: VersionSourceDraft) {
+    setSourceDraft(draft);
+    setWorkflowMessage(null);
+  }
+
+  function handleSourceReset() {
+    if (detailState.status !== "loaded") {
+      clearSourceEditor();
+      return;
+    }
+    setSourceDraft(sourceDraftFromOverview(detailState.overview));
+    setSourceViewMode("edit");
+    setWorkflowMessage(null);
+  }
+
+  function requestSourceOverwrite(navigation: PendingNavigation | null = null) {
+    if (sourceDraft === null || !sourceDirty || workflowBusy) {
+      return;
+    }
+    setPendingSourceOverwrite({ navigation });
+  }
+
+  function handleCancelSourceOverwrite() {
+    setPendingSourceOverwrite(null);
+  }
+
+  async function handleConfirmSourceOverwrite() {
+    if (pendingSourceOverwrite === null) {
+      return;
+    }
+    const navigation = pendingSourceOverwrite.navigation;
+    setNavigationError(null);
+    setPendingSourceOverwrite(null);
+    try {
+      await handleSaveVersionSource("overwrite_current", {
+        navigation,
+        rethrow: true
+      });
+      if (navigation !== null) {
+        setPendingNavigation(null);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      if (navigation !== null) {
+        setNavigationError(message);
+      }
+    }
+  }
+
+  async function refreshCurrentVersionAfterSourceOverwrite(
+    experiment: Experiment,
+    version: string
+  ) {
+    const [overview, runs, latestValidation, latestReview] = await Promise.all([
+      getVersionOverview(experiment.id, version),
+      getVersionRuns(experiment.id, version),
+      getLatestValidationState(experiment.id, version),
+      getLatestReviewState(experiment.id, version)
+    ]);
+    const latestProposal =
+      latestReview === null
+        ? null
+        : await getReviewProposal(experiment.id, version, latestReview.review_id);
+    setDetailState({ status: "loaded", overview, runs });
+    setCommittedValidationState(latestValidation);
+    setCompareValidationByVersion({});
+    setCommittedReviewState(latestReview);
+    setProposalResponse(latestProposal);
+    setCreatedVersion(null);
+    setComparison(null);
+  }
+
+  async function handleSaveVersionSource(
+    mode: VersionSourceSaveMode,
+    options?: { navigation?: PendingNavigation | null; rethrow?: boolean }
+  ) {
+    if (
+      selectedExperiment === null ||
+      detailState.status !== "loaded" ||
+      sourceDraft === null
+    ) {
+      return;
+    }
+    const experiment = selectedExperiment;
+    const version = experiment.active_version;
+    const navigation = options?.navigation ?? null;
+    setWorkflowBusy(true);
+    setWorkflowMessage(
+      mode === "create_next"
+        ? "Saving source as next version..."
+        : "Overwriting current version..."
+    );
+    try {
+      const response = await updateVersionSource(experiment.id, version, {
+        mode,
+        prompt: sourceDraft.prompt,
+        model_py:
+          detailState.overview.experiment.output.type === "pydantic"
+            ? sourceDraft.model_py ?? ""
+            : null
+      });
+      setVersionSummaries((current) => {
+        if (current.some((summary) => summary.version === response.version)) {
+          return current;
+        }
+        return [...current, { version: response.version, is_active: false }].sort(
+          (left, right) => left.version.localeCompare(right.version)
+        );
+      });
+
+      if (mode === "create_next") {
+        const savedExperiment = await updateExperiment(experiment.id, {
+          ...experiment,
+          active_version: response.version
+        });
+        setCommittedReviewState(null);
+        setProposalResponse(null);
+        setCreatedVersion(null);
+        setComparison(null);
+        setCompareValidationByVersion({});
+        await refreshExperimentsAfterSettingsSave(savedExperiment);
+        clearSourceEditor();
+        setWorkflowMessage(`Created ${response.version} and switched to it.`);
+        activateTab("overview");
+      } else {
+        await refreshCurrentVersionAfterSourceOverwrite(experiment, version);
+        clearSourceEditor();
+        setWorkflowMessage(`Overwrote ${version} and cleared generated artifacts.`);
+        activateTab("overview");
+      }
+
+      if (navigation !== null) {
+        performPendingNavigation(navigation);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setWorkflowMessage(message);
+      if (options?.rethrow) {
+        throw error;
+      }
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
 
   async function handleRunVersion() {
     if (selectedExperiment === null || detailState.status !== "loaded") {
@@ -1524,6 +1765,7 @@ function App() {
 
   async function handleCreateVersion() {
     if (selectedExperiment === null || reviewState === null) return;
+    const experiment = selectedExperiment;
     const experimentId = selectedExperiment.id;
     const version = selectedExperiment.active_version;
     const selectionKey = `${experimentId}:${version}`;
@@ -1547,13 +1789,21 @@ function App() {
       candidateVersionRef.current = response.version;
       setCandidateVersion(response.version);
       setComparison(null);
-      setWorkflowMessage(`Created ${response.version}.`);
+      const savedExperiment = await updateExperiment(experimentId, {
+        ...experiment,
+        active_version: response.version
+      });
+      setCommittedReviewState(null);
+      setProposalResponse(null);
+      await refreshExperimentsAfterSettingsSave(savedExperiment);
+      setWorkflowMessage(`Created ${response.version} and switched to it.`);
+      activateTab("overview");
     } catch (error) {
-      if (isWorkflowCurrent(requestId, selectionKey)) {
+      if (workflowRequestIdRef.current === requestId) {
         setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
       }
     } finally {
-      if (isWorkflowCurrent(requestId, selectionKey)) {
+      if (workflowRequestIdRef.current === requestId) {
         setWorkflowBusy(false);
       }
     }
@@ -1803,6 +2053,7 @@ function App() {
     sameVersion: baselineVersion === candidateVersion,
     versionCount: knownVersions.length
   });
+  const pendingNavigationKind = unsavedNavigationKind();
   const pendingNavigationDialog = pendingNavigationCopy();
   const pendingNavigationSaveDisabled =
     navigationSaving || !canSavePendingNavigation();
@@ -2080,8 +2331,21 @@ function App() {
                       <ExperimentOverview
                         overview={detailState.overview}
                         isRunning={workflowLocked}
+                        isSourceEditing={sourceEditing}
                         onRunVersion={handleRunVersion}
+                        onSourceDraftChange={handleSourceDraftChange}
+                        onSourceEdit={handleSourceEdit}
+                        onSourceOverwriteCurrent={() => requestSourceOverwrite()}
+                        onSourceReset={handleSourceReset}
+                        onSourceSaveAsNext={() =>
+                          void handleSaveVersionSource("create_next")
+                        }
+                        onSourceViewModeChange={setSourceViewMode}
                         showRunAction={false}
+                        sourceBusy={workflowLocked}
+                        sourceDirty={sourceDirty}
+                        sourceDraft={sourceDraft}
+                        sourceViewMode={sourceViewMode}
                       />
                     ) : null}
 
@@ -2179,7 +2443,7 @@ function App() {
         />
       ) : null}
 
-      {pendingNavigation !== null ? (
+      {pendingNavigation !== null && pendingSourceOverwrite === null ? (
         <div className="modal-backdrop" role="presentation">
           <section
             aria-labelledby="settings-navigation-title"
@@ -2211,13 +2475,65 @@ function App() {
               >
                 Discard changes
               </button>
+              {pendingNavigationKind === "source" ? (
+                <button
+                  className="secondary-action danger-action"
+                  disabled={pendingNavigationSaveDisabled}
+                  onClick={() => requestSourceOverwrite(pendingNavigation)}
+                  type="button"
+                >
+                  Overwrite and continue
+                </button>
+              ) : null}
               <button
                 className="primary-action"
                 disabled={pendingNavigationSaveDisabled}
                 onClick={() => void handleSaveSettingsAndContinue()}
                 type="button"
               >
-                {navigationSaving ? "Saving..." : "Save and continue"}
+                {navigationSaving
+                  ? "Saving..."
+                  : pendingNavigationKind === "source"
+                    ? "Save as next and continue"
+                    : "Save and continue"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {pendingSourceOverwrite !== null ? (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            aria-labelledby="source-overwrite-title"
+            aria-modal="true"
+            className="settings-navigation-modal"
+            role="dialog"
+          >
+            <div>
+              <h2 id="source-overwrite-title">Overwrite current version?</h2>
+              <p>
+                This will replace the prompt and model for the active version and
+                delete its generated runs, validations, reviews, proposals, and
+                comparisons.
+              </p>
+            </div>
+            <div className="modal-actions">
+              <button
+                className="secondary-action"
+                disabled={workflowBusy}
+                onClick={handleCancelSourceOverwrite}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="secondary-action danger-action"
+                disabled={workflowBusy}
+                onClick={() => void handleConfirmSourceOverwrite()}
+                type="button"
+              >
+                {workflowBusy ? "Overwriting..." : "Overwrite current version"}
               </button>
             </div>
           </section>
