@@ -2134,6 +2134,9 @@ function App() {
                     {activeTab === "proposal" ? (
                       <ProposalView
                         createdVersion={createdVersion}
+                        currentModel={detailState.overview.model_py ?? null}
+                        currentModelFile={detailState.overview.model_file ?? null}
+                        currentPrompt={detailState.overview.prompt}
                         hasUnsavedReviewChanges={hasUnsavedReviewChanges}
                         isBusy={workflowLocked}
                         onCreateVersion={handleCreateVersion}
