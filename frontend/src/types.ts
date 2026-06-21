@@ -109,6 +109,8 @@ export interface VersionOverview {
   experiment: Experiment;
   version: string;
   prompt: string;
+  model_py?: string | null;
+  model_file?: string | null;
   rubric: string;
   cases: Case[];
   validators: ValidatorDefinition[];
