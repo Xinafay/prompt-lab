@@ -72,13 +72,13 @@
 }
 
 .code-viewer .cm-jinja-variable {
-  background: #ecfdf3;
-  color: #067647;
+  background: #eef4ff;
+  color: #3538cd;
 }
 
 .code-viewer .cm-jinja-block {
-  background: #eff8ff;
-  color: #175cd3;
+  background: #f4f3ff;
+  color: #5925dc;
 }
 
 .code-viewer .cm-jinja-comment {
@@ -89,8 +89,8 @@
 
 .code-viewer .cm-model-marker {
   border-radius: 4px;
-  background: #fef3f2;
-  color: #b42318;
+  background: #f5f3ff;
+  color: #6d28d9;
   font-weight: 800;
 }
 
