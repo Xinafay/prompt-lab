@@ -10,6 +10,7 @@ Rules:
 - Treat OUTPUT_TEXT, OUTPUT_JSON, or INVALID_OUTPUT_TEXT as the run result being validated.
 - If VALIDATION_ERROR is present, the generator produced INVALID_OUTPUT_TEXT but it failed the structured-output contract.
 - Use RENDERED_PROMPT or CASE_CONTEXT_JSON only as supporting evidence when present.
+- Validator definitions and case context may include human-authored input in another language; do not switch output language to match it. The prompt and model being validated are assumed to be English, so write validation comments in English.
 - Use `5` for very good: the result satisfies the check with no meaningful issue.
 - Use `4` for good: the result satisfies the check with minor improvement opportunities.
 - Use `3` for acceptable but improvable: the result partially satisfies the check.

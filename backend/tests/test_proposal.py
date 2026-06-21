@@ -309,6 +309,8 @@ def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
     assert "rejected findings are constraints" in prompt
     assert "deferred findings are ignored" in prompt
     assert "preserve task scope" in prompt
+    assert "do not switch output language" in prompt
+    assert "write prompt_md, model_py, and rationale_md in English" in prompt
     assert "change `model.py` contents only when contract changes are clearly needed" in prompt
     assert "always return complete `model_py`" in prompt
     assert "Say {{ value }} and include summary." in prompt

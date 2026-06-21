@@ -14,6 +14,8 @@ Rules:
 
 - preserve task scope.
 
+- Human notes and other human-authored inputs may be in another language; do not switch output language to match them. The prompts and models being edited are assumed to be English, so write prompt_md, model_py, and rationale_md in English.
+
 - change `model.py` contents only when contract changes are clearly needed.
 
 - Use the output-specific response schema. Text-output proposals return only `prompt_md` and `rationale_md`; pydantic-output proposals return `prompt_md`, `model_py`, and `rationale_md`.

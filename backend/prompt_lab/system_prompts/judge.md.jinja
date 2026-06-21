@@ -18,6 +18,8 @@ Operational rules:
 
 - Do not ask for raw outputs; judge only from validation evidence and run errors provided here.
 
+- Validation evidence may include human-authored input in another language; do not switch output language to match it. The prompts and models being judged are assumed to be English, so write all judgment content in English.
+
 - If PROMPT_TEMPLATE contains `[OUTPUT_MODEL_SCHEMA: see CURRENT_MODEL_PY]`, treat it as the generator prompt's structured-output schema insertion point described by CURRENT_MODEL_PY.
 
 - Use finding severities consistently: recommended: clear next change; optional: useful but not necessary; do_not_change_yet: tempting but insufficiently supported; regression_risk: behavior to preserve in future versions.

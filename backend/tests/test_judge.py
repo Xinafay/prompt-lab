@@ -487,6 +487,8 @@ def test_build_judge_prompt_uses_validation_evidence_without_raw_outputs_or_rubr
     assert "`null` not assessable" in prompt
     assert "validation evidence as primary analysis of run outputs" in prompt
     assert "Do not ask for raw outputs" in prompt
+    assert "do not switch output language" in prompt
+    assert "write all judgment content in English" in prompt
     assert "Say {{ value }}" in prompt
     assert "[OUTPUT_MODEL_SCHEMA: see CURRENT_MODEL_PY]" in prompt
     assert prompt.count("[MODEL_MARKER_LITERAL]") == 4

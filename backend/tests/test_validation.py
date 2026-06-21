@@ -139,6 +139,8 @@ def test_build_llm_validator_prompt_defines_global_grade_scale() -> None:
     assert "Use `2` for weak" in prompt
     assert "Use `1` for bad" in prompt
     assert "Use `null` only when" in prompt
+    assert "do not switch output language" in prompt
+    assert "write validation comments in English" in prompt
     assert "Use `yes`" not in prompt
     assert "Use `no`" not in prompt
     assert "Use `unknown`" not in prompt
