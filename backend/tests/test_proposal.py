@@ -11,7 +11,11 @@ from fastapi.testclient import TestClient
 from prompt_lab import llm_client
 from prompt_lab.api import create_app
 from prompt_lab.config import PromptLabConfig
-from prompt_lab.proposal import ProposalDraft, build_proposal_prompt
+from prompt_lab.proposal import (
+    PydanticProposalDraft,
+    TextProposalDraft,
+    build_proposal_prompt,
+)
 from prompt_lab.settings import PromptLabSettings, save_settings
 from test_judge import valid_case_payload, valid_judgment_payload, write_json
 
@@ -66,7 +70,12 @@ def write_review_fixture(root: Path, *, output_type: str = "pydantic") -> Path:
     cases_dir = example / "cases"
     cases_dir.mkdir(parents=True)
     version_dir.mkdir(parents=True)
-    (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
+    prompt_text = (
+        "Say {{ value }}\n\n<<MODEL>>"
+        if output_type == "pydantic"
+        else "Say {{ value }}"
+    )
+    (version_dir / "prompt.md").write_text(prompt_text, encoding="utf-8")
     if output_type == "pydantic":
         (version_dir / "model.py").write_text(
             "from pydantic import BaseModel\n\n"
@@ -181,14 +190,49 @@ def write_valid_proposal_source(review_dir: Path) -> None:
     )
 
 
+def test_text_proposal_draft_rejects_model_marker() -> None:
+    try:
+        TextProposalDraft(
+            prompt_md="Improved prompt\n\n<<MODEL>>",
+            rationale_md="Text prompts should not include structured schema markers.",
+        )
+    except ValueError as error:
+        assert "text proposal prompt_md cannot contain <<MODEL>>" in str(error)
+    else:
+        raise AssertionError("Expected text proposal to reject <<MODEL>>")
+
+
+def test_pydantic_proposal_draft_requires_one_model_marker() -> None:
+    for prompt_md in ["Improved prompt", "A\n\n<<MODEL>>\n\nB\n\n<<MODEL>>"]:
+        try:
+            PydanticProposalDraft(
+                prompt_md=prompt_md,
+                model_py=None,
+                rationale_md="Pydantic prompts need one schema marker.",
+            )
+        except ValueError as error:
+            assert "pydantic proposal prompt_md must contain exactly one <<MODEL>>" in str(
+                error
+            )
+        else:
+            raise AssertionError("Expected pydantic proposal to reject marker count")
+
+    proposal = PydanticProposalDraft(
+        prompt_md="Improved prompt\n\n<<MODEL>>",
+        model_py=None,
+        rationale_md="Pydantic prompt keeps structured output.",
+    )
+    assert proposal.prompt_md.endswith("<<MODEL>>")
+
+
 def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
     prompt = build_proposal_prompt(
         experiment_id="demo",
         version="v001",
         current_model="local/generator",
         output_type="pydantic",
-        prompt_template="Say {{ value }} and include summary.",
-        model_source="class DemoOutput: ...\n    answer: str",
+        prompt_template="Say {{ value }} and include summary.\n\n<<MODEL>>",
+        model_source="class DemoOutput: ...\n    answer: str\n    marker = '<<MODEL>>'",
         validation_context={
             "validation_batch_id": "validation-001",
             "run_batch_id": "batch-001",
@@ -199,7 +243,7 @@ def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
                     "case_id": "case-a",
                     "repeat_index": 1,
                     "grade": 1,
-                    "comment": "Missing summary.",
+                    "comment": "Missing summary near <<MODEL>>.",
                 }
             ],
         },
@@ -239,7 +283,10 @@ def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
             "f-rejected": {"decision": "rejected", "reason": "Out of scope"},
             "f-deferred": {"decision": "deferred", "reason": "Later"},
         },
-        human_notes="Keep the answer terse; human notes override all judge findings.",
+        human_notes=(
+            "Keep the answer terse; human notes override all judge findings. "
+            "Do not copy <<MODEL>> from notes."
+        ),
     )
 
     assert "human notes override all judge findings" in prompt
@@ -250,14 +297,17 @@ def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
     assert "preserve task scope" in prompt
     assert "change `model.py` only when contract changes are clearly needed" in prompt
     assert "Say {{ value }} and include summary." in prompt
+    assert "[OUTPUT_MODEL_SCHEMA: see CURRENT_MODEL_PY]" in prompt
+    assert prompt.count("[MODEL_MARKER_LITERAL]") == 2
     assert "Current model: local/generator" in prompt
     assert "Keep the answer terse" in prompt
-    assert "VALIDATION_CONTEXT_JSON" in prompt
+    assert "VALIDATION_METADATA_JSON" in prompt
     assert "validation-001" in prompt
-    assert '"grade": 1' in prompt
+    assert '"grade": 1' not in prompt
+    assert "Missing summary near" not in prompt
     assert '"verdict"' not in prompt
     assert "<<<PROPOSAL_SCHEMA_JSON" not in prompt
-    assert prompt.index("<<<VALIDATION_CONTEXT_JSON") < prompt.index("<<MODEL>>")
+    assert prompt.index("<<<VALIDATION_METADATA_JSON") < prompt.index("<<MODEL>>")
     assert prompt.index("<<<REJECTED_FINDINGS_AS_CONSTRAINTS_JSON") < prompt.index("<<MODEL>>")
     assert "RUBRIC_SNAPSHOT_MD" not in prompt
     assert "f-accepted" in prompt
@@ -268,6 +318,7 @@ def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
     assert "f-deferred" not in prompt
     assert "class DemoOutput" in prompt
     assert "answer: str" in prompt
+    assert "Use the output-specific response schema" in prompt
 
 
 def test_proposal_prompt_template_file_is_used() -> None:
@@ -303,7 +354,7 @@ def test_api_generates_proposal_artifacts_with_traceable_source() -> None:
         )
         return FakeGeneratedStructured(
             response_model(
-                prompt_md="Say {{ value }} with summary",
+                prompt_md="Say {{ value }} with summary\n\n<<MODEL>>",
                 model_py="from pydantic import BaseModel\n\nclass DemoOutput(BaseModel):\n    answer: str\n    summary: str\n",
                 rationale_md="Accepted f-accepted and preserved rejected scope.",
             )
@@ -327,7 +378,7 @@ def test_api_generates_proposal_artifacts_with_traceable_source() -> None:
             )
             proposal_dir = runtime_review_dir(root) / "proposal"
             assert (proposal_dir / "prompt.md").read_text(encoding="utf-8") == (
-                "Say {{ value }} with summary"
+                "Say {{ value }} with summary\n\n<<MODEL>>"
             )
             assert (proposal_dir / "model.py").is_file()
             assert (proposal_dir / "rationale.md").read_text(encoding="utf-8") == (
@@ -349,12 +400,14 @@ def test_api_generates_proposal_artifacts_with_traceable_source() -> None:
                 "deferred": ["f-deferred"],
             }
             assert calls[0]["model"] == "openai/judge"
-            assert calls[0]["response_model"] is ProposalDraft
+            assert calls[0]["response_model"].__name__ == "PydanticProposalDraft"
             assert calls[0]["validation_context"] is None
+            assert calls[0]["prompt"].count("<<MODEL>>") == 1
+            assert "[OUTPUT_MODEL_SCHEMA: see CURRENT_MODEL_PY]" in calls[0]["prompt"]
             assert "Say {{ value }}" in calls[0]["prompt"]
             assert "Current model: local/a" in calls[0]["prompt"]
             assert "Keep the answer terse" in calls[0]["prompt"]
-            assert "VALIDATION_CONTEXT_JSON" in calls[0]["prompt"]
+            assert "VALIDATION_METADATA_JSON" in calls[0]["prompt"]
             assert "validation-001" in calls[0]["prompt"]
             assert "RUBRIC_SNAPSHOT_MD" not in calls[0]["prompt"]
             assert "f-accepted" in calls[0]["prompt"]
@@ -439,7 +492,7 @@ def test_api_strips_wrapping_code_fences_from_proposal_files() -> None:
     ) -> FakeGeneratedStructured:
         return FakeGeneratedStructured(
             response_model(
-                prompt_md="```text\nSay {{ value }} with summary\n```",
+                prompt_md="```text\nSay {{ value }} with summary\n\n<<MODEL>>\n```",
                 model_py=(
                     "```python\n"
                     "from pydantic import BaseModel\n\n"
@@ -466,7 +519,7 @@ def test_api_strips_wrapping_code_fences_from_proposal_files() -> None:
             assert response.status_code == 200
             proposal_dir = runtime_review_dir(root) / "proposal"
             assert (proposal_dir / "prompt.md").read_text(encoding="utf-8") == (
-                "Say {{ value }} with summary"
+                "Say {{ value }} with summary\n\n<<MODEL>>"
             )
             assert (proposal_dir / "model.py").read_text(encoding="utf-8") == (
                 "from pydantic import BaseModel\n\n"
@@ -477,7 +530,7 @@ def test_api_strips_wrapping_code_fences_from_proposal_files() -> None:
                 "Accepted f-accepted."
             )
             assert response.json()["proposal"]["prompt_md"] == (
-                "Say {{ value }} with summary"
+                "Say {{ value }} with summary\n\n<<MODEL>>"
             )
     finally:
         llm_client.generate_structured = original_generate_structured  # type: ignore[assignment]
@@ -535,13 +588,13 @@ def test_api_reports_active_proposal_job_and_rejects_second_proposal() -> None:
         response_model: Any,
         validation_context: dict[str, Any] | None,
     ) -> FakeGeneratedStructured:
-        del model, prompt, response_model, validation_context
+        del model, prompt, validation_context
         started.set()
         if not release.wait(timeout=5):
             raise TimeoutError("test timed out waiting to release fake proposal")
         return FakeGeneratedStructured(
-            ProposalDraft(
-                prompt_md="Improved prompt",
+            response_model(
+                prompt_md="Improved prompt\n\n<<MODEL>>",
                 model_py=(
                     "from pydantic import BaseModel\n\n"
                     "class DemoOutput(BaseModel):\n"
@@ -607,7 +660,9 @@ def test_api_create_version_copies_clean_source_and_replaces_pydantic_files() ->
         (version_dir / "comparisons" / "comparison-001").mkdir(parents=True)
         proposal_dir = review_dir / "proposal"
         proposal_dir.mkdir()
-        (proposal_dir / "prompt.md").write_text("Improved prompt", encoding="utf-8")
+        (proposal_dir / "prompt.md").write_text(
+            "Improved prompt\n\n<<MODEL>>", encoding="utf-8"
+        )
         (proposal_dir / "model.py").write_text(
             "from pydantic import BaseModel\n\n"
             "class DemoOutput(BaseModel):\n"
@@ -628,7 +683,7 @@ def test_api_create_version_copies_clean_source_and_replaces_pydantic_files() ->
         runtime_version_dir = runtime_review_dir(root).parents[1]
         new_version_dir = runtime_version_dir.parent / "v002"
         assert (new_version_dir / "prompt.md").read_text(encoding="utf-8") == (
-            "Improved prompt"
+            "Improved prompt\n\n<<MODEL>>"
         )
         assert "summary: str" in (new_version_dir / "model.py").read_text(
             encoding="utf-8"
@@ -639,7 +694,7 @@ def test_api_create_version_copies_clean_source_and_replaces_pydantic_files() ->
         assert not (new_version_dir / "reviews").exists()
         assert not (new_version_dir / "comparisons").exists()
         assert (runtime_version_dir / "prompt.md").read_text(encoding="utf-8") == (
-            "Say {{ value }}"
+            "Say {{ value }}\n\n<<MODEL>>"
         )
         assert "summary: str" not in (runtime_version_dir / "model.py").read_text(
             encoding="utf-8"
@@ -783,18 +838,21 @@ def test_api_create_version_returns_404_when_proposal_missing() -> None:
 
 
 def test_api_rejects_text_proposal_that_returns_model_py() -> None:
+    captured: dict[str, Any] = {}
+
     def fake_generate_structured(
         model: str,
         prompt: str,
         response_model: Any,
         validation_context: dict[str, Any] | None,
     ) -> FakeGeneratedStructured:
+        captured["response_model"] = response_model
         return FakeGeneratedStructured(
-            response_model(
-                prompt_md="Improved text prompt",
-                model_py="class ShouldNotExist: ...",
-                rationale_md="Text proposals cannot change model.py.",
-            )
+            {
+                "prompt_md": "Improved text prompt",
+                "model_py": "class ShouldNotExist: ...",
+                "rationale_md": "Text proposals cannot change model.py.",
+            }
         )
 
     original_generate_structured = llm_client.generate_structured
@@ -810,6 +868,11 @@ def test_api_rejects_text_proposal_that_returns_model_py() -> None:
             )
 
             assert response.status_code == 400
+            assert captured["response_model"].__name__ == "TextProposalDraft"
+            assert (
+                "model_py"
+                not in captured["response_model"].model_json_schema()["properties"]
+            )
             assert response.json()["detail"] == (
                 "Text output proposals cannot include model_py"
             )
@@ -820,6 +883,8 @@ def test_api_rejects_text_proposal_that_returns_model_py() -> None:
 
 def main() -> int:
     tests: list[Any] = [
+        test_text_proposal_draft_rejects_model_marker,
+        test_pydantic_proposal_draft_requires_one_model_marker,
         test_build_proposal_prompt_sorts_decisions_and_includes_rules,
         test_proposal_prompt_template_file_is_used,
         test_api_generates_proposal_artifacts_with_traceable_source,

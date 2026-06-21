@@ -43,7 +43,13 @@ from prompt_lab.models.validators import (
     ValidationResultArtifact,
     ValidatorDefinition,
 )
-from prompt_lab.proposal import ProposalDraft, ProposalSource, build_proposal_prompt
+from prompt_lab.proposal import (
+    ProposalDraft,
+    ProposalSource,
+    build_proposal_prompt,
+    proposal_response_model,
+    proposal_response_to_draft,
+)
 from prompt_lab.pydantic_loader import load_model_entrypoint
 from prompt_lab.runner import iter_case_major, run_structured_case, run_text_case
 from prompt_lab.settings import PromptLabSettings, load_settings, save_settings
@@ -2632,11 +2638,12 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 decisions=decisions,
                 human_notes=human_notes,
             )
+            response_model = proposal_response_model(experiment.output.type)
             if dry_run:
                 generated = llm_client.generate_structured_from_fake_response(
                     experiment.models.judge_model,
                     proposal_prompt,
-                    ProposalDraft,
+                    response_model,
                     None,
                     dry_proposal_response_json(
                         prompt_template=prompt_template,
@@ -2649,16 +2656,24 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                     job_id,
                     experiment.models.judge_model,
                     proposal_prompt,
-                    ProposalDraft,
+                    response_model,
                     None,
                 )
             raise_if_workflow_job_cancelled(job_id)
-            output = generated.output
-            proposal = (
-                output
-                if isinstance(output, ProposalDraft)
-                else ProposalDraft.model_validate(output)
-            )
+            try:
+                typed_proposal = response_model.model_validate(generated.output)
+            except ValidationError as exc:
+                if (
+                    experiment.output.type == "text"
+                    and isinstance(generated.output, dict)
+                    and generated.output.get("model_py") is not None
+                ):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Text output proposals cannot include model_py",
+                    ) from exc
+                raise
+            proposal = proposal_response_to_draft(typed_proposal)
             if experiment.output.type == "text" and proposal.model_py is not None:
                 raise HTTPException(
                     status_code=400,

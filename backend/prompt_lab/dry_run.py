@@ -81,15 +81,16 @@ def dry_proposal_response_json(
     model_source: str | None,
     output_type: str,
 ) -> str:
-    payload = {
+    payload: dict[str, str | None] = {
         "prompt_md": prompt_template
         or "Dry-run prompt proposal placeholder.",
-        "model_py": model_source if output_type == "pydantic" else None,
         "rationale_md": (
             "Dry-run proposal generated from deterministic fake LLM JSON. "
             "No live model was called."
         ),
     }
+    if output_type == "pydantic":
+        payload["model_py"] = model_source
     return json.dumps(payload, ensure_ascii=False)
 
 

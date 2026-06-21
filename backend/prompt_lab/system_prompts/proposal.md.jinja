@@ -1,6 +1,6 @@
 You are generating a Prompt Lab proposal for one reviewed experiment version.
 
-Return JSON matching ProposalDraft exactly.
+Return JSON matching the provided output-specific response schema exactly.
 
 Rules:
 
@@ -16,9 +16,13 @@ Rules:
 
 - change `model.py` only when contract changes are clearly needed.
 
-- If the experiment output is text, normally leave model_py absent.
+- Use the output-specific response schema. Text-output proposals return only `prompt_md` and `rationale_md`; pydantic-output proposals may also return `model_py`.
+
+- If the experiment output is text, do not propose `model.py` changes.
 
 - If the experiment output is pydantic, prefer prompt changes unless the output contract clearly needs a model.py change.
+
+- If CURRENT_PROMPT_MD contains `[OUTPUT_MODEL_SCHEMA: see CURRENT_MODEL_PY]`, treat it as the generator prompt's structured-output schema insertion point. If you return a pydantic `prompt_md` that keeps structured output, write that marker in the actual prompt file as two `<` characters, then `MODEL`, then two `>` characters.
 
 - `prompt_md`, `model_py`, and `rationale_md` values must be raw file contents, not fenced Markdown code blocks. Do not wrap them in ```text, ```markdown, ```python, or closing ``` fences.
 
@@ -36,7 +40,7 @@ Output type: {{ output_type }}
 
 {{ current_prompt_section }}
 
-{{ validation_context_section }}
+{{ validation_metadata_section }}
 
 {{ human_notes_section }}
 
