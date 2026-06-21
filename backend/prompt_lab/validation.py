@@ -14,6 +14,8 @@ from prompt_lab.models.validators import (
 from prompt_lab.prompt_sections import fenced_section, json_block
 from prompt_lab.prompt_templates import render_system_prompt
 
+_MODEL_PLACEHOLDER = "<<MODEL>>"
+
 
 def enabled_validators(validators: list[ValidatorDefinition]) -> list[ValidatorDefinition]:
     return [validator for validator in validators if validator.enabled]
@@ -66,6 +68,11 @@ def build_llm_validator_prompt(
 ) -> str:
     rendered_prompt_section = ""
     if validator.input_scope in {"output_and_prompt", "output_prompt_and_case"}:
+        if _MODEL_PLACEHOLDER in run.rendered_prompt:
+            raise ValueError(
+                "rendered_prompt contains unresolved <<MODEL>>; "
+                "rerun the structured generator before validation"
+            )
         rendered_prompt_section = fenced_section(
             "RENDERED_PROMPT",
             run.rendered_prompt,

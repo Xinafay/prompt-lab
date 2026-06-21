@@ -144,6 +144,25 @@ def test_build_llm_validator_prompt_defines_global_grade_scale() -> None:
     assert "Use `unknown`" not in prompt
 
 
+def test_build_llm_validator_prompt_rejects_structured_prompt_placeholder() -> None:
+    try:
+        build_llm_validator_prompt(
+            experiment_id="demo",
+            version="v001",
+            validation_batch_id="validation-001",
+            validator=_validator(input_scope="output_and_prompt"),
+            run=_run_artifact(
+                rendered_prompt="Return JSON matching this schema:\n<<MODEL>>"
+            ),
+            case=_case_artifact(),
+            case_context={},
+        )
+    except ValueError as exc:
+        assert "rendered_prompt contains unresolved <<MODEL>>" in str(exc)
+    else:
+        raise AssertionError("Expected unresolved structured prompt marker to fail")
+
+
 def test_build_llm_validator_prompt_renders_text_output_as_text() -> None:
     prompt = build_llm_validator_prompt(
         experiment_id="demo",
@@ -413,6 +432,7 @@ def main() -> int:
     tests = [
         test_build_llm_validator_prompt_respects_output_only_input_scope,
         test_build_llm_validator_prompt_defines_global_grade_scale,
+        test_build_llm_validator_prompt_rejects_structured_prompt_placeholder,
         test_build_llm_validator_prompt_renders_text_output_as_text,
         test_build_llm_validator_prompt_renders_validation_error_with_raw_output,
         test_build_llm_validator_prompt_includes_only_materialized_case_context,
