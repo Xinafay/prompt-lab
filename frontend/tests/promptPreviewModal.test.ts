@@ -33,6 +33,7 @@ test("prompt preview modal renders warnings, metadata, counts, and actions", () 
 
   assert.match(html, /Preview prompts/);
   assert.match(html, /Showing every case and LLM validator/);
+  assert.match(html, /prompt-preview-list prompt-preview-list-single/);
   assert.match(html, /Run case case-a repeat 1/);
   assert.match(html, /local\/demo/);
   assert.match(html, /case-a/);

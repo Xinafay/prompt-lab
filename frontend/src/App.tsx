@@ -310,16 +310,61 @@ function App() {
     writeGlobalSettingsRoute(options?.historyMode ?? "replace");
   }
 
-  function shouldBlockSettingsNavigation(): boolean {
-    return (
-      (appView === "experiment" &&
-        activeTab === "settings" &&
-        settingsDirty &&
-        !settingsBusy) ||
-      (appView === "globalSettings" &&
-        globalSettingsDirty &&
-        !globalSettingsBusy)
-    );
+  function unsavedNavigationKind(): "settings" | "validation" | null {
+    if (
+      appView === "experiment" &&
+      activeTab === "validation" &&
+      validationDirty &&
+      !workflowBusy
+    ) {
+      return "validation";
+    }
+    if (
+      appView === "experiment" &&
+      activeTab === "settings" &&
+      settingsDirty &&
+      !settingsBusy
+    ) {
+      return "settings";
+    }
+    if (
+      appView === "globalSettings" &&
+      globalSettingsDirty &&
+      !globalSettingsBusy
+    ) {
+      return "settings";
+    }
+    return null;
+  }
+
+  function shouldBlockUnsavedNavigation(): boolean {
+    return unsavedNavigationKind() !== null;
+  }
+
+  function canSavePendingNavigation(): boolean {
+    const kind = unsavedNavigationKind();
+    if (kind === "validation") {
+      return validationState !== null;
+    }
+    if (appView === "globalSettings") {
+      return globalSettingsDraft !== null;
+    }
+    return settingsDraft !== null;
+  }
+
+  function pendingNavigationCopy(): { title: string; body: string } {
+    if (unsavedNavigationKind() === "validation") {
+      return {
+        title: "Unsaved validation changes",
+        body:
+          "Save validation inclusion before leaving this view, or discard the unsaved changes."
+      };
+    }
+    return {
+      title: "Unsaved settings changes",
+      body:
+        "Save the current settings before leaving this view, or discard the draft changes."
+    };
   }
 
   function experimentForRoute(route: ReturnType<typeof currentExperimentRoute>) {
@@ -363,7 +408,7 @@ function App() {
     if (appView === "experiment" && experiment?.id === selectedExperiment?.id) {
       return;
     }
-    if (shouldBlockSettingsNavigation()) {
+    if (shouldBlockUnsavedNavigation()) {
       setNavigationError(null);
       setPendingNavigation({ kind: "experiment", experiment });
       return;
@@ -375,7 +420,7 @@ function App() {
     if (appView === "globalSettings") {
       return;
     }
-    if (shouldBlockSettingsNavigation()) {
+    if (shouldBlockUnsavedNavigation()) {
       setNavigationError(null);
       setPendingNavigation({ kind: "globalSettings" });
       return;
@@ -387,7 +432,7 @@ function App() {
     if (tab === activeTab) {
       return;
     }
-    if (shouldBlockSettingsNavigation()) {
+    if (shouldBlockUnsavedNavigation()) {
       setNavigationError(null);
       setPendingNavigation({ kind: "tab", tab });
       return;
@@ -405,8 +450,16 @@ function App() {
       return;
     }
     const navigation = pendingNavigation;
-    setSettingsDirty(false);
-    setSettingsDraft(null);
+    const kind = unsavedNavigationKind();
+    if (kind === "validation") {
+      setValidationDirty(false);
+    } else if (appView === "globalSettings") {
+      setGlobalSettingsDirty(false);
+      setGlobalSettingsDraft(null);
+    } else {
+      setSettingsDirty(false);
+      setSettingsDraft(null);
+    }
     setPendingNavigation(null);
     setNavigationError(null);
     performPendingNavigation(navigation);
@@ -417,10 +470,13 @@ function App() {
       return;
     }
     const navigation = pendingNavigation;
+    const kind = unsavedNavigationKind();
     setNavigationSaving(true);
     setNavigationError(null);
     try {
-      if (appView === "globalSettings") {
+      if (kind === "validation") {
+        await handleSaveValidationInclusion({ rethrow: true });
+      } else if (appView === "globalSettings") {
         if (globalSettingsDraft === null) {
           return;
         }
@@ -639,7 +695,7 @@ function App() {
     function handlePopState() {
       const url = new URL(window.location.href);
       const requestedRoute = currentExperimentRoute();
-      if (shouldBlockSettingsNavigation()) {
+      if (shouldBlockUnsavedNavigation()) {
         writeCurrentRoute("replace");
         setNavigationError(null);
         setPendingNavigation(
@@ -677,11 +733,14 @@ function App() {
     selectedExperiment,
     settingsBusy,
     settingsDirty,
+    validationDirty,
+    validationState,
+    workflowBusy,
     state
   ]);
 
   useEffect(() => {
-    if (!settingsDirty && !globalSettingsDirty) {
+    if (!settingsDirty && !globalSettingsDirty && !validationDirty) {
       return;
     }
 
@@ -694,7 +753,7 @@ function App() {
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, [globalSettingsDirty, settingsDirty]);
+  }, [globalSettingsDirty, settingsDirty, validationDirty]);
 
   useEffect(() => {
     if (selectedExperiment === null) {
@@ -1208,7 +1267,7 @@ function App() {
     setHumanNotesDirty(false);
   }
 
-  async function handleSaveValidationInclusion() {
+  async function handleSaveValidationInclusion(options?: { rethrow?: boolean }) {
     if (selectedExperiment === null || validationState === null) {
       return;
     }
@@ -1240,6 +1299,9 @@ function App() {
     } catch (error) {
       if (isWorkflowCurrent(requestId, selectionKey)) {
         setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+      }
+      if (options?.rethrow) {
+        throw error;
       }
     } finally {
       if (isWorkflowCurrent(requestId, selectionKey)) {
@@ -1622,7 +1684,7 @@ function App() {
   }
 
   async function handleActiveVersionChange(version: string) {
-    if (shouldBlockSettingsNavigation()) {
+    if (shouldBlockUnsavedNavigation()) {
       setNavigationError(null);
       setPendingNavigation({ kind: "version", version });
       return;
@@ -1721,6 +1783,9 @@ function App() {
     sameVersion: baselineVersion === candidateVersion,
     versionCount: knownVersions.length
   });
+  const pendingNavigationDialog = pendingNavigationCopy();
+  const pendingNavigationSaveDisabled =
+    navigationSaving || !canSavePendingNavigation();
 
   return (
     <main className="app-shell">
@@ -2094,11 +2159,8 @@ function App() {
             role="dialog"
           >
             <div>
-              <h2 id="settings-navigation-title">Unsaved settings changes</h2>
-              <p>
-                Save the current settings before leaving this view, or discard the
-                draft changes.
-              </p>
+              <h2 id="settings-navigation-title">{pendingNavigationDialog.title}</h2>
+              <p>{pendingNavigationDialog.body}</p>
             </div>
             {navigationError !== null ? (
               <div className="settings-error">{navigationError}</div>
@@ -2122,12 +2184,7 @@ function App() {
               </button>
               <button
                 className="primary-action"
-                disabled={
-                  navigationSaving ||
-                  (appView === "globalSettings"
-                    ? globalSettingsDraft === null
-                    : settingsDraft === null)
-                }
+                disabled={pendingNavigationSaveDisabled}
                 onClick={() => void handleSaveSettingsAndContinue()}
                 type="button"
               >

@@ -69,6 +69,11 @@
   background: #ffffff;
 }
 
+.prompt-preview-list-single {
+  align-content: stretch;
+  grid-template-rows: minmax(0, 1fr);
+}
+
 .prompt-preview-card {
   display: grid;
   gap: 10px;
@@ -77,6 +82,11 @@
   border: 1px solid #d0d5dd;
   border-radius: 8px;
   background: #ffffff;
+}
+
+.prompt-preview-list-single .prompt-preview-card {
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
 }
 
 .prompt-preview-card-header {
@@ -124,6 +134,11 @@
   white-space: pre-wrap;
 }
 
+.prompt-preview-list-single .prompt-preview-body {
+  max-height: none;
+  min-height: 0;
+}
+
 .prompt-preview-footer {
   grid-row: 4;
   display: flex;
@@ -134,4 +149,12 @@
   padding: 14px 20px;
   border-top: 1px solid #e4e7ec;
   background: #f9fafb;
+}
+
+.prompt-preview-footer .primary-action,
+.prompt-preview-footer .secondary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
 }

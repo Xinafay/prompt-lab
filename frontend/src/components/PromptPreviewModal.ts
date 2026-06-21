@@ -67,7 +67,12 @@ export function PromptPreviewModal({
         : null,
       React.createElement(
         "div",
-        { className: "prompt-preview-list" },
+        {
+          className:
+            preview.prompts.length === 1
+              ? "prompt-preview-list prompt-preview-list-single"
+              : "prompt-preview-list"
+        },
         preview.prompts.map((prompt, index) =>
           React.createElement(
             "article",

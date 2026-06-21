@@ -92,9 +92,25 @@ def _execute_check(
     return ValidationCheckResult(
         check_id=check_id,
         grade=5 if passed else 1,
+        comment=_measurement_comment(rule, value),
         included_in_judge=True,
         metrics={"value": value},
     )
+
+
+def _measurement_comment(rule: AutomaticRule, value: int) -> str:
+    if rule.kind == "word_count":
+        return f"Word count {value}."
+    if rule.kind == "sentence_count":
+        return f"Sentence count {value}."
+    if rule.kind == "character_count":
+        return f"Character count {value}."
+    if rule.kind == "json_path_count":
+        return f"JSON path count {rule.path} {value}."
+    if rule.kind == "json_path_exists":
+        status = "present" if value == 1 else "missing"
+        return f"JSON path {rule.path} {status}."
+    return f"Measured value {value}."
 
 
 def _measure(run: RunArtifact, rule: AutomaticRule) -> int:

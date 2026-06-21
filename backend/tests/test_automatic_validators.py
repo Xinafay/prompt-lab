@@ -64,6 +64,7 @@ def test_word_count_rule_passes_lte_limit() -> None:
     assert result.included_in_judge is True
     assert result.execution_error is None
     assert result.check_results[0].grade == 5
+    assert result.check_results[0].comment == "Word count 3."
     assert result.check_results[0].metrics == {"value": 3}
 
 
@@ -82,6 +83,7 @@ def test_word_count_rule_failure_maps_to_min_grade() -> None:
 
     assert result.status == "ok"
     assert result.check_results[0].grade == 1
+    assert result.check_results[0].comment == "Word count 4."
     assert result.check_results[0].metrics == {"value": 4}
 
 
@@ -105,6 +107,7 @@ def test_json_path_count_counts_list_items_at_path() -> None:
 
     assert result.status == "ok"
     assert result.check_results[0].grade == 5
+    assert result.check_results[0].comment == "JSON path count scenes 2."
     assert result.check_results[0].metrics == {"value": 2}
 
 

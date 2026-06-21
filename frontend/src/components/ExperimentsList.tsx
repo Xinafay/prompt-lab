@@ -38,6 +38,9 @@ export function ExperimentsList({
             <span className="experiment-nav-model">
               Judge: {experiment.models.judge_model}
             </span>
+            <span className="experiment-nav-model">
+              Validator: {experiment.models.validator_model}
+            </span>
           </button>
         ))}
       </div>
