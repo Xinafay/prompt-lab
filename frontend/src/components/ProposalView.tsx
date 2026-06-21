@@ -13,6 +13,7 @@ interface ProposalViewProps {
   currentPrompt: string;
   currentModel: string | null;
   currentModelFile: string | null;
+  initialViewMode?: ProposalViewMode;
   isBusy: boolean;
   hasUnsavedReviewChanges: boolean;
   onGenerateProposal: () => void;
@@ -26,12 +27,13 @@ export function ProposalView({
   currentPrompt,
   currentModel,
   currentModelFile,
+  initialViewMode = "new",
   isBusy,
   hasUnsavedReviewChanges,
   onGenerateProposal,
   onCreateVersion
 }: ProposalViewProps) {
-  const [viewMode, setViewMode] = useState<ProposalViewMode>("new");
+  const [viewMode, setViewMode] = useState<ProposalViewMode>(initialViewMode);
   const hasModel = Boolean(proposalResponse?.proposal.model_py);
   const modelFile = currentModelFile?.trim() || "model.py";
 
@@ -134,11 +136,15 @@ export function ProposalView({
                     language="python"
                     value={proposalResponse.proposal.model_py}
                   />
+                ) : currentModel === null ? (
+                  <div className="empty-inline">
+                    Current model source unavailable; diff cannot be shown.
+                  </div>
                 ) : (
                   <DiffViewer
                     label="Model diff"
                     language="python"
-                    original={currentModel ?? ""}
+                    original={currentModel}
                     value={proposalResponse.proposal.model_py}
                   />
                 )}

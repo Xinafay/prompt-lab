@@ -32,6 +32,7 @@ after(async () => {
 function renderProposal(props: {
   currentModel?: string | null;
   currentModelFile?: string | null;
+  initialViewMode?: "new" | "diff";
   proposalResponse: ProposalResponse;
 }) {
   return renderToStaticMarkup(
@@ -41,6 +42,7 @@ function renderProposal(props: {
       currentModelFile: props.currentModelFile ?? null,
       currentPrompt: "Existing prompt",
       hasUnsavedReviewChanges: false,
+      initialViewMode: props.initialViewMode,
       isBusy: false,
       onCreateVersion: noop,
       onGenerateProposal: noop,
@@ -73,7 +75,7 @@ test("text proposal renders new version controls, rationale, and prompt without 
 
 test("pydantic proposal renders prompt and model panels with model file fallback", () => {
   const html = renderProposal({
-    currentModel: "class ExistingAnswer(BaseModel):\n    old: str",
+    currentModel: null,
     currentModelFile: null,
     proposalResponse: {
       proposal_dir: "proposal-2",
@@ -94,4 +96,27 @@ test("pydantic proposal renders prompt and model panels with model file fallback
   assert.match(html, /Proposed model/);
   assert.match(html, /model\.py/);
   assert.match(html, /class ProposedAnswer\(BaseModel\)/);
+});
+
+test("pydantic proposal diff shows unavailable state when current model is missing", () => {
+  const html = renderProposal({
+    currentModel: null,
+    currentModelFile: "custom_model.py",
+    initialViewMode: "diff",
+    proposalResponse: {
+      proposal_dir: "proposal-3",
+      proposal: {
+        prompt_md: "Proposed pydantic prompt",
+        model_py: "class ProposedAnswer(BaseModel):\n    answer: str",
+        rationale_md: "The model captures the answer explicitly."
+      },
+      source: {}
+    }
+  });
+
+  assert.match(html, /Prompt diff/);
+  assert.match(html, /custom_model\.py/);
+  assert.match(html, /Current model source unavailable; diff cannot be shown\./);
+  assert.doesNotMatch(html, /Model diff/);
+  assert.doesNotMatch(html, /class ProposedAnswer\(BaseModel\)/);
 });
