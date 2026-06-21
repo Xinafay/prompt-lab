@@ -1,6 +1,8 @@
 import { readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
+const nodeOptions = ["--import", "./scripts/register-tsx-loader.mjs", "--test"];
+
 const testArgs =
   process.argv.length > 2
     ? process.argv
@@ -14,7 +16,7 @@ const testArgs =
         .sort()
         .map((name) => `tests/${name}`);
 
-const result = spawnSync(process.execPath, ["--test", ...testArgs], {
+const result = spawnSync(process.execPath, [...nodeOptions, ...testArgs], {
   stdio: "inherit"
 });
 
