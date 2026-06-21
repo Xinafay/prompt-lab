@@ -48,7 +48,7 @@ export function ProposalView({
               ? "Wait for the current workflow action to finish."
               : reviewState === null
                 ? "Judge the active run before generating a proposal."
-                : "Save review decisions and human notes before generating a proposal."
+                : "Save review changes before generating a proposal."
           }
           onClick={onGenerateProposal}
           type="button"
@@ -59,7 +59,7 @@ export function ProposalView({
 
       {hasUnsavedReviewChanges ? (
         <div className="empty-inline">
-          Save decisions and human notes before generating a proposal.
+          Save review changes before generating a proposal.
         </div>
       ) : null}
 

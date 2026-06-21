@@ -12,7 +12,6 @@ import type {
   ValidationState
 } from "../types";
 import { MatrixItem } from "./MatrixItem";
-import { TooltipButton } from "./TooltipButton";
 import {
   buildValidationMatrix,
   setValidationInclusion,
@@ -27,9 +26,7 @@ interface ValidationViewProps {
   runs: RunArtifact[];
   isBusy: boolean;
   hasRuns: boolean;
-  hasUnsavedChanges: boolean;
   onStateChange: (state: ValidationState) => void;
-  onSaveInclusion: () => void;
 }
 
 interface InclusionState {
@@ -213,9 +210,7 @@ export function ValidationView({
   runs,
   isBusy,
   hasRuns,
-  hasUnsavedChanges,
-  onStateChange,
-  onSaveInclusion
+  onStateChange
 }: ValidationViewProps) {
   const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
   const matrix = useMemo(
@@ -240,30 +235,6 @@ export function ValidationView({
     <section className="validation-panel" aria-label="Validation">
       <div className="section-heading">
         <h3>Validation</h3>
-        <div className="section-actions">
-          <span
-            className={
-              hasUnsavedChanges
-                ? "validation-unsaved-inline"
-                : "validation-unsaved-inline validation-unsaved-inline-hidden"
-            }
-          >
-            Unsaved inclusion changes.
-          </span>
-          <TooltipButton
-            className="secondary-action"
-            disabled={isBusy || !hasUnsavedChanges || validationState === null}
-            disabledReason={
-              isBusy
-                ? "Wait for the current workflow action to finish."
-                : "Change validation inclusion before saving."
-            }
-            onClick={onSaveInclusion}
-            type="button"
-          >
-            Save inclusion
-          </TooltipButton>
-        </div>
       </div>
 
       {validationState === null || matrix === null ? (

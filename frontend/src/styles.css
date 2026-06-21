@@ -2499,7 +2499,7 @@ select {
   }
 
   .workflow-toolbar {
-    position: static;
+    position: sticky;
     display: grid;
     margin: -16px -16px 0;
   }

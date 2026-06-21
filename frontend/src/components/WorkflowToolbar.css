@@ -4,9 +4,37 @@
   font-size: 14px;
 }
 
+.workflow-unsaved-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.workflow-unsaved-action .secondary-action {
+  min-height: 30px;
+  padding: 0 10px;
+  border-color: #fdba74;
+  color: #9a3412;
+  font-size: 13px;
+}
+
 @media (max-width: 760px) {
   .workflow-toolbar .workflow-actions .disabled-tooltip-wrapper,
-  .workflow-toolbar .workflow-actions .secondary-action {
+  .workflow-toolbar .workflow-actions .secondary-action,
+  .workflow-unsaved-action {
     width: 100%;
+  }
+
+  .workflow-unsaved-action {
+    justify-content: space-between;
   }
 }

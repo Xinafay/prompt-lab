@@ -6,17 +6,13 @@ interface ReviewViewProps {
   isBusy: boolean;
   judgeDisabled: boolean;
   judgeDisabledReason: string | null;
-  hasUnsavedDecisionChanges: boolean;
-  hasUnsavedHumanNotesChanges: boolean;
   onJudge: () => void;
   onDecisionChange: (
     findingId: string,
     decision: FindingDecisionValue,
     reason: string | null
   ) => void;
-  onSaveDecisions: () => void;
   onHumanNotesChange: (notes: string) => void;
-  onSaveHumanNotes: () => void;
 }
 
 const decisionOptions: FindingDecisionValue[] = [
@@ -36,13 +32,9 @@ export function ReviewView({
   isBusy,
   judgeDisabled,
   judgeDisabledReason,
-  hasUnsavedDecisionChanges,
-  hasUnsavedHumanNotesChanges,
   onJudge,
   onDecisionChange,
-  onSaveDecisions,
-  onHumanNotesChange,
-  onSaveHumanNotes
+  onHumanNotesChange
 }: ReviewViewProps) {
   const decisionCounts =
     reviewState === null
@@ -113,23 +105,7 @@ export function ReviewView({
                   </div>
                 ) : null}
               </div>
-              <TooltipButton
-                className="secondary-action"
-                disabled={isBusy || !hasUnsavedDecisionChanges}
-                disabledReason={
-                  isBusy
-                    ? "Wait for the current workflow action to finish."
-                    : "Change a decision before saving."
-                }
-                onClick={onSaveDecisions}
-                type="button"
-              >
-                Save decisions
-              </TooltipButton>
             </div>
-            {hasUnsavedDecisionChanges ? (
-              <p className="dirty-copy">Unsaved decision changes.</p>
-            ) : null}
             {reviewState.judgment.findings.map((finding) => {
               const savedDecision =
                 reviewState.decisions.finding_decisions[finding.finding_id] ??
@@ -211,23 +187,7 @@ export function ReviewView({
             <div className="review-section-toolbar">
               <div>
                 <h4>Human notes</h4>
-                {hasUnsavedHumanNotesChanges ? (
-                  <p className="dirty-copy">Unsaved notes.</p>
-                ) : null}
               </div>
-              <TooltipButton
-                className="secondary-action"
-                disabled={isBusy || !hasUnsavedHumanNotesChanges}
-                disabledReason={
-                  isBusy
-                    ? "Wait for the current workflow action to finish."
-                    : "Change human notes before saving."
-                }
-                onClick={onSaveHumanNotes}
-                type="button"
-              >
-                Save notes
-              </TooltipButton>
             </div>
             <textarea
               className="notes-input"

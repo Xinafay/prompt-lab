@@ -16,6 +16,7 @@ interface WorkflowToolbarProps {
   onCancelJob?: () => void;
   primaryAction: ReactNode;
   secondaryAction?: ReactNode;
+  unsavedChangesAction?: ReactNode;
   showDryRunControls: boolean;
 }
 
@@ -32,6 +33,7 @@ export function WorkflowToolbar({
   onWorkflowModeChange,
   primaryAction,
   secondaryAction = null,
+  unsavedChangesAction = null,
   showDryRunControls
 }: WorkflowToolbarProps) {
   const statusMessage =
@@ -44,6 +46,7 @@ export function WorkflowToolbar({
     showDryRunControls ||
     primaryAction !== null ||
     secondaryAction !== null ||
+    unsavedChangesAction !== null ||
     showCancelAction;
 
   return (
@@ -87,6 +90,7 @@ export function WorkflowToolbar({
               <span>Dry-run</span>
             </label>
           ) : null}
+          {unsavedChangesAction}
           {secondaryAction}
           {primaryAction}
           {showCancelAction ? (
