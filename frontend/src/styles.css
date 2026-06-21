@@ -474,6 +474,30 @@ select {
   grid-column: 1 / -1;
 }
 
+.overview-source-grid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  min-width: 0;
+}
+
+.overview-source-grid-single {
+  grid-template-columns: 1fr;
+}
+
+.overview-code-viewer {
+  padding: 14px;
+}
+
+.overview-inline-empty {
+  margin: 0;
+  padding: 16px;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .settings-form {
   display: grid;
   gap: 14px;
@@ -2482,6 +2506,7 @@ select {
 
   .tool-layout,
   .overview-grid,
+  .overview-source-grid,
   .case-row {
     grid-template-columns: 1fr;
   }
