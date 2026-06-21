@@ -580,14 +580,22 @@ def _validation_snapshot_lookup(
     lookup: dict[str, dict[str, object]] = {}
     for validator in validators:
         checks = getattr(validator, "checks", [])
-        check_lookup = {
-            check.check_id: {"check_title": check.title}
-            for check in checks
-        }
-        lookup[validator.validator_id] = {
+        check_lookup: dict[str, dict[str, object]] = {}
+        for check in checks:
+            check_payload: dict[str, object] = {"check_title": check.title}
+            check_question = getattr(check, "question", "")
+            if isinstance(check_question, str) and check_question:
+                check_payload["check_question"] = check_question
+            if check.description:
+                check_payload["check_description"] = check.description
+            check_lookup[check.check_id] = check_payload
+        validator_payload: dict[str, object] = {
             "validator_title": validator.title,
             "checks": check_lookup,
         }
+        if validator.description:
+            validator_payload["validator_description"] = validator.description
+        lookup[validator.validator_id] = validator_payload
     return lookup
 
 
@@ -617,6 +625,9 @@ def _build_validation_evidence(
             validator_title = validator_snapshot.get("validator_title")
             if isinstance(validator_title, str):
                 payload["validator_title"] = validator_title
+            validator_description = validator_snapshot.get("validator_description")
+            if isinstance(validator_description, str):
+                payload["validator_description"] = validator_description
             evidence.append(payload)
         for check in result.check_results:
             if not check.included_in_judge:
@@ -632,12 +643,21 @@ def _build_validation_evidence(
             validator_title = validator_snapshot.get("validator_title")
             if isinstance(validator_title, str):
                 payload["validator_title"] = validator_title
+            validator_description = validator_snapshot.get("validator_description")
+            if isinstance(validator_description, str):
+                payload["validator_description"] = validator_description
             if isinstance(check_lookup, dict):
                 check_snapshot = check_lookup.get(check.check_id)
                 if isinstance(check_snapshot, dict):
                     check_title = check_snapshot.get("check_title")
                     if isinstance(check_title, str):
                         payload["check_title"] = check_title
+                    check_question = check_snapshot.get("check_question")
+                    if isinstance(check_question, str):
+                        payload["check_question"] = check_question
+                    check_description = check_snapshot.get("check_description")
+                    if isinstance(check_description, str):
+                        payload["check_description"] = check_description
             evidence.append(payload)
     return evidence
 
@@ -2035,7 +2055,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             model_source = store.read_text(experiment_id, version, model_file)
             output_declaration = (
                 f"pydantic model: {model_entrypoint}\n"
-                f"model file: {model_file}\n\n{model_source}"
+                f"model file: {model_file}"
             )
         else:
             output_declaration = "text output"
@@ -2159,7 +2179,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 model_source = store.read_text(experiment_id, version, model_file)
                 output_declaration = (
                     f"pydantic model: {model_entrypoint}\n"
-                    f"model file: {model_file}\n\n{model_source}"
+                    f"model file: {model_file}"
                 )
             else:
                 output_declaration = "text output"

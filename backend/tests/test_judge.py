@@ -161,7 +161,9 @@ def write_demo_experiment(
     (example / "rubric.md").write_text(
         "Prefer complete answers and valid JSON.", encoding="utf-8"
     )
-    (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
+    (version_dir / "prompt.md").write_text(
+        "Say {{ value }}\n\n<<MODEL>>", encoding="utf-8"
+    )
     (version_dir / "model.py").write_text(
         "from pydantic import BaseModel\n\nclass DemoOutput(BaseModel):\n    answer: str\n",
         encoding="utf-8",
@@ -239,7 +241,7 @@ def write_run_batch(
             "validator_id": "quality",
             "type": "llm_questionnaire",
             "title": "Quality checks",
-            "description": "",
+            "description": "Checks whether the generated answer is usable.",
             "enabled": True,
             "input_scope": "output_only",
             "checks": [
@@ -247,7 +249,7 @@ def write_run_batch(
                     "check_id": "complete",
                     "title": "Complete answer",
                     "question": "Is the answer complete?",
-                    "description": "",
+                    "description": "The answer should cover all requested parts.",
                 }
             ],
         },
@@ -447,19 +449,22 @@ def test_build_judge_prompt_uses_validation_evidence_without_raw_outputs_or_rubr
         run_batch_id="batch-001",
         validation_batch_id="validation-001",
         judge_model="openai/judge",
-        output_declaration="pydantic model: model.DemoOutput",
-        prompt_template="Say {{ value }}",
-        model_source="class DemoOutput: ...\n    answer: str",
+        output_declaration="pydantic model: model.DemoOutput\nnote <<MODEL>>",
+        prompt_template="Say {{ value }}\n\n<<MODEL>>",
+        model_source="class DemoOutput: ...\n    answer: str\n    note = '<<MODEL>>'",
         validation_evidence=[
             {
                 "validator_id": "quality",
                 "validator_title": "Quality checks",
+                "validator_description": "Checks whether the generated answer is usable.",
                 "check_id": "complete",
                 "check_title": "Complete answer",
+                "check_question": "Is the answer complete?",
+                "check_description": "The answer should cover all requested parts.",
                 "case_id": "case-a",
                 "repeat_index": 1,
                 "grade": 1,
-                "comment": "evidence comment",
+                "comment": "evidence comment with <<MODEL>>",
             }
         ],
         run_errors=[
@@ -467,7 +472,7 @@ def test_build_judge_prompt_uses_validation_evidence_without_raw_outputs_or_rubr
                 "case_id": "case-a",
                 "repeat_index": 2,
                 "status": "validation_error",
-                "validation_error": "answer must be a string",
+                "validation_error": "answer must be a string near <<MODEL>>",
                 "execution_error": None,
             }
         ],
@@ -483,10 +488,19 @@ def test_build_judge_prompt_uses_validation_evidence_without_raw_outputs_or_rubr
     assert "validation evidence as primary analysis of run outputs" in prompt
     assert "Do not ask for raw outputs" in prompt
     assert "Say {{ value }}" in prompt
+    assert "[OUTPUT_MODEL_SCHEMA: see CURRENT_MODEL_PY]" in prompt
+    assert prompt.count("[MODEL_MARKER_LITERAL]") == 4
+    assert "validation evidence fields" in prompt
+    assert "recommended: clear next change" in prompt
+    assert "decision_points only for real user tradeoffs" in prompt
     assert "pydantic model: model.DemoOutput" in prompt
     assert "class DemoOutput" in prompt
+    assert prompt.count("class DemoOutput") == 1
     assert "VALIDATION_EVIDENCE_JSON" in prompt
     assert "evidence comment" in prompt
+    assert "Checks whether the generated answer is usable." in prompt
+    assert "Is the answer complete?" in prompt
+    assert "The answer should cover all requested parts." in prompt
     assert "validation-001" in prompt
     assert "RAW SECRET" not in prompt
     assert "RUBRIC" not in prompt
@@ -664,7 +678,13 @@ def test_api_creates_judgment_and_default_accepted_decisions() -> None:
             assert captured["response_model"] is JudgmentArtifact
             assert captured["validation_context"] is None
             assert "VALIDATION_EVIDENCE_JSON" in captured["prompt"]
+            assert captured["prompt"].count("<<MODEL>>") == 1
+            assert "[OUTPUT_MODEL_SCHEMA: see CURRENT_MODEL_PY]" in captured["prompt"]
+            assert captured["prompt"].count("class DemoOutput") == 1
             assert "Validation evidence for case-a repeat 1" in captured["prompt"]
+            assert "Checks whether the generated answer is usable." in captured["prompt"]
+            assert "Is the answer complete?" in captured["prompt"]
+            assert "The answer should cover all requested parts." in captured["prompt"]
             assert "answer must be a string" in captured["prompt"]
             assert "RAW SECRET" not in captured["prompt"]
             assert "EXCLUDED CHECK" not in captured["prompt"]
@@ -684,6 +704,13 @@ def test_api_creates_judgment_and_default_accepted_decisions() -> None:
             assert "verdict" not in evidence
             assert evidence["comment"] == (
                 "Validation evidence for case-a repeat 1"
+            )
+            assert evidence["validator_description"] == (
+                "Checks whether the generated answer is usable."
+            )
+            assert evidence["check_question"] == "Is the answer complete?"
+            assert evidence["check_description"] == (
+                "The answer should cover all requested parts."
             )
             assert "EXCLUDED CHECK" not in json.dumps(validation_context)
             assert "EXCLUDED RESULT" not in json.dumps(validation_context)
@@ -765,6 +792,9 @@ def test_api_includes_validation_result_execution_errors_in_judge_evidence() -> 
                 {
                     "validator_id": "quality",
                     "validator_title": "Quality checks",
+                    "validator_description": (
+                        "Checks whether the generated answer is usable."
+                    ),
                     "case_id": "case-a",
                     "repeat_index": 1,
                     "status": "error",

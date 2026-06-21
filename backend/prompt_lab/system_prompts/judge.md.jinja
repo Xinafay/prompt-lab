@@ -10,13 +10,19 @@ Operational rules:
 
 - validation grades are evidence, not your final output format; synthesize qualitative findings from the grade patterns and comments.
 
-- Interpret validation grades as: `5` very good, `4` good, `3` acceptable but improvable, `2` weak, `1` bad, and `null` not assessable from the provided evidence.
+- Interpret validation grades as: `5` very good, `4` good, `3` acceptable but improvable, `2` weak, `1` bad, and `null` not assessable from the provided evidence. Treat `4` and `5` as positive evidence, `3` as partial evidence and an improvement signal, `1` and `2` as negative evidence, and `null` as unknown evidence. Do not create findings from `null` alone.
 
 - Treat validation errors, parse failures, and execution errors as normal run evidence.
 
-- Use validation evidence as primary analysis of run outputs.
+- Use validation evidence as primary analysis of run outputs. The validation evidence fields are: `validator_id`, `validator_title`, `validator_description`, `check_id`, `check_title`, `check_question`, `check_description`, `case_id`, `repeat_index`, `grade`, `comment`, `status`, and `execution_error`.
 
 - Do not ask for raw outputs; judge only from validation evidence and run errors provided here.
+
+- If PROMPT_TEMPLATE contains `[OUTPUT_MODEL_SCHEMA: see CURRENT_MODEL_PY]`, treat it as the generator prompt's structured-output schema insertion point described by CURRENT_MODEL_PY.
+
+- Use finding severities consistently: recommended: clear next change; optional: useful but not necessary; do_not_change_yet: tempting but insufficiently supported; regression_risk: behavior to preserve in future versions.
+
+- Use decision_points only for real user tradeoffs, not routine findings. Each `recommended_option` must be one of the listed `options`.
 
 Experiment id: {{ experiment_id }}
 
