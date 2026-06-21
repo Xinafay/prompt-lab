@@ -88,8 +88,34 @@ class ProposalDraft(BaseModel):
         return _strip_wrapping_code_fence(value)
 
 
-class PydanticProposalDraft(ProposalDraft):
+class PydanticProposalDraft(BaseModel):
     """Structured proposal for an experiment that returns a Pydantic model."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    prompt_md: str = Field(
+        min_length=1,
+        description=(
+            "Complete replacement contents for prompt.md. Include exactly one "
+            "literal <<MODEL>> marker for the generator output schema."
+        ),
+    )
+    model_py: str = Field(
+        min_length=1,
+        description=(
+            "Complete replacement contents for model.py. If the output contract "
+            "does not change, return the current model.py contents unchanged."
+        ),
+    )
+    rationale_md: str = Field(
+        min_length=1,
+        description="Short rationale explaining how the proposal addresses accepted findings.",
+    )
+
+    @field_validator("prompt_md", "model_py", "rationale_md", mode="before")
+    @classmethod
+    def strip_wrapping_code_fence(cls, value: object) -> object:
+        return _strip_wrapping_code_fence(value)
 
     @field_validator("prompt_md")
     @classmethod
@@ -98,6 +124,13 @@ class PydanticProposalDraft(ProposalDraft):
             raise ValueError(
                 "pydantic proposal prompt_md must contain exactly one <<MODEL>>"
             )
+        return value
+
+    @field_validator("model_py", mode="before")
+    @classmethod
+    def require_model_py(cls, value: object) -> object:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("pydantic proposal model_py must contain complete model.py")
         return value
 
 
@@ -112,6 +145,8 @@ def proposal_response_model(output_type: str) -> ProposalResponseModel:
 
 def proposal_response_to_draft(output: object) -> ProposalDraft:
     if isinstance(output, ProposalDraft):
+        return ProposalDraft.model_validate(output.model_dump(mode="json"))
+    if isinstance(output, PydanticProposalDraft):
         return ProposalDraft.model_validate(output.model_dump(mode="json"))
     if isinstance(output, TextProposalDraft):
         return ProposalDraft(

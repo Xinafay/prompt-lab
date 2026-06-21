@@ -14,13 +14,13 @@ Rules:
 
 - preserve task scope.
 
-- change `model.py` only when contract changes are clearly needed.
+- change `model.py` contents only when contract changes are clearly needed.
 
-- Use the output-specific response schema. Text-output proposals return only `prompt_md` and `rationale_md`; pydantic-output proposals may also return `model_py`.
+- Use the output-specific response schema. Text-output proposals return only `prompt_md` and `rationale_md`; pydantic-output proposals return `prompt_md`, `model_py`, and `rationale_md`.
 
 - If the experiment output is text, do not propose `model.py` changes.
 
-- If the experiment output is pydantic, prefer prompt changes unless the output contract clearly needs a model.py change.
+- If the experiment output is pydantic, always return complete `model_py`. If the output contract does not change, copy CURRENT_MODEL_PY unchanged.
 
 - If CURRENT_PROMPT_MD contains `[OUTPUT_MODEL_SCHEMA: see CURRENT_MODEL_PY]`, treat it as the generator prompt's structured-output schema insertion point. If you return a pydantic `prompt_md` that keeps structured output, write that marker in the actual prompt file as two `<` characters, then `MODEL`, then two `>` characters.
 

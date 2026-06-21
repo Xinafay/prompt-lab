@@ -202,12 +202,12 @@ def test_text_proposal_draft_rejects_model_marker() -> None:
         raise AssertionError("Expected text proposal to reject <<MODEL>>")
 
 
-def test_pydantic_proposal_draft_requires_one_model_marker() -> None:
+def test_pydantic_proposal_draft_requires_prompt_marker_and_model_py() -> None:
     for prompt_md in ["Improved prompt", "A\n\n<<MODEL>>\n\nB\n\n<<MODEL>>"]:
         try:
             PydanticProposalDraft(
                 prompt_md=prompt_md,
-                model_py=None,
+                model_py="from pydantic import BaseModel\n",
                 rationale_md="Pydantic prompts need one schema marker.",
             )
         except ValueError as error:
@@ -217,12 +217,26 @@ def test_pydantic_proposal_draft_requires_one_model_marker() -> None:
         else:
             raise AssertionError("Expected pydantic proposal to reject marker count")
 
+    try:
+        PydanticProposalDraft.model_validate(
+            {
+                "prompt_md": "Improved prompt\n\n<<MODEL>>",
+                "model_py": None,
+                "rationale_md": "Pydantic proposals must include model.py.",
+            }
+        )
+    except ValueError as error:
+        assert "pydantic proposal model_py must contain complete model.py" in str(error)
+    else:
+        raise AssertionError("Expected pydantic proposal to require model_py")
+
     proposal = PydanticProposalDraft(
         prompt_md="Improved prompt\n\n<<MODEL>>",
-        model_py=None,
+        model_py="from pydantic import BaseModel\n",
         rationale_md="Pydantic prompt keeps structured output.",
     )
     assert proposal.prompt_md.endswith("<<MODEL>>")
+    assert proposal.model_py.startswith("from pydantic")
 
 
 def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
@@ -295,7 +309,8 @@ def test_build_proposal_prompt_sorts_decisions_and_includes_rules() -> None:
     assert "rejected findings are constraints" in prompt
     assert "deferred findings are ignored" in prompt
     assert "preserve task scope" in prompt
-    assert "change `model.py` only when contract changes are clearly needed" in prompt
+    assert "change `model.py` contents only when contract changes are clearly needed" in prompt
+    assert "always return complete `model_py`" in prompt
     assert "Say {{ value }} and include summary." in prompt
     assert "[OUTPUT_MODEL_SCHEMA: see CURRENT_MODEL_PY]" in prompt
     assert prompt.count("[MODEL_MARKER_LITERAL]") == 2
@@ -884,7 +899,7 @@ def test_api_rejects_text_proposal_that_returns_model_py() -> None:
 def main() -> int:
     tests: list[Any] = [
         test_text_proposal_draft_rejects_model_marker,
-        test_pydantic_proposal_draft_requires_one_model_marker,
+        test_pydantic_proposal_draft_requires_prompt_marker_and_model_py,
         test_build_proposal_prompt_sorts_decisions_and_includes_rules,
         test_proposal_prompt_template_file_is_used,
         test_api_generates_proposal_artifacts_with_traceable_source,
