@@ -1,18 +1,22 @@
 import { expect, test } from "@playwright/test";
 
-test("demo string overview shows prompt and validators", async ({ page }) => {
-  await page.goto("/demo-string/overview");
+test("demo string prompt and validators tabs show source sections", async ({ page }) => {
+  await page.goto("/demo-string/prompt");
 
-  const overview = page.getByRole("region", { name: "Experiment overview" });
-  await expect(overview.getByRole("heading", { name: "Demo String" })).toBeVisible();
-  await expect(overview.getByRole("heading", { name: "Prompt" })).toBeVisible();
-  await expect(overview.getByText("Reply to the customer ticket")).toBeVisible();
+  const prompt = page.getByRole("region", { name: "Prompt source" });
+  await expect(prompt.getByRole("heading", { name: "Demo String" })).toBeVisible();
+  await expect(prompt.getByRole("heading", { name: "Prompt" })).toBeVisible();
+  await expect(prompt.getByText("Reply to the customer ticket")).toBeVisible();
+  await expect(prompt.getByText("Reply quality")).not.toBeVisible();
 
-  await expect(overview.getByRole("heading", { name: "Validators" })).toBeVisible();
-  await expect(overview.getByRole("heading", { name: "Reply quality" })).toBeVisible();
-  await expect(overview.getByText("LLM questionnaire")).toBeVisible();
-  await expect(overview.getByRole("heading", { name: "Reply stats" })).toBeVisible();
-  await expect(overview.getByText("Automatic")).toBeVisible();
+  await page.getByRole("tab", { name: "Validators" }).click();
+
+  const validators = page.getByRole("region", { name: "Validators" });
+  await expect(validators.getByRole("heading", { name: "Validators" })).toBeVisible();
+  await expect(validators.getByRole("heading", { name: "Reply quality" })).toBeVisible();
+  await expect(validators.getByText("LLM questionnaire")).toBeVisible();
+  await expect(validators.getByRole("heading", { name: "Reply stats" })).toBeVisible();
+  await expect(validators.getByText("Automatic")).toBeVisible();
 });
 
 test("demo string compare shows validator matrix and evidence modal", async ({
@@ -38,20 +42,20 @@ test("demo string compare shows validator matrix and evidence modal", async ({
   await expect(page.getByRole("dialog")).toContainText("billing-reply");
 });
 
-test("demo json overview shows prompt and model source", async ({ page }) => {
-  await page.goto("/demo-json/overview");
+test("demo json prompt shows prompt and model source", async ({ page }) => {
+  await page.goto("/demo-json/prompt");
 
-  const overview = page.getByRole("region", { name: "Experiment overview" });
-  await expect(overview).toBeVisible();
-  await expect(overview.getByRole("heading", { name: "Demo JSON" })).toBeVisible();
-  await expect(overview.getByRole("heading", { name: "Prompt" })).toBeVisible();
+  const prompt = page.getByRole("region", { name: "Prompt source" });
+  await expect(prompt).toBeVisible();
+  await expect(prompt.getByRole("heading", { name: "Demo JSON" })).toBeVisible();
+  await expect(prompt.getByRole("heading", { name: "Prompt" })).toBeVisible();
   await expect(
-    overview.getByText("Create a concise launch-readiness report")
+    prompt.getByText("Create a concise launch-readiness report")
   ).toBeVisible();
 
-  await expect(overview.getByRole("heading", { name: "Model" })).toBeVisible();
-  await expect(overview.getByText("model.py").first()).toBeVisible();
-  await expect(overview.getByText("class DemoReport")).toBeVisible();
+  await expect(prompt.getByRole("heading", { name: "Model" })).toBeVisible();
+  await expect(prompt.getByText("model.py").first()).toBeVisible();
+  await expect(prompt.getByText("class DemoReport")).toBeVisible();
 });
 
 test("demo json proposal shows new prompt and model plus diff", async ({

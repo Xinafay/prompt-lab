@@ -34,9 +34,9 @@ import {
 import { CaseBrowser } from "./components/CaseBrowser";
 import { ComparisonView } from "./components/ComparisonView";
 import { ExperimentSettings } from "./components/ExperimentSettings";
-import { ExperimentOverview } from "./components/ExperimentOverview";
 import { ExperimentsList } from "./components/ExperimentsList";
 import { GlobalSettings } from "./components/GlobalSettings";
+import { PromptView } from "./components/PromptView";
 import { PromptPreviewModal } from "./components/PromptPreviewModal";
 import { ProposalView } from "./components/ProposalView";
 import { ReviewView } from "./components/ReviewView";
@@ -46,6 +46,7 @@ import {
   buildValidationInclusionUpdate,
   ValidationView
 } from "./components/ValidationView";
+import { ValidatorsView } from "./components/ValidatorsView";
 import { snapshotReviewState } from "./components/reviewStateSnapshot";
 import { snapshotValidationState } from "./components/validationStateSnapshot";
 import { WorkbenchTabs } from "./components/WorkbenchTabs";
@@ -367,7 +368,7 @@ function App() {
     | null {
     if (
       appView === "experiment" &&
-      activeTab === "overview" &&
+      activeTab === "prompt" &&
       sourceDirty &&
       !workflowBusy
     ) {
@@ -1194,12 +1195,12 @@ function App() {
         await refreshExperimentsAfterSettingsSave(savedExperiment);
         clearSourceEditor();
         setWorkflowMessage(`Created ${response.version} and switched to it.`);
-        activateTab("overview");
+        activateTab("prompt");
       } else {
         await refreshCurrentVersionAfterSourceOverwrite(experiment, version);
         clearSourceEditor();
         setWorkflowMessage(`Overwrote ${version} and cleared generated artifacts.`);
-        activateTab("overview");
+        activateTab("prompt");
       }
 
       if (navigation !== null) {
@@ -1797,7 +1798,7 @@ function App() {
       setProposalResponse(null);
       await refreshExperimentsAfterSettingsSave(savedExperiment);
       setWorkflowMessage(`Created ${response.version} and switched to it.`);
-      activateTab("overview");
+      activateTab("prompt");
     } catch (error) {
       if (workflowRequestIdRef.current === requestId) {
         setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
@@ -2327,8 +2328,8 @@ function App() {
                   />
 
                   <div className="workbench-body">
-                    {activeTab === "overview" ? (
-                      <ExperimentOverview
+                    {activeTab === "prompt" ? (
+                      <PromptView
                         overview={detailState.overview}
                         isRunning={workflowLocked}
                         isSourceEditing={sourceEditing}
@@ -2358,6 +2359,12 @@ function App() {
                         onDraftChange={setSettingsDraft}
                         onReset={handleResetExperimentSettings}
                         onSave={handleSaveExperimentSettings}
+                      />
+                    ) : null}
+
+                    {activeTab === "validators" ? (
+                      <ValidatorsView
+                        validators={detailState.overview.validators ?? []}
                       />
                     ) : null}
 

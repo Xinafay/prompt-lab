@@ -122,7 +122,7 @@ test("pydantic proposal diff shows unavailable state when current model is missi
   assert.doesNotMatch(html, /class ProposedAnswer\(BaseModel\)/);
 });
 
-test("production proposal create-version flow switches to new overview version", () => {
+test("production proposal create-version flow switches to new prompt version", () => {
   const source = readFileSync(
     new URL("../src/App.tsx", import.meta.url),
     "utf8"
@@ -130,5 +130,5 @@ test("production proposal create-version flow switches to new overview version",
 
   assert.match(source, /active_version: response\.version/);
   assert.match(source, /Created \$\{response\.version\} and switched to it\./);
-  assert.match(source, /activateTab\("overview"\)/);
+  assert.match(source, /activateTab\("prompt"\)/);
 });

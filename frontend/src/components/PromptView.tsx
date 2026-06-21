@@ -1,10 +1,9 @@
-import type { Case, VersionOverview, VersionSourceDraft } from "../types";
+import type { VersionOverview, VersionSourceDraft } from "../types";
 import { CodeEditor, CodeViewer, DiffViewer } from "./CodeViewer";
-import { ValidatorsPreview } from "./ValidatorsPreview";
 
 type SourceViewMode = "edit" | "diff";
 
-interface ExperimentOverviewProps {
+interface PromptViewProps {
   overview: VersionOverview;
   isRunning: boolean;
   isSourceEditing?: boolean;
@@ -22,26 +21,7 @@ interface ExperimentOverviewProps {
   sourceViewMode?: SourceViewMode;
 }
 
-function formatCaseContract(artifactCase: Case): string {
-  return JSON.stringify(
-    {
-      bindings: artifactCase.bindings,
-      stores: artifactCase.stores
-    },
-    null,
-    2
-  );
-}
-
-function summarizeCaseContract(artifactCase: Case): string {
-  const bindingCount = Object.keys(artifactCase.bindings).length;
-  const storeCount = Object.keys(artifactCase.stores).length;
-  return `${bindingCount} binding${bindingCount === 1 ? "" : "s"} · ${storeCount} store${
-    storeCount === 1 ? "" : "s"
-  }`;
-}
-
-export function ExperimentOverview({
+export function PromptView({
   overview,
   isRunning,
   isSourceEditing = false,
@@ -57,7 +37,7 @@ export function ExperimentOverview({
   sourceDirty = false,
   sourceDraft = null,
   sourceViewMode = "edit"
-}: ExperimentOverviewProps) {
+}: PromptViewProps) {
   const isPydanticOutput = overview.experiment.output.type === "pydantic";
   const modelFile = overview.model_file ?? "model.py";
   const activeDraft =
@@ -78,7 +58,7 @@ export function ExperimentOverview({
   }
 
   return (
-    <section className="overview-grid" aria-label="Experiment overview">
+    <section className="overview-grid" aria-label="Prompt source">
       <div className="overview-header">
         <div>
           <h2>{overview.experiment.title}</h2>
@@ -233,33 +213,6 @@ export function ExperimentOverview({
             )}
           </div>
         ) : null}
-      </div>
-
-      <div className="overview-section overview-section-wide">
-        <div className="section-heading">
-          <h3>Validators</h3>
-          <span>{(overview.validators ?? []).length}</span>
-        </div>
-        <ValidatorsPreview validators={overview.validators ?? []} />
-      </div>
-
-      <div className="overview-section overview-section-wide">
-        <div className="section-heading">
-          <h3>Cases</h3>
-          <span>{overview.cases.length}</span>
-        </div>
-        <div className="case-list">
-          {overview.cases.map((artifactCase) => (
-            <article className="case-row" key={artifactCase.id}>
-              <div>
-                <h4>{artifactCase.title}</h4>
-                <p>{artifactCase.id}</p>
-                <p>{summarizeCaseContract(artifactCase)}</p>
-              </div>
-              <pre>{formatCaseContract(artifactCase)}</pre>
-            </article>
-          ))}
-        </div>
       </div>
     </section>
   );

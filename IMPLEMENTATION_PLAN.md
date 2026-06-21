@@ -89,7 +89,8 @@ prompt-lab/
       types.ts
       components/
         ExperimentsList.tsx
-        ExperimentOverview.tsx
+        PromptView.tsx
+        ValidatorsView.tsx
         RunsView.tsx
         RunDetail.tsx
         ReviewView.tsx
@@ -2354,11 +2355,12 @@ git commit -m "feat: scaffold prompt lab frontend"
 
 ---
 
-### Task 18: Frontend Experiment Overview And Runs
+### Task 18: Frontend Prompt, Validators, And Runs
 
 **Files:**
 - Create: `frontend/src/components/ExperimentsList.tsx`
-- Create: `frontend/src/components/ExperimentOverview.tsx`
+- Create: `frontend/src/components/PromptView.tsx`
+- Create: `frontend/src/components/ValidatorsView.tsx`
 - Create: `frontend/src/components/RunsView.tsx`
 - Modify: `frontend/src/App.tsx`
 - Modify: `frontend/src/types.ts`

@@ -35,7 +35,7 @@ Examples:
 
 Use `demo-string` and `demo-json` for manual browser testing and UI regression
 checks. They are intentionally small, deterministic, and include enough
-committed runtime artifacts to exercise Overview, Settings, Cases, Runs,
+committed runtime artifacts to exercise Prompt, Settings, Validators, Cases, Runs,
 Validation, Review, Proposal, and Compare without spending real LLM tokens.
 Each demo fixture keeps at least two cases and two repeats per case so UI tests
 exercise the common case/repeat matrix instead of a single-output happy path.

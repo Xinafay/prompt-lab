@@ -2,8 +2,9 @@ const EXPERIMENT_PARAM = "experiment";
 const GLOBAL_SETTINGS_SEGMENT = "global-settings";
 
 export const workbenchTabs = [
-  "overview",
+  "prompt",
   "settings",
+  "validators",
   "cases",
   "runs",
   "validation",
@@ -19,7 +20,7 @@ export interface ExperimentRoute {
   tab: WorkbenchTab;
 }
 
-const DEFAULT_TAB: WorkbenchTab = "overview";
+const DEFAULT_TAB: WorkbenchTab = "prompt";
 
 function isWorkbenchTab(value: string | undefined): value is WorkbenchTab {
   return workbenchTabs.includes(value as WorkbenchTab);

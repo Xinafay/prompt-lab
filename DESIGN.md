@@ -773,16 +773,22 @@ Show:
 - last run;
 - last judgment/comparison.
 
-### Experiment Overview
+### Prompt
 
 Show:
 
 - active version selector;
 - prompt editor;
 - Pydantic model editor or text-output notice;
-- validator list and validation status;
-- cases list;
-- buttons: `Run version`, `Validate active run`, `Judge validated run`, `Compare with previous version`, `Create proposal`.
+- buttons: `Run version`.
+
+### Validators
+
+Show:
+
+- validator list;
+- validator type, input scope, and enabled status;
+- configured checks.
 
 ### Runs
 

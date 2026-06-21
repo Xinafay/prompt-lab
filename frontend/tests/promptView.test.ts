@@ -22,9 +22,8 @@ registerHooks({
   }
 });
 
-const { ExperimentOverview } = await import(
-  "../src/components/ExperimentOverview.tsx"
-);
+const { PromptView } = await import("../src/components/PromptView.tsx");
+const { ValidatorsView } = await import("../src/components/ValidatorsView.tsx");
 
 function buildOverview(
   outputType: "text" | "pydantic",
@@ -65,9 +64,9 @@ function buildOverview(
   };
 }
 
-test("text output overview renders prompt content without model source", () => {
+test("text output prompt view renders prompt content without model source", () => {
   const html = renderToStaticMarkup(
-    React.createElement(ExperimentOverview, {
+    React.createElement(PromptView, {
       overview: buildOverview("text"),
       isRunning: false,
       onRunVersion: () => undefined
@@ -80,9 +79,9 @@ test("text output overview renders prompt content without model source", () => {
   assert.doesNotMatch(html, /model\.py/);
 });
 
-test("pydantic output overview renders prompt and model source", () => {
+test("pydantic output prompt view renders prompt and model source", () => {
   const html = renderToStaticMarkup(
-    React.createElement(ExperimentOverview, {
+    React.createElement(PromptView, {
       overview: buildOverview("pydantic", {
         model_py: "from pydantic import BaseModel\n\nclass Answer(BaseModel):\n    value: str\n"
       }),
@@ -99,9 +98,9 @@ test("pydantic output overview renders prompt and model source", () => {
   assert.match(html, /class Answer\(BaseModel\)/);
 });
 
-test("overview can hide its local run action for workbench toolbar layouts", () => {
+test("prompt view can hide its local run action for workbench toolbar layouts", () => {
   const html = renderToStaticMarkup(
-    React.createElement(ExperimentOverview, {
+    React.createElement(PromptView, {
       overview: buildOverview("text"),
       isRunning: false,
       onRunVersion: () => undefined,
@@ -112,9 +111,9 @@ test("overview can hide its local run action for workbench toolbar layouts", () 
   assert.doesNotMatch(html, /Run version/);
 });
 
-test("editable overview renders source editing actions and diff mode", () => {
+test("editable prompt view renders source editing actions and diff mode", () => {
   const html = renderToStaticMarkup(
-    React.createElement(ExperimentOverview, {
+    React.createElement(PromptView, {
       overview: buildOverview("pydantic", {
         model_py: "from pydantic import BaseModel\n\nclass Answer(BaseModel):\n    value: str\n"
       }),
@@ -147,7 +146,83 @@ test("editable overview renders source editing actions and diff mode", () => {
   assert.match(html, /confidence: float/);
 });
 
-test("production workbench overview delegates to ExperimentOverview", () => {
+test("prompt view does not include validators or cases", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(PromptView, {
+      overview: buildOverview("text", {
+        cases: [
+          {
+            schema_version: "prompt_lab.case/v2",
+            id: "case-a",
+            title: "Case A",
+            stores: {},
+            bindings: {}
+          }
+        ],
+        validators: [
+          {
+            schema_version: "prompt_lab.validator/v1",
+            validator_id: "reply-quality",
+            type: "automatic",
+            title: "Reply quality",
+            description: "Checks the reply.",
+            enabled: true,
+            input_scope: "output_only",
+            checks: [
+              {
+                check_id: "has-answer",
+                title: "Has answer",
+                description: "",
+                rule: {
+                  kind: "word_count",
+                  source: "output_text",
+                  comparison: { op: "gte", value: 3 }
+                }
+              }
+            ]
+          }
+        ]
+      }),
+      isRunning: false,
+      onRunVersion: () => undefined
+    })
+  );
+
+  assert.doesNotMatch(html, /Reply quality/);
+  assert.doesNotMatch(html, /Case A/);
+});
+
+test("validators view renders validators independently from prompt view", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(ValidatorsView, {
+      validators: [
+        {
+          schema_version: "prompt_lab.validator/v1",
+          validator_id: "reply-quality",
+          type: "llm_questionnaire",
+          title: "Reply quality",
+          description: "Checks the reply.",
+          enabled: true,
+          input_scope: "output_and_case",
+          checks: [
+            {
+              check_id: "answers-question",
+              title: "Answers question",
+              description: "The reply answers the user.",
+              question: "Does the reply answer the user?"
+            }
+          ]
+        }
+      ]
+    })
+  );
+
+  assert.match(html, /Validators/);
+  assert.match(html, /Reply quality/);
+  assert.match(html, /LLM questionnaire/);
+});
+
+test("production workbench delegates prompt and validators tabs", () => {
   const source = readFileSync(
     new URL("../src/App.tsx", import.meta.url),
     "utf8"
@@ -155,11 +230,15 @@ test("production workbench overview delegates to ExperimentOverview", () => {
 
   assert.match(
     source,
-    /import \{ ExperimentOverview \} from "\.\/components\/ExperimentOverview"/
+    /import \{ PromptView \} from "\.\/components\/PromptView"/
   );
   assert.match(
     source,
-    /<ExperimentOverview\s+overview=\{detailState\.overview\}/
+    /<PromptView\s+overview=\{detailState\.overview\}/
+  );
+  assert.match(
+    source,
+    /<ValidatorsView\s+validators=\{detailState\.overview\.validators \?\? \[\]\}/
   );
   assert.match(source, /isRunning=\{workflowLocked\}/);
   assert.match(source, /onRunVersion=\{handleRunVersion\}/);
