@@ -127,7 +127,9 @@ When a Pydantic proposal exists:
 - show the same `New version` and `Diff` toggle;
 - show rationale as a full-width section above the artifacts;
 - in `New version`, show prompt and model side by side;
-- in `Diff`, show prompt diff and model diff side by side;
+- in `Diff`, show two artifact panels side by side: the prompt panel on the
+  left and the model panel on the right, with each panel using one unified diff
+  viewer rather than an old/new split view;
 - collapse to a single column on mobile or narrow content widths.
 
 The `Create next version` action remains in the proposal toolbar.
@@ -177,5 +179,6 @@ cd frontend && pnpm test:e2e
   that they do not create unrelated workflow latency.
 - Jinja highlighting will be approximate. The implementation should make this
   visually obvious as token highlighting, not as validation.
-- Diff layout can become cramped. Use unified diffs inside prompt/model panels
-  and responsive stacking instead of adding another side-by-side layer.
+- Diff layout can become cramped. Keep the side-by-side layout at the artifact
+  level only, with prompt on the left and model on the right, and use unified
+  diffs inside those panels instead of adding another old/new split layer.
