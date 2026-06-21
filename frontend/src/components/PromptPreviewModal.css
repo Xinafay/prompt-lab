@@ -119,24 +119,21 @@
   line-height: 1;
 }
 
-.prompt-preview-body {
-  max-height: 520px;
-  margin: 0;
-  overflow: auto;
-  padding: 14px;
-  border: 1px solid #1f2937;
-  border-radius: 6px;
-  background: #101828;
-  color: #f8fafc;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
-  line-height: 1.55;
-  white-space: pre-wrap;
+.prompt-preview-card .code-viewer {
+  min-height: 0;
 }
 
-.prompt-preview-list-single .prompt-preview-body {
-  max-height: none;
+.prompt-preview-list-single .code-viewer {
   min-height: 0;
+}
+
+.prompt-preview-list-single .code-viewer-editor,
+.prompt-preview-list-single .code-viewer .cm-editor {
+  min-height: 0;
+}
+
+.prompt-preview-list-single .code-viewer .cm-scroller {
+  max-height: none;
 }
 
 .prompt-preview-footer {

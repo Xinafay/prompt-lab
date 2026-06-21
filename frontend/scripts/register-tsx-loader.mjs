@@ -7,6 +7,29 @@ const viteRequire = createRequire(require.resolve("vite/package.json"));
 const { transformSync } = viteRequire("esbuild");
 
 registerHooks({
+  resolve(specifier, context, nextResolve) {
+    const isRelative = specifier.startsWith("./") || specifier.startsWith("../");
+    const hasExtension = /\.[a-z]+$/i.test(specifier);
+    const parent = context.parentURL ?? "";
+    if (
+      isRelative &&
+      !hasExtension &&
+      (parent.endsWith(".ts") || parent.endsWith(".tsx"))
+    ) {
+      try {
+        return nextResolve(`${specifier}.tsx`, context);
+      } catch {
+        try {
+          return nextResolve(`${specifier}.ts`, context);
+        } catch {
+          return nextResolve(specifier, context);
+        }
+      }
+    }
+
+    return nextResolve(specifier, context);
+  },
+
   load(url, context, nextLoad) {
     if (url.endsWith(".css")) {
       return {

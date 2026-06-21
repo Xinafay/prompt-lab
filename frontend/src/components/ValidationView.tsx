@@ -19,6 +19,7 @@ import {
   type ValidationMatrixCell,
   type ValidationMatrixCheckRow
 } from "./validationMatrix";
+import { CodeViewer, type CodeViewerProps } from "./CodeViewer";
 export { buildValidationInclusionUpdate } from "./validationInclusion";
 
 interface ValidationViewProps {
@@ -116,6 +117,15 @@ function outputText(run: RunArtifact | null | undefined): string {
     return run.execution_error;
   }
   return "This run artifact has no saved output.";
+}
+
+function outputLanguage(
+  run: RunArtifact | null | undefined
+): CodeViewerProps["language"] {
+  if (run?.output_json !== undefined) {
+    return "json";
+  }
+  return "text";
 }
 
 function snippet(value: string, limit = 180): string {
@@ -522,6 +532,7 @@ function ValidationCellModal({
   onClose: () => void;
 }) {
   const text = outputText(run);
+  const language = outputLanguage(run);
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div
@@ -548,8 +559,7 @@ function ValidationCellModal({
         </div>
 
         <section>
-          <h3>Run output</h3>
-          <pre>{text}</pre>
+          <CodeViewer label="Run output" language={language} value={text} />
         </section>
 
         <section>

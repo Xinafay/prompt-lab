@@ -1,6 +1,7 @@
 import React from "react";
 
 import type { PromptPreviewItem, PromptPreviewResponse } from "../types";
+import { CodeViewer } from "./CodeViewer";
 
 interface PromptPreviewModalProps {
   preview: PromptPreviewResponse;
@@ -87,11 +88,11 @@ export function PromptPreviewModal({
                 )
               )
             ]),
-            React.createElement(
-              "pre",
-              { className: "prompt-preview-body" },
-              prompt.prompt
-            )
+            React.createElement(CodeViewer, {
+              label: "Prompt",
+              language: "markdown-jinja",
+              value: prompt.prompt
+            })
           )
         )
       ),

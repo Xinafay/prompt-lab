@@ -9,6 +9,7 @@ import {
 } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
 import { python } from "@codemirror/lang-python";
+import { json } from "@codemirror/lang-json";
 import { unifiedMergeView } from "@codemirror/merge";
 import { basicSetup } from "codemirror";
 import React, { useEffect, useRef } from "react";
@@ -17,7 +18,7 @@ import "./CodeViewer.css";
 
 export type CodeViewerProps = {
   label: string;
-  language: "markdown-jinja" | "python";
+  language: "json" | "markdown-jinja" | "python" | "text";
   value: string;
 };
 
@@ -78,6 +79,12 @@ const jinjaTokenHighlighting = ViewPlugin.fromClass(
 function languageExtensions(language: CodeLanguage): Extension[] {
   if (language === "python") {
     return [python()];
+  }
+  if (language === "json") {
+    return [json()];
+  }
+  if (language === "text") {
+    return [];
   }
 
   return [markdown({ addKeymap: false }), jinjaTokenHighlighting];
