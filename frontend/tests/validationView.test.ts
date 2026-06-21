@@ -5,6 +5,7 @@ import {
   buildValidationMatrix,
   setValidationInclusion
 } from "../src/components/validationMatrix.ts";
+import { snapshotValidationState } from "../src/components/validationStateSnapshot.ts";
 import { buildValidationInclusionUpdate } from "../src/components/validationInclusion.ts";
 import type { ValidationState } from "../src/types.ts";
 
@@ -85,6 +86,25 @@ test("buildValidationInclusionUpdate serializes result and check inclusion", () 
       }
     ]
   });
+});
+
+test("snapshotValidationState preserves saved inclusion when draft changes", () => {
+  const saved = validationState();
+  const snapshot = snapshotValidationState(saved);
+  const draft = setValidationInclusion(
+    saved,
+    { kind: "row", rowKey: "quality\u0000coverage" },
+    true
+  );
+
+  assert.equal(
+    draft.results[0].check_results[0].included_in_judge,
+    true
+  );
+  assert.equal(
+    snapshot?.results[0].check_results[0].included_in_judge,
+    false
+  );
 });
 
 test("buildValidationMatrix groups checks by validator rows and case-repeat columns", () => {

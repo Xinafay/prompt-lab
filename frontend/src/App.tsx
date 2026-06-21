@@ -45,6 +45,7 @@ import {
   ValidationView
 } from "./components/ValidationView";
 import { ValidatorsPreview } from "./components/ValidatorsPreview";
+import { snapshotValidationState } from "./components/validationStateSnapshot";
 import { WorkbenchTabs } from "./components/WorkbenchTabs";
 import { WorkflowToolbar } from "./components/WorkflowToolbar";
 import type {
@@ -143,6 +144,7 @@ function App() {
   const [validationState, setValidationState] = useState<ValidationState | null>(
     null
   );
+  const committedValidationStateRef = useRef<ValidationState | null>(null);
   const [validationDirty, setValidationDirty] = useState(false);
   const [compareValidationByVersion, setCompareValidationByVersion] = useState<
     Record<string, boolean>
@@ -240,8 +242,7 @@ function App() {
     runRequestIdRef.current += 1;
     workflowRequestIdRef.current += 1;
     setSelectedExperiment(experiment);
-    setValidationState(null);
-    setValidationDirty(false);
+    setCommittedValidationState(null);
     setCompareValidationByVersion({});
     setReviewState(null);
     setProposalResponse(null);
@@ -286,8 +287,7 @@ function App() {
     setSelectedExperiment(null);
     setDetailState({ status: "idle" });
     setJobStatus(null);
-    setValidationState(null);
-    setValidationDirty(false);
+    setCommittedValidationState(null);
     setCompareValidationByVersion({});
     setReviewState(null);
     setProposalResponse(null);
@@ -452,7 +452,7 @@ function App() {
     const navigation = pendingNavigation;
     const kind = unsavedNavigationKind();
     if (kind === "validation") {
-      setValidationDirty(false);
+      restoreCommittedValidationState();
     } else if (appView === "globalSettings") {
       setGlobalSettingsDirty(false);
       setGlobalSettingsDraft(null);
@@ -517,6 +517,18 @@ function App() {
     return requestId;
   }
 
+  function setCommittedValidationState(state: ValidationState | null) {
+    const displayState = snapshotValidationState(state);
+    committedValidationStateRef.current = snapshotValidationState(state);
+    setValidationState(displayState);
+    setValidationDirty(false);
+  }
+
+  function restoreCommittedValidationState() {
+    setValidationState(snapshotValidationState(committedValidationStateRef.current));
+    setValidationDirty(false);
+  }
+
   function isWorkflowCurrent(requestId: number, selectionKey: string): boolean {
     return (
       workflowRequestIdRef.current === requestId && isSelectionCurrent(selectionKey)
@@ -546,8 +558,7 @@ function App() {
       return;
     }
     setDetailState({ status: "loaded", overview, runs });
-    setValidationState(latestValidation);
-    setValidationDirty(false);
+    setCommittedValidationState(latestValidation);
     setCompareValidationByVersion((current) => ({
       ...current,
       [job.version]: hasCompletedValidation(latestValidation)
@@ -758,16 +769,14 @@ function App() {
   useEffect(() => {
     if (selectedExperiment === null) {
       setDetailState({ status: "idle" });
-      setValidationState(null);
-      setValidationDirty(false);
+      setCommittedValidationState(null);
       return;
     }
 
     let cancelled = false;
     setDetailState({ status: "loading" });
     setJobStatus(null);
-    setValidationState(null);
-    setValidationDirty(false);
+    setCommittedValidationState(null);
 
     async function loadDetails(experiment: Experiment) {
       try {
@@ -787,8 +796,7 @@ function App() {
               );
         if (!cancelled) {
           setDetailState({ status: "loaded", overview, runs });
-          setValidationState(latestValidation);
-          setValidationDirty(false);
+          setCommittedValidationState(latestValidation);
           setReviewState(latestReview);
           setProposalResponse(latestProposal);
           setDecisionsDirty(false);
@@ -959,8 +967,7 @@ function App() {
         return;
       }
       setJobStatus(job);
-      setValidationState(null);
-      setValidationDirty(false);
+      setCommittedValidationState(null);
       setCompareValidationByVersion((current) => ({
         ...current,
         [version]: false
@@ -1227,8 +1234,7 @@ function App() {
     try {
       const latestValidation = await validateVersion(experimentId, version, dryRun);
       if (!isWorkflowCurrent(requestId, selectionKey)) return;
-      setValidationState(latestValidation);
-      setValidationDirty(false);
+      setCommittedValidationState(latestValidation);
       setCompareValidationByVersion((current) => ({
         ...current,
         [version]: hasCompletedValidation(latestValidation)
@@ -1283,8 +1289,7 @@ function App() {
         buildValidationInclusionUpdate(validationState)
       );
       if (!isWorkflowCurrent(requestId, selectionKey)) return;
-      setValidationState(savedValidation);
-      setValidationDirty(false);
+      setCommittedValidationState(savedValidation);
       setCompareValidationByVersion((current) => ({
         ...current,
         [version]: hasCompletedValidation(savedValidation)
@@ -1625,8 +1630,7 @@ function App() {
     setSelectedExperiment(savedExperiment);
     selectedKeyRef.current = `${savedExperiment.id}:${savedExperiment.active_version}`;
     setDetailState({ status: "loaded", overview, runs });
-    setValidationState(latestValidation);
-    setValidationDirty(false);
+    setCommittedValidationState(latestValidation);
     setCompareValidationByVersion({});
     setVersionSummaries(versions.versions);
     setCandidateVersion(savedExperiment.active_version);
@@ -1700,8 +1704,7 @@ function App() {
     setWorkflowMessage(`Switching to ${version}...`);
     setPromptPreview(null);
     setPromptPreviewAction(null);
-    setValidationState(null);
-    setValidationDirty(false);
+    setCommittedValidationState(null);
     setCompareValidationByVersion({});
     setReviewState(null);
     setProposalResponse(null);
