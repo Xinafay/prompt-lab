@@ -12,6 +12,7 @@ class PromptLabConfig:
     project_root: Path
     experiments_root: Path
     examples_root: Path
+    settings_path: Path
 
     @classmethod
     def from_env(cls, *, project_root: Path | None = None) -> "PromptLabConfig":
@@ -22,4 +23,5 @@ class PromptLabConfig:
             project_root=root,
             experiments_root=Path(experiments_override).resolve() if experiments_override else root / "experiments",
             examples_root=Path(examples_override).resolve() if examples_override else root / "examples",
+            settings_path=root / "config" / "settings.json",
         )

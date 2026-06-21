@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from fastapi.testclient import TestClient
+
+from prompt_lab.api import create_app
+from prompt_lab.config import PromptLabConfig
 from prompt_lab.experiment_seed import seed_experiments_from_examples
+from prompt_lab.settings import PromptLabSettings
 
 
 MANIFEST = {
@@ -15,7 +21,11 @@ MANIFEST = {
     "active_version": "v001",
     "output": {"type": "text"},
     "template": {"engine": "jinja2", "path": "prompt.md"},
-    "models": {"generator_model": "local/a", "judge_model": "openai/b"},
+    "models": {
+        "generator_model": "local/a",
+        "validator_model": "openai/validator-a",
+        "judge_model": "openai/b",
+    },
     "run_defaults": {
         "repeat_count": 1,
         "llm_cache": "disabled",
@@ -53,6 +63,81 @@ def test_seed_creates_experiments_root_when_missing() -> None:
         assert (
             root / "experiments" / "demo" / "versions" / "v001" / "prompt.md"
         ).read_text(encoding="utf-8") == "Prompt"
+
+
+def test_seed_applies_global_defaults_to_copied_manifest() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_example(root)
+        settings = PromptLabSettings(
+            default_generator_model="local/default-generator",
+            default_validator_model="openai/default-validator",
+            default_judge_model="openai/default-judge",
+            default_repeat_count=7,
+        )
+
+        result = seed_experiments_from_examples(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+            settings=settings,
+        )
+
+        assert result.seeded is True
+        copied_manifest = json.loads(
+            (root / "experiments" / "demo" / "experiment.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert copied_manifest["models"] == {
+            "generator_model": "local/default-generator",
+            "validator_model": "openai/default-validator",
+            "judge_model": "openai/default-judge",
+        }
+        assert copied_manifest["run_defaults"]["repeat_count"] == 7
+        source_manifest = json.loads(
+            (root / "examples" / "demo" / "experiment.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert source_manifest["models"] == {
+            "generator_model": "local/a",
+            "validator_model": "openai/validator-a",
+            "judge_model": "openai/b",
+        }
+        assert source_manifest["run_defaults"]["repeat_count"] == 1
+
+
+def test_seed_preserves_manifest_defaults_for_artifact_fixtures() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        example_dir = write_example(root)
+        artifact_dir = example_dir / "versions" / "v001" / "runs" / "run-000001"
+        artifact_dir.mkdir(parents=True)
+        settings = PromptLabSettings(
+            default_generator_model="local/default-generator",
+            default_validator_model="openai/default-validator",
+            default_judge_model="openai/default-judge",
+            default_repeat_count=7,
+        )
+
+        result = seed_experiments_from_examples(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+            settings=settings,
+        )
+
+        assert result.seeded is True
+        copied_manifest = json.loads(
+            (root / "experiments" / "demo" / "experiment.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert copied_manifest["models"] == {
+            "generator_model": "local/a",
+            "validator_model": "openai/validator-a",
+            "judge_model": "openai/b",
+        }
+        assert copied_manifest["run_defaults"]["repeat_count"] == 1
 
 
 def test_seed_copies_when_experiments_root_is_empty() -> None:
@@ -127,13 +212,92 @@ def test_seed_fails_on_conflicting_existing_directory_without_manifest() -> None
         assert (conflict_dir / "notes.txt").read_text(encoding="utf-8") == "local data"
 
 
+def test_repository_demo_examples_seed_for_ui_testing() -> None:
+    repository_root = Path(__file__).resolve().parents[2]
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        shutil.copytree(repository_root / "examples", root / "examples")
+
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        client = TestClient(app)
+
+        experiments = client.get("/api/experiments")
+        assert experiments.status_code == 200
+        experiment_ids = [item["id"] for item in experiments.json()]
+        assert "demo-string" in experiment_ids
+        assert "demo-json" in experiment_ids
+
+        for experiment_id in ("demo-string", "demo-json"):
+            cases = client.get(f"/api/experiments/{experiment_id}/versions/v002")
+            assert cases.status_code == 200
+            case_ids = [case["id"] for case in cases.json()["cases"]]
+            assert len(case_ids) >= 2
+
+            runs = client.get(
+                f"/api/experiments/{experiment_id}/versions/v002/runs"
+            )
+            assert runs.status_code == 200
+            assert runs.json()["run_batch_id"] == "run-000002"
+            runs_by_case = {
+                case_id: [
+                    run
+                    for run in runs.json()["runs"]
+                    if run["case_id"] == case_id
+                ]
+                for case_id in case_ids
+            }
+            assert all(len(case_runs) >= 2 for case_runs in runs_by_case.values())
+
+            validation = client.get(
+                f"/api/experiments/{experiment_id}/versions/v002/validations/latest"
+            )
+            assert validation.status_code == 200
+            assert validation.json()["validation_batch"]["validation_batch_id"] == (
+                "validation-000002"
+            )
+            assert len(validation.json()["validators"]) == 2
+            assert len(validation.json()["results"]) >= len(case_ids) * 2 * 2
+
+            review = client.get(
+                f"/api/experiments/{experiment_id}/versions/v002/reviews/latest"
+            )
+            assert review.status_code == 200
+            review_id = review.json()["review_id"]
+            proposal = client.get(
+                f"/api/experiments/{experiment_id}/versions/v002/reviews/"
+                f"{review_id}/proposal"
+            )
+            assert proposal.status_code == 200
+            assert proposal.json()["source"]["validation_batch_id"] == (
+                "validation-000002"
+            )
+
+            comparison = client.post(
+                f"/api/experiments/{experiment_id}/comparisons",
+                json={
+                    "baseline_version": "v001",
+                    "candidate_version": "v002",
+                    "dry_run": True,
+                },
+            )
+            assert comparison.status_code == 200
+            assert comparison.json()["schema_version"] == (
+                "prompt_lab.compare_matrix/v1"
+            )
+            assert comparison.json()["versions"] == ["v001", "v002"]
+            assert comparison.json()["rows"]
+
+
 def main() -> int:
     tests = [
         test_seed_creates_experiments_root_when_missing,
+        test_seed_applies_global_defaults_to_copied_manifest,
+        test_seed_preserves_manifest_defaults_for_artifact_fixtures,
         test_seed_copies_when_experiments_root_is_empty,
         test_seed_does_nothing_when_any_runtime_manifest_exists,
         test_seed_creates_empty_experiments_when_examples_missing,
         test_seed_fails_on_conflicting_existing_directory_without_manifest,
+        test_repository_demo_examples_seed_for_ui_testing,
     ]
     for test in tests:
         test()

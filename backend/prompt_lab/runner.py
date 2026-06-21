@@ -92,7 +92,7 @@ def run_structured_case(
             context,
         )
         output = getattr(result, "output")
-    except PromptLabStructuredValidationError:
+    except PromptLabStructuredValidationError as exc:
         return RunArtifact(
             schema_version="prompt_lab.run/v1",
             run_id=run_id,
@@ -102,8 +102,9 @@ def run_structured_case(
             repeat_index=repeat_index,
             generator_model=generator_model,
             status="validation_error",
-            rendered_prompt=rendered_prompt,
+            rendered_prompt=exc.executed_prompt or rendered_prompt,
             output_type="pydantic",
+            raw_output=exc.raw_output,
             validation_error=traceback.format_exc(),
         )
     except Exception:
@@ -129,7 +130,7 @@ def run_structured_case(
         repeat_index=repeat_index,
         generator_model=generator_model,
         status="ok",
-        rendered_prompt=rendered_prompt,
+        rendered_prompt=getattr(result, "executed_prompt", None) or rendered_prompt,
         raw_output=output.model_dump_json(),
         output_type="pydantic",
         output_json=output.model_dump(mode="json"),

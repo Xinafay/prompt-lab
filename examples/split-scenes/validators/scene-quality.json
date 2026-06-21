@@ -1,0 +1,37 @@
+{
+  "schema_version": "prompt_lab.validator/v1",
+  "validator_id": "scene-quality",
+  "type": "llm_questionnaire",
+  "title": "Scene quality",
+  "description": "Checks whether structured scenes preserve source content and useful boundaries.",
+  "enabled": true,
+  "input_scope": "output_and_prompt",
+  "checks": [
+    {
+      "check_id": "coverage",
+      "title": "Coverage",
+      "question": "Does the scene list cover every important source event without omission?",
+      "description": "Compare the output to the source text in the rendered prompt."
+    },
+    {
+      "check_id": "order",
+      "title": "Order",
+      "question": "Are scenes in the same order as the source?"
+    },
+    {
+      "check_id": "boundaries",
+      "title": "Scene boundaries",
+      "question": "Are scene boundaries based on stable place, continuous time, immediate focus, cast changes, or persistent mode shifts?"
+    },
+    {
+      "check_id": "no-hallucinations",
+      "title": "No hallucinations",
+      "question": "Does the output avoid inventing events not present in the source?"
+    },
+    {
+      "check_id": "concise-labels",
+      "title": "Concise labels",
+      "question": "Are scene titles and summaries concise and specific?"
+    }
+  ]
+}

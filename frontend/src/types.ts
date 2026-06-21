@@ -44,6 +44,7 @@ export interface Experiment {
   };
   models: {
     generator_model: string;
+    validator_model: string;
     judge_model: string;
   };
   run_defaults: {
@@ -110,6 +111,7 @@ export interface VersionOverview {
   prompt: string;
   rubric: string;
   cases: Case[];
+  validators: ValidatorDefinition[];
 }
 
 export interface VersionSummary {
@@ -131,6 +133,170 @@ export type WorkflowMode = "live" | "dry-run";
 
 export interface RunVersionRequest {
   dry_run?: boolean;
+}
+
+export interface PromptPreviewItem {
+  kind: string;
+  title: string;
+  model: string;
+  prompt: string;
+  character_count: number;
+  word_count: number;
+  case_id?: string | null;
+  repeat_index?: number | null;
+  validator_id?: string | null;
+}
+
+export interface PromptPreviewResponse {
+  workflow_kind: string;
+  prompts: PromptPreviewItem[];
+  warnings: string[];
+}
+
+export interface GlobalSettings {
+  schema_version: "prompt_lab.settings/v1";
+  default_generator_model: string;
+  default_validator_model: string;
+  default_judge_model: string;
+  default_repeat_count: number;
+}
+
+export type ValidatorType = "llm_questionnaire" | "automatic";
+
+export type InputScope =
+  | "output_only"
+  | "output_and_prompt"
+  | "output_and_case"
+  | "output_prompt_and_case";
+
+export type ValidationBatchStatus =
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export type NonNullValidationGrade = 1 | 2 | 3 | 4 | 5;
+
+export type ValidationGrade = NonNullValidationGrade | null;
+
+export type ValidationResultStatus = "ok" | "error" | "skipped";
+
+export interface LlmValidatorCheck {
+  check_id: string;
+  title: string;
+  question: string;
+  description: string;
+}
+
+export interface CountComparison {
+  op: "lt" | "lte" | "gt" | "gte" | "eq" | "between";
+  value?: number | null;
+  min_value?: number | null;
+  max_value?: number | null;
+}
+
+export interface AutomaticRule {
+  kind:
+    | "word_count"
+    | "sentence_count"
+    | "character_count"
+    | "json_path_count"
+    | "json_path_exists";
+  source: "output_text" | "raw_output" | "output_json";
+  path?: string | null;
+  comparison?: CountComparison | null;
+}
+
+export interface AutomaticValidatorCheck {
+  check_id: string;
+  title: string;
+  description: string;
+  rule: AutomaticRule;
+}
+
+interface BaseValidatorDefinition {
+  schema_version: "prompt_lab.validator/v1";
+  validator_id: string;
+  type: ValidatorType;
+  title: string;
+  description: string;
+  enabled: boolean;
+  input_scope: InputScope;
+}
+
+export interface LlmQuestionnaireValidatorDefinition
+  extends BaseValidatorDefinition {
+  type: "llm_questionnaire";
+  checks: LlmValidatorCheck[];
+}
+
+export interface AutomaticValidatorDefinition extends BaseValidatorDefinition {
+  type: "automatic";
+  checks: AutomaticValidatorCheck[];
+}
+
+export type ValidatorDefinition =
+  | LlmQuestionnaireValidatorDefinition
+  | AutomaticValidatorDefinition;
+
+export interface ValidationBatch {
+  schema_version: "prompt_lab.validation_batch/v1";
+  validation_batch_id: string;
+  run_batch_id: string;
+  version: string;
+  status: ValidationBatchStatus;
+  started_at: string;
+  finished_at?: string | null;
+  total_results: number;
+  completed_results: number;
+  validator_model: string;
+  validator_ids: string[];
+}
+
+export interface ValidationCheckResult {
+  check_id: string;
+  grade: ValidationGrade;
+  comment: string;
+  included_in_judge: boolean;
+  metrics: Record<string, unknown>;
+}
+
+export interface ValidationResult {
+  schema_version: "prompt_lab.validation_result/v1";
+  validation_result_id: string;
+  validation_batch_id: string;
+  run_batch_id: string;
+  run_id: string;
+  case_id: string;
+  repeat_index: number;
+  validator_id: string;
+  validator_type: ValidatorType;
+  status: ValidationResultStatus;
+  included_in_judge: boolean;
+  check_results: ValidationCheckResult[];
+  usage: Record<string, unknown>;
+  execution_error?: string | null;
+}
+
+export interface ValidationState {
+  validation_batch: ValidationBatch;
+  validators: ValidatorDefinition[];
+  results: ValidationResult[];
+}
+
+export interface ValidationCheckInclusionUpdate {
+  check_id: string;
+  included_in_judge: boolean;
+}
+
+export interface ValidationResultInclusionUpdate {
+  validation_result_id: string;
+  included_in_judge: boolean;
+  check_results: ValidationCheckInclusionUpdate[];
+}
+
+export interface ValidationInclusionUpdate {
+  results: ValidationResultInclusionUpdate[];
 }
 
 export type FindingSeverity =
@@ -198,6 +364,7 @@ export interface ReviewState {
 export interface JudgmentResponse {
   review_id: string;
   run_batch_id: string;
+  validation_batch_id: string;
   judgment: JudgmentArtifact;
 }
 
@@ -220,33 +387,60 @@ export interface CreatedVersionResponse {
   version_dir: string;
 }
 
-export type ComparisonRecommendation =
-  | "keep_new_version"
-  | "revise_new_version"
-  | "revert_to_baseline"
-  | "inconclusive";
+export type ComparisonStatus = "pass" | "fail" | "mixed" | "empty";
 
-export interface ComparisonArtifact {
-  schema_version: "prompt_lab.comparison/v1";
-  comparison_id: string;
-  baseline_version: string;
-  candidate_version: string;
-  baseline_run_batch_ids: string[];
-  candidate_run_batch_ids: string[];
-  judge_model: string;
-  summary: string;
-  improvements: string[];
-  regressions: string[];
-  unchanged_problems: string[];
-  new_problems: string[];
-  stability_changes: string[];
-  recommendation: ComparisonRecommendation;
-  decision_points: DecisionPoint[];
+export type CompareDetailStatus = "graded" | "not_assessable" | "error";
+
+interface BaseCompareCellDetail {
+  case_id: string;
+  repeat_index: number;
+  validation_result_id: string;
+  comment: string;
 }
 
-export interface ComparisonResponse {
-  comparison_id: string;
-  baseline_run_batch_id: string;
-  candidate_run_batch_id: string;
-  comparison: ComparisonArtifact;
+export type CompareCellDetail =
+  | (BaseCompareCellDetail & {
+      status: "graded";
+      grade: NonNullValidationGrade;
+    })
+  | (BaseCompareCellDetail & {
+      status: "error";
+      grade: null;
+    })
+  | (BaseCompareCellDetail & {
+      status: "not_assessable";
+      grade: null;
+    });
+
+export interface CompareMatrixCell {
+  version: string;
+  status: ComparisonStatus;
+  grade_5: number;
+  grade_4: number;
+  grade_3: number;
+  grade_2: number;
+  grade_1: number;
+  not_assessable: number;
+  missing: number;
+  error: number;
+  total: number;
+  details: CompareCellDetail[];
 }
+
+export interface CompareMatrixRow {
+  validator_id: string;
+  validator_title: string;
+  check_id: string;
+  check_title: string;
+  check_description: string;
+  cells: CompareMatrixCell[];
+}
+
+export interface CompareMatrixResponse {
+  schema_version: "prompt_lab.compare_matrix/v1";
+  experiment_id: string;
+  versions: string[];
+  rows: CompareMatrixRow[];
+}
+
+export type ComparisonResponse = CompareMatrixResponse;

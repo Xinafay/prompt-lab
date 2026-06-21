@@ -81,6 +81,7 @@ def test_pydantic_experiment_artifact_validates() -> None:
             "template": {"engine": "jinjax", "path": "prompt.md"},
             "models": {
                 "generator_model": "local/example-small-model",
+                "validator_model": "openai/example-large-model",
                 "judge_model": "openai/example-large-model",
             },
             "run_defaults": {

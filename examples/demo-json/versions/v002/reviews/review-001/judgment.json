@@ -1,0 +1,44 @@
+{
+  "schema_version": "prompt_lab.judgment/v1",
+  "judgment_id": "review-001",
+  "version": "v002",
+  "run_batch_ids": [
+    "run-000002"
+  ],
+  "judge_model": "openai/demo-judge",
+  "summary": "The revised prompt improves structured completeness and makes validation evidence easy to inspect without token usage.",
+  "what_looks_correct": [
+    {
+      "finding_id": "ok-json-shape",
+      "description": "The output satisfies the automatic JSON shape checks.",
+      "evidence": [
+        "report-shape/three-tags returned grade 5",
+        "report-shape/risk-count returned grade 5"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "finding_id": "tighten-launch-ready",
+      "severity": "optional",
+      "area": "prompt",
+      "category": "decision logic",
+      "description": "The prompt asks for launch_ready but does not define how risks should affect that boolean.",
+      "evidence": [
+        "The generated output sets launch_ready to false because two risks are present."
+      ],
+      "suggested_change": "Add a rule that launch_ready should be false whenever unresolved risks remain."
+    }
+  ],
+  "decision_points": [
+    {
+      "decision_id": "launch-ready-rule",
+      "description": "Should the proposal encode explicit launch readiness logic?",
+      "options": [
+        "Add explicit readiness rule",
+        "Leave model discretion"
+      ],
+      "recommended_option": "Add explicit readiness rule"
+    }
+  ]
+}

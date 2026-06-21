@@ -1,6 +1,8 @@
 # Prompt Lab Backend
 
-The backend owns filesystem experiment storage, prompt rendering, Pydantic model loading, LLM calls, run artifacts, job progress, judgments, proposals, and comparisons.
+The backend owns filesystem experiment storage, prompt rendering, Pydantic model
+loading, LLM calls, run artifacts, validator execution, job progress, judgments,
+proposals, and deterministic comparisons.
 
 The bundled `backend/shared/llm` module keeps its original `shared.llm` import path. Prompt Lab application code should access it through `prompt_lab.llm_client`, which keeps generator-run cache disabled.
 
@@ -23,12 +25,18 @@ curl -X POST http://127.0.0.1:8000/api/experiments/split-scenes/versions/v001/ru
   -H 'content-type: application/json' \
   -d '{"dry_run": true}'
 
+curl -X POST http://127.0.0.1:8000/api/experiments/split-scenes/versions/v001/validations \
+  -H 'content-type: application/json' \
+  -d '{"dry_run": true}'
+
 curl -X POST http://127.0.0.1:8000/api/experiments/split-scenes/versions/v001/judgments \
   -H 'content-type: application/json' \
   -d '{"dry_run": true}'
 ```
 
-Proposal generation accepts the same body at the review proposal endpoint. Comparisons accept `dry_run` alongside `baseline_version` and `candidate_version`.
+Proposal generation accepts the same body at the review proposal endpoint.
+Comparisons use saved validation batches and return a deterministic matrix; no
+comparison model call is made.
 
 ## Prompt Templates
 
@@ -39,13 +47,13 @@ validation.
 
 Cases live once per experiment under `cases/` and are shared by all versions.
 Version directories hold the active prompt/model files plus generated run,
-review, proposal, and comparison artifacts.
+validation, review, proposal, and comparison artifacts.
 
-Judge, proposal, and comparison system prompts live in editable Markdown/Jinja files:
+Validator, judge, and proposal system prompts live in editable Markdown/Jinja files:
 
+- `backend/prompt_lab/system_prompts/validator.md.jinja`
 - `backend/prompt_lab/system_prompts/judge.md.jinja`
 - `backend/prompt_lab/system_prompts/proposal.md.jinja`
-- `backend/prompt_lab/system_prompts/comparison.md.jinja`
 
 Python code builds structured context and renders these templates through `prompt_lab.prompt_templates`. Keep the structured-output marker `<<MODEL>>` in templates that rely on fake structured responses.
 
@@ -71,8 +79,13 @@ python -m python.workflow_runtime.eval_runner \
   --export-prompt-lab /Users/karol/Projects/sinafai/prompt-lab/examples/split-scenes
 ```
 
-The command writes shared `cases/`, version files, and top-level experiment
-metadata, then reports created, existing, and skipped file events to stderr.
+The command writes shared `cases/`, validator definitions, version files, and
+top-level experiment metadata, then reports created, existing, and skipped file
+events to stderr.
+
+Existing runtime experiments are not migrated when examples change. Once
+`experiments/` contains any active manifest, the backend leaves it alone unless
+the user edits or replaces it.
 
 Environment overrides:
 
@@ -97,6 +110,7 @@ Feature tests can be run directly, for example:
 PYTHONPATH=backend .venv/bin/python backend/tests/test_api.py
 PYTHONPATH=backend .venv/bin/python backend/tests/test_runner.py
 PYTHONPATH=backend .venv/bin/python backend/tests/test_judge.py
+PYTHONPATH=backend .venv/bin/python backend/tests/test_validators.py
 PYTHONPATH=backend .venv/bin/python backend/tests/test_proposal.py
 PYTHONPATH=backend .venv/bin/python backend/tests/test_compare.py
 ```

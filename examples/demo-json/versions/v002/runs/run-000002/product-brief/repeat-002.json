@@ -1,0 +1,31 @@
+{
+  "schema_version": "prompt_lab.run/v1",
+  "run_id": "run-000002-product-brief-repeat-002",
+  "run_batch_id": "run-000002",
+  "version": "v002",
+  "case_id": "product-brief",
+  "repeat_index": 2,
+  "generator_model": "local/demo-generator",
+  "status": "ok",
+  "rendered_prompt": "Create launch-readiness report for product-brief repeat 2.",
+  "raw_output": "{\"summary\":\"Atlas Desk Lamp gives remote designers a clearer home studio lighting story.\",\"tags\":[\"lighting\",\"home-studio\",\"remote-work\"],\"risks\":[\"Pricing is missing.\",\"Power details are not specified.\"],\"launch_ready\":false}",
+  "output_type": "pydantic",
+  "usage": {
+    "prompt_tokens": 102,
+    "completion_tokens": 32,
+    "total_tokens": 134
+  },
+  "output_json": {
+    "summary": "Atlas Desk Lamp gives remote designers a clearer home studio lighting story.",
+    "tags": [
+      "lighting",
+      "home-studio",
+      "remote-work"
+    ],
+    "risks": [
+      "Pricing is missing.",
+      "Power details are not specified."
+    ],
+    "launch_ready": false
+  }
+}

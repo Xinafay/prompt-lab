@@ -8,6 +8,7 @@ import httpx
 
 from shared.llm.server_registry import ModelSpec
 from shared.llm.transports.openai_client import _get_openai_client
+from shared.llm.transport_retry import run_with_transport_retry
 
 
 class TokenizeError(Exception):
@@ -94,7 +95,9 @@ def count_tokens_openai_input_tokens(spec: ModelSpec, content: str) -> int:
     """
     client = _get_openai_client(SimpleNamespace(spec=spec))
     try:
-        result = client.responses.input_tokens.count(model=spec.model_name, input=content)
+        result = run_with_transport_retry(
+            lambda: client.responses.input_tokens.count(model=spec.model_name, input=content),
+        )
     except Exception as exc:  # surface SDK/transport errors as TokenizeError
         raise TokenizeError(f"OpenAI input-token count failed: {exc}") from exc
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any, Protocol, runtime_checkable
 
 from shared.llm.chat_request import PreparedChatRequest, build_cache_request, prepare_chat_request
@@ -9,6 +8,7 @@ from shared.llm.chat_result import LlmResponse
 from shared.llm.chat_transport import execute_prepared_chat_request, replay_cached_response
 from shared.llm.stream_callbacks import StreamCallbacks, supports_reasoning_deltas
 from shared.llm.llm_cache import SqliteLlmCache, get_llm_cache
+from shared.llm.transport_retry import transport_retries_from_env
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -106,7 +106,7 @@ def default_chat_client() -> ChatClient:
     from shared.llm.clients.logging_client import LoggingChatClient
     from shared.llm.clients.retrying_client import RetryingChatClient
 
-    transport_retries = int(os.getenv("LLM_TRANSPORT_RETRIES", "1"))
+    transport_retries = transport_retries_from_env()
     cache = get_llm_cache()
     client: Any = DefaultChatClient()
     client = RetryingChatClient(client, max_retries=transport_retries)

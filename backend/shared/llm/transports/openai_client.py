@@ -18,8 +18,9 @@ def _get_openai_client(prepared: Any) -> OpenAI:
             api_key=spec.api_key,
             base_url=spec.base_url,
             http_client=DefaultHttpxClient(verify=False),
+            max_retries=0,
         )
     else:
-        client = OpenAI(api_key=spec.api_key, base_url=spec.base_url)
+        client = OpenAI(api_key=spec.api_key, base_url=spec.base_url, max_retries=0)
     _OPENAI_CLIENT_CACHE[key] = client
     return client

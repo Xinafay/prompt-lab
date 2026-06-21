@@ -1,0 +1,24 @@
+{
+  "schema_version": "prompt_lab.experiment/v1",
+  "id": "demo-string",
+  "title": "Demo String",
+  "description": "Offline plain-text demo with precomputed artifacts for UI testing.",
+  "active_version": "v002",
+  "output": {
+    "type": "text"
+  },
+  "template": {
+    "engine": "jinjax",
+    "path": "prompt.md"
+  },
+  "models": {
+    "generator_model": "local/demo-generator",
+    "validator_model": "openai/demo-validator",
+    "judge_model": "openai/demo-judge"
+  },
+  "run_defaults": {
+    "repeat_count": 2,
+    "llm_cache": "disabled",
+    "case_order": "case-major"
+  }
+}

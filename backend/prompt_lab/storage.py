@@ -4,8 +4,18 @@ import json
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
+from pydantic import TypeAdapter
+
 from prompt_lab.errors import NotFoundError
 from prompt_lab.models.artifacts import CaseArtifact, ExperimentArtifact
+from prompt_lab.models.validators import (
+    ValidationBatchArtifact,
+    ValidationResultArtifact,
+    ValidatorDefinition,
+)
+
+
+_VALIDATOR_DEFINITION_ADAPTER = TypeAdapter(ValidatorDefinition)
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -120,9 +130,80 @@ class PromptLabStore:
             for path in sorted(cases_dir.glob("*.json"))
         ]
 
+    def load_validators(self, experiment_id: str) -> list[ValidatorDefinition]:
+        validators_dir = self.experiment_dir(experiment_id) / "validators"
+        if not validators_dir.is_dir():
+            return []
+        return [
+            _VALIDATOR_DEFINITION_ADAPTER.validate_python(_read_json(path))
+            for path in sorted(validators_dir.glob("*.json"))
+        ]
+
     def write_run_artifact(self, experiment_id: str, version: str, relative_path: str, value: dict[str, Any]) -> Path:
         path = _resolve_version_local_path(
             self.version_dir(experiment_id, version), relative_path
         )
         _write_json(path, value)
         return path
+
+    def write_validation_artifact(
+        self,
+        experiment_id: str,
+        version: str,
+        relative_path: str,
+        value: dict[str, Any],
+    ) -> Path:
+        path = _resolve_version_local_path(
+            self.version_dir(experiment_id, version), relative_path
+        )
+        _write_json(path, value)
+        return path
+
+    def load_validation_batch(
+        self,
+        experiment_id: str,
+        version: str,
+        validation_batch_id: str,
+    ) -> ValidationBatchArtifact:
+        path = self._validation_batch_dir(
+            experiment_id,
+            version,
+            validation_batch_id,
+        ) / "batch.json"
+        if not path.is_file():
+            raise NotFoundError("Validation batch not found")
+        return ValidationBatchArtifact.model_validate(_read_json(path))
+
+    def load_validation_results(
+        self,
+        experiment_id: str,
+        version: str,
+        validation_batch_id: str,
+    ) -> list[ValidationResultArtifact]:
+        batch_dir = self._validation_batch_dir(
+            experiment_id,
+            version,
+            validation_batch_id,
+        )
+        if not batch_dir.is_dir():
+            raise NotFoundError("Validation batch not found")
+        results: list[ValidationResultArtifact] = []
+        for path in sorted(batch_dir.rglob("*.json")):
+            relative = path.relative_to(batch_dir)
+            if relative.parts == ("batch.json",):
+                continue
+            if relative.parts and relative.parts[0] == "validators_snapshot":
+                continue
+            results.append(ValidationResultArtifact.model_validate(_read_json(path)))
+        return results
+
+    def _validation_batch_dir(
+        self,
+        experiment_id: str,
+        version: str,
+        validation_batch_id: str,
+    ) -> Path:
+        _validate_storage_id(validation_batch_id, "Validation batch")
+        return (
+            self.version_dir(experiment_id, version) / "validations" / validation_batch_id
+        ).resolve()

@@ -1,15 +1,19 @@
 import type {
-  ComparisonResponse,
+  CompareMatrixResponse,
   CreatedVersionResponse,
   Experiment,
   FindingDecisionSet,
+  GlobalSettings,
   JobEvent,
   JobStatus,
   JudgmentResponse,
+  PromptPreviewResponse,
   ProposalResponse,
   ReviewState,
   RunVersionRequest,
   RunsResponse,
+  ValidationInclusionUpdate,
+  ValidationState,
   VersionOverview,
   VersionsResponse
 } from "./types";
@@ -89,6 +93,16 @@ export function updateExperiment(
   );
 }
 
+export function getGlobalSettings(): Promise<GlobalSettings> {
+  return apiGet<GlobalSettings>("/api/settings");
+}
+
+export function updateGlobalSettings(
+  settings: GlobalSettings
+): Promise<GlobalSettings> {
+  return apiPut<GlobalSettings>("/api/settings", settings);
+}
+
 export function getExperimentVersions(
   experimentId: string
 ): Promise<VersionsResponse> {
@@ -118,6 +132,41 @@ export function runVersion(
       version
     )}/runs`,
     request
+  );
+}
+
+export function previewRunPrompts(
+  experimentId: string,
+  version: string
+): Promise<PromptPreviewResponse> {
+  return apiPost<PromptPreviewResponse>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
+      version
+    )}/runs/preview-prompts`
+  );
+}
+
+export function validateVersion(
+  experimentId: string,
+  version: string,
+  dryRun = false
+): Promise<ValidationState> {
+  return apiPost<ValidationState>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
+      version
+    )}/validations`,
+    dryRun ? { dry_run: true } : undefined
+  );
+}
+
+export function previewValidationPrompts(
+  experimentId: string,
+  version: string
+): Promise<PromptPreviewResponse> {
+  return apiPost<PromptPreviewResponse>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
+      version
+    )}/validations/preview-prompts`
   );
 }
 
@@ -155,6 +204,17 @@ export function judgeVersion(
   );
 }
 
+export function previewJudgePrompts(
+  experimentId: string,
+  version: string
+): Promise<PromptPreviewResponse> {
+  return apiPost<PromptPreviewResponse>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
+      version
+    )}/judgments/preview-prompts`
+  );
+}
+
 export function getReviewState(
   experimentId: string,
   version: string,
@@ -179,6 +239,34 @@ export async function getLatestReviewState(
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(await readErrorMessage(response));
   return response.json() as Promise<ReviewState>;
+}
+
+export async function getLatestValidationState(
+  experimentId: string,
+  version: string
+): Promise<ValidationState | null> {
+  const response = await fetch(
+    `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
+      version
+    )}/validations/latest`
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(await readErrorMessage(response));
+  return response.json() as Promise<ValidationState>;
+}
+
+export function updateValidationInclusion(
+  experimentId: string,
+  version: string,
+  validationBatchId: string,
+  update: ValidationInclusionUpdate
+): Promise<ValidationState> {
+  return apiPut<ValidationState>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
+      version
+    )}/validations/${encodeURIComponent(validationBatchId)}/inclusion`,
+    update
+  );
 }
 
 export function updateReviewDecisions(
@@ -223,6 +311,18 @@ export function generateProposal(
   );
 }
 
+export function previewProposalPrompts(
+  experimentId: string,
+  version: string,
+  reviewId: string
+): Promise<PromptPreviewResponse> {
+  return apiPost<PromptPreviewResponse>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
+      version
+    )}/reviews/${encodeURIComponent(reviewId)}/proposal/preview-prompts`
+  );
+}
+
 export async function getReviewProposal(
   experimentId: string,
   version: string,
@@ -255,8 +355,8 @@ export function compareVersions(
   baselineVersion: string,
   candidateVersion: string,
   dryRun = false
-): Promise<ComparisonResponse> {
-  return apiPost<ComparisonResponse>(
+): Promise<CompareMatrixResponse> {
+  return apiPost<CompareMatrixResponse>(
     `/api/experiments/${encodeURIComponent(experimentId)}/comparisons`,
     {
       baseline_version: baselineVersion,

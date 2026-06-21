@@ -1,0 +1,18 @@
+{
+  "experiment_id": "demo-json",
+  "source_version": "v002",
+  "review_id": "review-001",
+  "judgment_id": "review-001",
+  "decision_summary": {
+    "accepted": [
+      "tighten-launch-ready"
+    ],
+    "rejected": [],
+    "deferred": []
+  },
+  "decisions_path": "decisions.json",
+  "human_notes_present": true,
+  "generated_by_model": "openai/demo-judge",
+  "output_type": "pydantic",
+  "validation_batch_id": "validation-000002"
+}

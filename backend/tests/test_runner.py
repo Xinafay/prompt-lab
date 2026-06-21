@@ -133,6 +133,40 @@ def test_run_structured_case_saves_json_output() -> None:
     assert run.output_type == "pydantic"
 
 
+def test_run_structured_case_saves_executed_prompt() -> None:
+    case = CaseArtifact.model_validate(demo_case_payload())
+
+    def generate(
+        model: str,
+        prompt: str,
+        response_model: type[BaseModel],
+        validation_context: dict[str, object] | None,
+    ) -> object:
+        del model, prompt, response_model, validation_context
+
+        class Result:
+            output = DemoOutput(name="Ada")
+            usage = {"total_tokens": 5}
+            executed_prompt = "Hello Ada\n\nschema: DemoOutput"
+
+        return Result()
+
+    run = run_structured_case(
+        version="v001",
+        run_batch_id="batch-1",
+        case=case,
+        repeat_index=1,
+        generator_model="local/model",
+        template_text="Hello {{ chapter.name }}\n\n<<MODEL>>",
+        response_model=DemoOutput,
+        generate_structured=generate,
+    )
+
+    assert run.status == "ok"
+    assert run.rendered_prompt == "Hello Ada\n\nschema: DemoOutput"
+    assert "<<MODEL>>" not in run.rendered_prompt
+
+
 def test_run_structured_case_stores_validation_errors() -> None:
     case = CaseArtifact.model_validate(demo_case_payload())
 
@@ -142,7 +176,10 @@ def test_run_structured_case_stores_validation_errors() -> None:
         response_model: type[BaseModel],
         validation_context: dict[str, object] | None,
     ) -> object:
-        raise PromptLabStructuredValidationError("invalid structured output")
+        raise PromptLabStructuredValidationError(
+            "invalid structured output",
+            raw_output='{"name": 123}',
+        )
 
     run = run_structured_case(
         version="v001",
@@ -158,6 +195,7 @@ def test_run_structured_case_stores_validation_errors() -> None:
     assert run.status == "validation_error"
     assert run.validation_error is not None
     assert "invalid structured output" in run.validation_error
+    assert run.raw_output == '{"name": 123}'
 
 
 def test_run_structured_case_stores_execution_errors() -> None:
@@ -203,6 +241,7 @@ def main() -> int:
         test_run_text_case_saves_text_output,
         test_run_text_case_stores_execution_errors,
         test_run_structured_case_saves_json_output,
+        test_run_structured_case_saves_executed_prompt,
         test_run_structured_case_stores_validation_errors,
         test_run_structured_case_stores_execution_errors,
         test_dry_run_text_response_is_deterministic,

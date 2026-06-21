@@ -1,0 +1,23 @@
+{
+  "schema_version": "prompt_lab.validator/v1",
+  "validator_id": "report-quality",
+  "type": "llm_questionnaire",
+  "title": "Report quality",
+  "description": "Checks whether the structured report is useful and grounded.",
+  "enabled": true,
+  "input_scope": "output_prompt_and_case",
+  "checks": [
+    {
+      "check_id": "grounded-summary",
+      "title": "Grounded summary",
+      "question": "Is the summary grounded in the product brief?",
+      "description": "The summary should use facts from the case instead of inventing unrelated claims."
+    },
+    {
+      "check_id": "actionable-risks",
+      "title": "Actionable risks",
+      "question": "Are the risks concrete enough to guide a prompt change?",
+      "description": "Risks should be specific rather than generic."
+    }
+  ]
+}

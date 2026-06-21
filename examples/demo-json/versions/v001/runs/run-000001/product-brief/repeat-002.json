@@ -1,0 +1,26 @@
+{
+  "schema_version": "prompt_lab.run/v1",
+  "run_id": "run-000001-product-brief-repeat-002",
+  "run_batch_id": "run-000001",
+  "version": "v001",
+  "case_id": "product-brief",
+  "repeat_index": 2,
+  "generator_model": "local/demo-generator",
+  "status": "ok",
+  "rendered_prompt": "Create launch-readiness report for product-brief repeat 2.",
+  "raw_output": "{\"summary\":\"A desk lamp for remote designers that improves focus.\",\"tags\":[\"lighting\"],\"risks\":[],\"launch_ready\":true}",
+  "output_type": "pydantic",
+  "usage": {
+    "prompt_tokens": 102,
+    "completion_tokens": 32,
+    "total_tokens": 134
+  },
+  "output_json": {
+    "summary": "A desk lamp for remote designers that improves focus.",
+    "tags": [
+      "lighting"
+    ],
+    "risks": [],
+    "launch_ready": true
+  }
+}

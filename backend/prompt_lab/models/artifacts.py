@@ -39,11 +39,12 @@ class OutputConfig(BaseModel):
 
 
 class ModelConfig(BaseModel):
-    """Generator and judge model references."""
+    """Generator, validator, and judge model references."""
 
     model_config = ConfigDict(extra="forbid")
 
     generator_model: str
+    validator_model: str
     judge_model: str
 
 

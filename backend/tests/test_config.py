@@ -16,6 +16,7 @@ def test_default_config_uses_repo_local_paths() -> None:
         assert config.project_root == resolved_root
         assert config.experiments_root == resolved_root / "experiments"
         assert config.examples_root == resolved_root / "examples"
+        assert config.settings_path == resolved_root / "config" / "settings.json"
 
 
 def test_config_accepts_experiments_root_override() -> None:

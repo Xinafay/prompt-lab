@@ -215,6 +215,22 @@ export function ExperimentSettings({
           />
         </label>
         <label className="settings-field">
+          <span>Validator model</span>
+          <input
+            required
+            value={draft.models.validator_model}
+            onChange={(event) =>
+              updateDraft((current) => ({
+                ...current,
+                models: {
+                  ...current.models,
+                  validator_model: event.target.value
+                }
+              }))
+            }
+          />
+        </label>
+        <label className="settings-field">
           <span>Judge model</span>
           <input
             required

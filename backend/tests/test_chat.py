@@ -14,6 +14,7 @@ from shared.llm.chat import Chat, ChatMessage
 from shared.llm import chat_get_text as operation_utils
 from shared.llm import chat_request as request_utils
 from shared.llm import chat_transport as transport_utils
+from shared.llm import transport_retry as retry_transport_utils
 from shared.llm import server_registry as server_registry_utils
 import shared.llm.transports.openai_client as openai_client_utils
 from shared.llm.chat_client import default_chat_client
@@ -1032,8 +1033,8 @@ def test_retrying_client_retries_on_rate_limit() -> None:
             return LlmResponse(content="hello")
 
     slept: list[float] = []
-    with _patched(retrying_utils.random, "uniform", lambda _a, _b: 1.0):
-        with _patched(retrying_utils.time, "sleep", lambda s: slept.append(s)):
+    with _patched(retry_transport_utils.random, "uniform", lambda _a, _b: 1.0):
+        with _patched(retry_transport_utils.time, "sleep", lambda s: slept.append(s)):
             client = RetryingChatClient(_FlakyClient(), max_retries=2)
             response = client.complete([], preset={"model": "local/Valkyrie"})
 
@@ -1055,8 +1056,8 @@ def test_retrying_client_raises_after_max_retries() -> None:
             raise rate_limit_err
 
     slept: list[float] = []
-    with _patched(retrying_utils.random, "uniform", lambda _a, _b: 1.0):
-        with _patched(retrying_utils.time, "sleep", lambda s: slept.append(s)):
+    with _patched(retry_transport_utils.random, "uniform", lambda _a, _b: 1.0):
+        with _patched(retry_transport_utils.time, "sleep", lambda s: slept.append(s)):
             client = RetryingChatClient(_AlwaysFailClient(), max_retries=2)
             try:
                 client.complete([], preset={"model": "local/Valkyrie"})
@@ -1403,62 +1404,6 @@ def test_chat_get_text_uses_ambient_cache_override_when_request_override_is_none
         _assert_equal(second.output, "ambient cached", "ambient cache second response")
 
 
-def test_chat_get_text_retry_count_zero_does_not_retry() -> None:
-    with _temporary_chat_env():
-        calls = {"count": 0}
-
-        def fail(*_args: Any, **_kwargs: Any) -> LlmResponse:
-            calls["count"] += 1
-            raise RuntimeError("boom")
-
-        with _patched(operation_utils, "request_chat_raw_text", fail):
-            try:
-                chat_get_text(
-                    Chat(),
-                    "Return text",
-                    {"model": "openai/gpt-5-mini"},
-                    retry_count=0,
-                )
-            except RuntimeError as exc:
-                _assert_true("boom" in str(exc), "retry_count zero error")
-            else:
-                raise ValueError("Expected text failure without retry.")
-
-        _assert_equal(calls["count"], 1, "retry_count zero call count")
-
-
-def test_chat_get_text_retry_count_one_retries_once() -> None:
-    with _temporary_chat_env():
-        calls = {"count": 0}
-
-        def flaky(*_args: Any, **_kwargs: Any) -> LlmResponse:
-            calls["count"] += 1
-            if calls["count"] == 1:
-                raise RuntimeError("boom")
-            return LlmResponse(
-                content="hello",
-                usage={"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3},
-            )
-
-        with _patched(operation_utils, "request_chat_raw_text", flaky):
-            result = chat_get_text(
-                Chat(),
-                "Return text",
-                {"model": "openai/gpt-5-mini"},
-                retry_count=1,
-            )
-
-        _assert_equal(calls["count"], 2, "retry_count one call count")
-        _assert_equal(result.output, "hello", "retry_count one output")
-        _assert_usage_counts(
-            result.usage,
-            prompt_tokens=1,
-            completion_tokens=2,
-            total_tokens=3,
-            label="retry_count one usage",
-        )
-
-
 def test_chat_get_text_does_not_retry_cancelled_request() -> None:
     with _temporary_chat_env():
         calls = {"count": 0}
@@ -1473,7 +1418,6 @@ def test_chat_get_text_does_not_retry_cancelled_request() -> None:
                     Chat(),
                     "Return text",
                     {"model": "openai/gpt-5-mini"},
-                    retry_count=1,
                 )
             except LlmRequestCancelled:
                 pass
@@ -1497,7 +1441,6 @@ def test_text_failure_restores_original_chat() -> None:
                     chat,
                     "Return text",
                     {"model": "openai/gpt-5-mini"},
-                    retry_count=1,
                 )
             except RuntimeError as exc:
                 _assert_true("boom" in str(exc), "text failure error")
@@ -1542,8 +1485,6 @@ def main() -> int:
         test_chat_get_text_cache_enabled_override_forces_cache_when_env_disabled,
         test_chat_get_text_cache_enabled_override_disables_cache_when_env_enabled,
         test_chat_get_text_uses_ambient_cache_override_when_request_override_is_none,
-        test_chat_get_text_retry_count_zero_does_not_retry,
-        test_chat_get_text_retry_count_one_retries_once,
         test_chat_get_text_does_not_retry_cancelled_request,
         test_text_failure_restores_original_chat,
     ]

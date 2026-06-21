@@ -1,0 +1,27 @@
+{
+  "schema_version": "prompt_lab.run/v1",
+  "run_id": "run-000001-product-brief-repeat-001",
+  "run_batch_id": "run-000001",
+  "version": "v001",
+  "case_id": "product-brief",
+  "repeat_index": 1,
+  "generator_model": "local/demo-generator",
+  "status": "ok",
+  "rendered_prompt": "Create launch-readiness report for product-brief repeat 1.",
+  "raw_output": "{\"summary\":\"Atlas Desk Lamp is positioned for remote designers with clear ergonomic benefits.\",\"tags\":[\"lighting\",\"remote-work\"],\"risks\":[],\"launch_ready\":true}",
+  "output_type": "pydantic",
+  "usage": {
+    "prompt_tokens": 101,
+    "completion_tokens": 31,
+    "total_tokens": 132
+  },
+  "output_json": {
+    "summary": "Atlas Desk Lamp is positioned for remote designers with clear ergonomic benefits.",
+    "tags": [
+      "lighting",
+      "remote-work"
+    ],
+    "risks": [],
+    "launch_ready": true
+  }
+}

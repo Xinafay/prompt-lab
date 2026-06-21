@@ -11,36 +11,63 @@ from pathlib import Path, PureWindowsPath
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 from prompt_lab import llm_client
+from prompt_lab.automatic_validators import execute_automatic_validator
 from prompt_lab.case_context import materialize_case_context
-from prompt_lab.compare import build_comparison_prompt
+from prompt_lab.compare import build_compare_matrix
 from prompt_lab.config import PromptLabConfig
 from prompt_lab.dry_run import (
-    dry_comparison_response_json,
     dry_judgment_response_json,
     dry_proposal_response_json,
     dry_structured_response_json,
     dry_text_response,
+    dry_validator_response_json,
 )
 from prompt_lab.experiment_seed import seed_experiments_from_examples
 from prompt_lab.judge import build_judge_prompt
 from prompt_lab.jobs import JobAlreadyRunningError, JobManager
 from prompt_lab.models.artifacts import ExperimentArtifact, RunArtifact
 from prompt_lab.models.judgments import (
-    ComparisonArtifact,
     FindingDecisionSet,
     JudgmentArtifact,
 )
-from prompt_lab.proposal import ProposalDraft, ProposalSource, build_proposal_prompt
+from prompt_lab.models.validators import (
+    AutomaticValidatorDefinition,
+    CompareMatrixResponse,
+    LlmQuestionnaireResponse,
+    LlmQuestionnaireValidatorDefinition,
+    ValidationBatchArtifact,
+    ValidationInclusionUpdate,
+    ValidationResultArtifact,
+    ValidatorDefinition,
+)
+from prompt_lab.proposal import (
+    ProposalDraft,
+    ProposalSource,
+    build_proposal_prompt,
+    proposal_response_model,
+    proposal_response_to_draft,
+)
 from prompt_lab.pydantic_loader import load_model_entrypoint
 from prompt_lab.runner import iter_case_major, run_structured_case, run_text_case
+from prompt_lab.settings import PromptLabSettings, load_settings, save_settings
 from prompt_lab.storage import PromptLabStore
+from prompt_lab.template_renderer import render_prompt
 from prompt_lab.errors import NotFoundError
+from prompt_lab.validation import (
+    apply_inclusion_update,
+    build_llm_validation_result,
+    build_skipped_validation_result,
+    build_llm_validator_prompt,
+    enabled_validators,
+)
 
 
 logger = logging.getLogger(__name__)
+_VALIDATOR_DEFINITION_ADAPTER = TypeAdapter(ValidatorDefinition)
+PROMPT_PREVIEW_MAX_PROMPTS = 100
 
 
 class HumanNotesRequest(BaseModel):
@@ -67,6 +94,51 @@ class DryRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dry_run: bool = False
+
+
+class PromptPreviewItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str
+    title: str
+    model: str
+    prompt: str
+    character_count: int
+    word_count: int
+    case_id: str | None = None
+    repeat_index: int | None = None
+    validator_id: str | None = None
+
+
+class PromptPreviewResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workflow_kind: str
+    prompts: list[PromptPreviewItem]
+    warnings: list[str] = Field(default_factory=list)
+
+
+def _prompt_preview_item(
+    *,
+    kind: str,
+    title: str,
+    model: str,
+    prompt: str,
+    case_id: str | None = None,
+    repeat_index: int | None = None,
+    validator_id: str | None = None,
+) -> PromptPreviewItem:
+    return PromptPreviewItem(
+        kind=kind,
+        title=title,
+        model=model,
+        prompt=prompt,
+        character_count=len(prompt),
+        word_count=len(prompt.split()),
+        case_id=case_id,
+        repeat_index=repeat_index,
+        validator_id=validator_id,
+    )
 
 
 def _validate_case_id_path_segment(case_id: str) -> None:
@@ -109,6 +181,34 @@ def _validate_review_id_path_segment(review_id: str) -> None:
         or review_id in {".", ".."}
     ):
         raise HTTPException(status_code=400, detail="Unsafe review id")
+
+
+def _validate_validation_batch_id_path_segment(validation_batch_id: str) -> None:
+    windows_path = PureWindowsPath(validation_batch_id)
+    if (
+        not validation_batch_id
+        or Path(validation_batch_id).is_absolute()
+        or windows_path.is_absolute()
+        or windows_path.drive
+        or "/" in validation_batch_id
+        or "\\" in validation_batch_id
+        or validation_batch_id in {".", ".."}
+    ):
+        raise HTTPException(status_code=400, detail="Unsafe validation batch id")
+
+
+def _validate_validator_id_path_segment(validator_id: str) -> None:
+    windows_path = PureWindowsPath(validator_id)
+    if (
+        not validator_id
+        or Path(validator_id).is_absolute()
+        or windows_path.is_absolute()
+        or windows_path.drive
+        or "/" in validator_id
+        or "\\" in validator_id
+        or validator_id in {".", ".."}
+    ):
+        raise HTTPException(status_code=400, detail="Unsafe validator id")
 
 
 def _read_json(path: Path) -> dict[str, object]:
@@ -215,48 +315,6 @@ def _render_judgment_markdown(judgment: JudgmentArtifact) -> str:
                 f"  Recommended: {_markdown_text(decision.recommended_option)}",
             ]
         )
-    return "\n".join(lines).rstrip() + "\n"
-
-
-def _render_comparison_markdown(comparison: ComparisonArtifact) -> str:
-    lines = [
-        f"# Comparison {comparison.comparison_id}",
-        "",
-        f"Baseline: `{_markdown_text(comparison.baseline_version)}`",
-        f"Candidate: `{_markdown_text(comparison.candidate_version)}`",
-        f"Recommendation: `{comparison.recommendation}`",
-        "",
-        _markdown_text(comparison.summary),
-    ]
-    sections = [
-        ("Improvements", comparison.improvements),
-        ("Regressions", comparison.regressions),
-        ("Unchanged Problems", comparison.unchanged_problems),
-        ("New Problems", comparison.new_problems),
-        ("Stability Changes", comparison.stability_changes),
-    ]
-    for title, items in sections:
-        lines.extend(["", f"## {title}"])
-        if items:
-            lines.extend(f"- {_markdown_text(item)}" for item in items)
-        else:
-            lines.append("- None.")
-    lines.extend(["", "## Decision Points"])
-    if comparison.decision_points:
-        for decision in comparison.decision_points:
-            options = "; ".join(_markdown_text(item) for item in decision.options)
-            lines.extend(
-                [
-                    (
-                        f"- `{_markdown_text(decision.decision_id)}`: "
-                        f"{_markdown_text(decision.description)}"
-                    ),
-                    f"  Options: {options}",
-                    f"  Recommended: {_markdown_text(decision.recommended_option)}",
-                ]
-            )
-    else:
-        lines.append("- None.")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -368,54 +426,6 @@ def _validate_judgment_metadata(
         )
 
 
-def _validate_comparison_metadata(
-    *,
-    comparison: ComparisonArtifact,
-    comparison_id: str,
-    baseline_version: str,
-    candidate_version: str,
-    baseline_run_batch_id: str,
-    candidate_run_batch_id: str,
-    judge_model: str,
-) -> None:
-    if comparison.comparison_id != comparison_id:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Comparison comparison_id must be {comparison_id}",
-        )
-    if comparison.baseline_version != baseline_version:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Comparison baseline_version must be {baseline_version}",
-        )
-    if comparison.candidate_version != candidate_version:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Comparison candidate_version must be {candidate_version}",
-        )
-    if comparison.baseline_run_batch_ids != [baseline_run_batch_id]:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Comparison baseline_run_batch_ids must be "
-                f"['{baseline_run_batch_id}']"
-            ),
-        )
-    if comparison.candidate_run_batch_ids != [candidate_run_batch_id]:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Comparison candidate_run_batch_ids must be "
-                f"['{candidate_run_batch_id}']"
-            ),
-        )
-    if comparison.judge_model != judge_model:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Comparison judge_model must be {judge_model}",
-        )
-
-
 def _next_review_location(version_dir: Path) -> tuple[str, Path]:
     reviews_dir = version_dir / "reviews"
     index = 1
@@ -485,6 +495,488 @@ def _select_latest_review_dir(version_dir: Path) -> Path | None:
     if not review_dirs:
         return None
     return max(review_dirs, key=lambda path: path.name)
+
+
+def _select_latest_validation_dir(version_dir: Path) -> Path | None:
+    validations_dir = version_dir / "validations"
+    if not validations_dir.is_dir():
+        return None
+    validation_dirs = []
+    for path in validations_dir.iterdir():
+        batch_path = path / "batch.json"
+        if not path.is_dir() or not batch_path.is_file():
+            continue
+        try:
+            batch = ValidationBatchArtifact.model_validate(_read_json(batch_path))
+        except (json.JSONDecodeError, ValidationError):
+            continue
+        if batch.status == "completed":
+            validation_dirs.append(path)
+    if not validation_dirs:
+        return None
+    return max(validation_dirs, key=lambda path: path.name)
+
+
+def _resolve_existing_validation_dir(
+    version_dir: Path,
+    validation_batch_id: str,
+) -> Path:
+    _validate_validation_batch_id_path_segment(validation_batch_id)
+    validations_dir = (version_dir / "validations").resolve()
+    validation_dir = (validations_dir / validation_batch_id).resolve()
+    if (
+        validation_dir == validations_dir
+        or not validation_dir.is_relative_to(validations_dir)
+        or not validation_dir.is_dir()
+    ):
+        raise HTTPException(status_code=404, detail="Validation batch not found")
+    if not (validation_dir / "batch.json").is_file():
+        raise HTTPException(status_code=404, detail="Validation batch not found")
+    return validation_dir
+
+
+def _read_validation_snapshots(validation_dir: Path) -> list[ValidatorDefinition]:
+    snapshots_dir = validation_dir / "validators_snapshot"
+    if not snapshots_dir.is_dir():
+        return []
+    return [
+        _VALIDATOR_DEFINITION_ADAPTER.validate_python(_read_json(path))
+        for path in sorted(snapshots_dir.glob("*.json"))
+    ]
+
+
+def _read_validation_state(
+    store: PromptLabStore,
+    experiment_id: str,
+    version: str,
+    validation_dir: Path,
+) -> dict[str, object]:
+    batch = ValidationBatchArtifact.model_validate(
+        _read_json(validation_dir / "batch.json")
+    )
+    results = store.load_validation_results(
+        experiment_id,
+        version,
+        batch.validation_batch_id,
+    )
+    validators = _read_validation_snapshots(validation_dir)
+    return {
+        "validation_batch": batch.model_dump(mode="json"),
+        "validators": [validator.model_dump(mode="json") for validator in validators],
+        "results": [result.model_dump(mode="json") for result in results],
+    }
+
+
+def _validate_validation_batch_dir_identity(
+    *, validation_dir: Path, validation_batch: ValidationBatchArtifact
+) -> None:
+    if validation_batch.validation_batch_id != validation_dir.name:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Validation batch file {validation_dir.name} has "
+                f"validation_batch_id {validation_batch.validation_batch_id}"
+            ),
+        )
+
+
+def _validation_snapshot_lookup(
+    validators: list[ValidatorDefinition],
+) -> dict[str, dict[str, object]]:
+    lookup: dict[str, dict[str, object]] = {}
+    for validator in validators:
+        checks = getattr(validator, "checks", [])
+        check_lookup: dict[str, dict[str, object]] = {}
+        for check in checks:
+            check_payload: dict[str, object] = {"check_title": check.title}
+            check_question = getattr(check, "question", "")
+            if isinstance(check_question, str) and check_question:
+                check_payload["check_question"] = check_question
+            if check.description:
+                check_payload["check_description"] = check.description
+            check_lookup[check.check_id] = check_payload
+        validator_payload: dict[str, object] = {
+            "validator_title": validator.title,
+            "checks": check_lookup,
+        }
+        if validator.description:
+            validator_payload["validator_description"] = validator.description
+        lookup[validator.validator_id] = validator_payload
+    return lookup
+
+
+def _build_validation_evidence(
+    *,
+    results: list[ValidationResultArtifact],
+    validators: list[ValidatorDefinition],
+) -> list[dict[str, object]]:
+    validator_lookup = _validation_snapshot_lookup(validators)
+    evidence: list[dict[str, object]] = []
+    for result in sorted(
+        results,
+        key=lambda item: (item.case_id, item.repeat_index, item.validator_id),
+    ):
+        if not result.included_in_judge:
+            continue
+        validator_snapshot = validator_lookup.get(result.validator_id, {})
+        check_lookup = validator_snapshot.get("checks", {})
+        if result.status == "error" or result.execution_error is not None:
+            payload: dict[str, object] = {
+                "validator_id": result.validator_id,
+                "case_id": result.case_id,
+                "repeat_index": result.repeat_index,
+                "status": result.status,
+                "execution_error": result.execution_error,
+            }
+            validator_title = validator_snapshot.get("validator_title")
+            if isinstance(validator_title, str):
+                payload["validator_title"] = validator_title
+            validator_description = validator_snapshot.get("validator_description")
+            if isinstance(validator_description, str):
+                payload["validator_description"] = validator_description
+            evidence.append(payload)
+        for check in result.check_results:
+            if not check.included_in_judge:
+                continue
+            payload = {
+                "validator_id": result.validator_id,
+                "check_id": check.check_id,
+                "case_id": result.case_id,
+                "repeat_index": result.repeat_index,
+                "grade": check.grade,
+                "comment": check.comment,
+            }
+            validator_title = validator_snapshot.get("validator_title")
+            if isinstance(validator_title, str):
+                payload["validator_title"] = validator_title
+            validator_description = validator_snapshot.get("validator_description")
+            if isinstance(validator_description, str):
+                payload["validator_description"] = validator_description
+            if isinstance(check_lookup, dict):
+                check_snapshot = check_lookup.get(check.check_id)
+                if isinstance(check_snapshot, dict):
+                    check_title = check_snapshot.get("check_title")
+                    if isinstance(check_title, str):
+                        payload["check_title"] = check_title
+                    check_question = check_snapshot.get("check_question")
+                    if isinstance(check_question, str):
+                        payload["check_question"] = check_question
+                    check_description = check_snapshot.get("check_description")
+                    if isinstance(check_description, str):
+                        payload["check_description"] = check_description
+            evidence.append(payload)
+    return evidence
+
+
+def _validate_validation_results_for_judge(
+    *,
+    validation_batch: ValidationBatchArtifact,
+    validation_results: list[ValidationResultArtifact],
+    validator_snapshots: list[ValidatorDefinition],
+    run_artifacts: list[RunArtifact],
+) -> None:
+    validator_ids = {validator.validator_id for validator in validator_snapshots}
+    run_lookup = {
+        (run.case_id, run.repeat_index): run.run_id
+        for run in run_artifacts
+    }
+    for result in validation_results:
+        if result.validation_batch_id != validation_batch.validation_batch_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} has "
+                    f"validation_batch_id {result.validation_batch_id}, expected "
+                    f"{validation_batch.validation_batch_id}"
+                ),
+            )
+        if result.run_batch_id != validation_batch.run_batch_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} has "
+                    f"run_batch_id {result.run_batch_id}, expected "
+                    f"{validation_batch.run_batch_id}"
+                ),
+            )
+        if result.validator_id not in validator_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} uses unknown "
+                    f"validator_id {result.validator_id}"
+                ),
+            )
+        expected_run_id = run_lookup.get((result.case_id, result.repeat_index))
+        if expected_run_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} references "
+                    f"unknown run case {result.case_id} repeat {result.repeat_index}"
+                ),
+            )
+        if result.run_id != expected_run_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} has run_id "
+                    f"{result.run_id}, expected {expected_run_id}"
+                ),
+            )
+
+
+def _validate_validation_results_for_compare(
+    *,
+    version: str,
+    validation_batch: ValidationBatchArtifact,
+    validation_results: list[ValidationResultArtifact],
+    validator_snapshots: list[ValidatorDefinition],
+    run_artifacts: list[RunArtifact],
+) -> None:
+    if validation_batch.version != version:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Validation batch {validation_batch.validation_batch_id} has "
+                f"version {validation_batch.version}, expected {version}"
+            ),
+        )
+    if validation_batch.status != "completed":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Validation batch {validation_batch.validation_batch_id} has "
+                f"status {validation_batch.status}, expected completed"
+            ),
+        )
+    if validation_batch.completed_results != validation_batch.total_results:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Validation batch {validation_batch.validation_batch_id} has "
+                f"completed_results {validation_batch.completed_results}, expected "
+                f"{validation_batch.total_results}"
+            ),
+        )
+    if len(validation_results) != validation_batch.total_results:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Validation batch {validation_batch.validation_batch_id} has "
+                f"{len(validation_results)} validation results, expected "
+                f"{validation_batch.total_results}"
+            ),
+        )
+
+    validator_metadata = {
+        validator.validator_id: {
+            "type": validator.type,
+            "check_ids": {check.check_id for check in validator.checks},
+        }
+        for validator in validator_snapshots
+    }
+    snapshot_ids = set(validator_metadata)
+    batch_validator_ids = set(validation_batch.validator_ids)
+    if not snapshot_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Validation batch {validation_batch.validation_batch_id} has "
+                "no validator snapshots"
+            ),
+        )
+    if not batch_validator_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Validation batch {validation_batch.validation_batch_id} has "
+                "no validator_ids"
+            ),
+        )
+    if snapshot_ids != batch_validator_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Validation batch {validation_batch.validation_batch_id} has "
+                f"validator_ids {sorted(batch_validator_ids)}, but snapshot "
+                f"validator_ids are {sorted(snapshot_ids)}"
+            ),
+        )
+    expected_total_results = len(run_artifacts) * len(snapshot_ids)
+    if validation_batch.total_results != expected_total_results:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Validation batch {validation_batch.validation_batch_id} has "
+                f"total_results {validation_batch.total_results}, expected "
+                f"{expected_total_results}"
+            ),
+        )
+
+    seen_result_ids: set[str] = set()
+    seen_logical_results: set[tuple[str, int, str]] = set()
+    run_lookup = {
+        (run.case_id, run.repeat_index): run.run_id
+        for run in run_artifacts
+    }
+    expected_logical_results = {
+        (run.case_id, run.repeat_index, validator_id)
+        for run in run_artifacts
+        for validator_id in snapshot_ids
+    }
+    for result in validation_results:
+        if result.validation_result_id in seen_result_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"duplicate validation_result_id {result.validation_result_id}",
+            )
+        seen_result_ids.add(result.validation_result_id)
+
+        logical_key = (result.case_id, result.repeat_index, result.validator_id)
+        if logical_key in seen_logical_results:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"duplicate validation result for case {result.case_id} "
+                    f"repeat {result.repeat_index} validator {result.validator_id}"
+                ),
+            )
+        seen_logical_results.add(logical_key)
+
+        if result.validation_batch_id != validation_batch.validation_batch_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} has "
+                    f"validation_batch_id {result.validation_batch_id}, expected "
+                    f"{validation_batch.validation_batch_id}"
+                ),
+            )
+        if result.run_batch_id != validation_batch.run_batch_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} has "
+                    f"run_batch_id {result.run_batch_id}, expected "
+                    f"{validation_batch.run_batch_id}"
+                ),
+            )
+        expected_run_id = run_lookup.get((result.case_id, result.repeat_index))
+        if expected_run_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} references "
+                    f"unknown run case {result.case_id} repeat {result.repeat_index}"
+                ),
+            )
+        if result.run_id != expected_run_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} has run_id "
+                    f"{result.run_id}, expected {expected_run_id}"
+                ),
+            )
+        validator_snapshot = validator_metadata.get(result.validator_id)
+        if validator_snapshot is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} uses unknown "
+                    f"validator_id {result.validator_id}"
+                ),
+            )
+        expected_validator_type = validator_snapshot["type"]
+        if result.validator_type != expected_validator_type:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Validation result {result.validation_result_id} has "
+                    f"validator_type {result.validator_type}, expected "
+                    f"{expected_validator_type}"
+                ),
+            )
+        check_ids = validator_snapshot["check_ids"]
+        for check in result.check_results:
+            if check.check_id not in check_ids:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Validation result {result.validation_result_id} references "
+                        f"unknown check_id {check.check_id} for validator_id "
+                        f"{result.validator_id}"
+                    ),
+                )
+        actual_check_ids_list = [check.check_id for check in result.check_results]
+        seen_check_ids: set[str] = set()
+        for check_id in actual_check_ids_list:
+            if check_id in seen_check_ids:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Validation result {result.validation_result_id} has "
+                        f"duplicate check_id {check_id}"
+                    ),
+                )
+            seen_check_ids.add(check_id)
+        if result.status == "ok":
+            actual_check_ids = set(actual_check_ids_list)
+            if actual_check_ids != check_ids:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Validation result {result.validation_result_id} has "
+                        f"check_ids {sorted(actual_check_ids)} do not match snapshot "
+                        f"check_ids {sorted(check_ids)}"
+                    ),
+                )
+
+    missing_logical_results = sorted(expected_logical_results - seen_logical_results)
+    if missing_logical_results:
+        case_id, repeat_index, validator_id = missing_logical_results[0]
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"missing validation result for case {case_id} "
+                f"repeat {repeat_index} validator {validator_id}"
+            ),
+        )
+
+    unexpected_logical_results = sorted(seen_logical_results - expected_logical_results)
+    if unexpected_logical_results:
+        case_id, repeat_index, validator_id = unexpected_logical_results[0]
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"unexpected validation result for case {case_id} "
+                f"repeat {repeat_index} validator {validator_id}"
+            ),
+        )
+
+
+def _run_errors_from_artifacts(
+    run_artifacts: list[RunArtifact],
+) -> list[dict[str, object]]:
+    return [
+        {
+            "case_id": run.case_id,
+            "repeat_index": run.repeat_index,
+            "status": run.status,
+            "validation_error": run.validation_error,
+            "execution_error": run.execution_error,
+        }
+        for run in sorted(run_artifacts, key=lambda item: (item.case_id, item.repeat_index))
+        if run.validation_error is not None or run.execution_error is not None
+    ]
+
+
+def _validation_result_relative_path(result: ValidationResultArtifact) -> str:
+    return (
+        f"validations/{result.validation_batch_id}/{result.case_id}/"
+        f"repeat-{result.repeat_index:03d}/{result.validator_id}.json"
+    )
 
 
 def _read_review_state(review_dir: Path, review_id: str) -> dict[str, object]:
@@ -569,7 +1061,7 @@ def _next_numeric_version_dir(versions_root: Path) -> tuple[str, Path]:
 
 
 def _remove_generated_version_dirs(version_dir: Path) -> None:
-    for name in ["runs", "reviews", "comparisons"]:
+    for name in ["runs", "validations", "reviews", "comparisons"]:
         path = version_dir / name
         if path.exists():
             shutil.rmtree(path)
@@ -666,11 +1158,37 @@ def _load_latest_validated_run_batch(
     return selected_run_batch_id, run_artifacts
 
 
+def _load_validated_run_batch_by_id(
+    *,
+    version_dir: Path,
+    run_batch_id: str,
+    version: str,
+    cases: set[str],
+    repeat_count: int,
+) -> list[RunArtifact]:
+    run_batch_dir = version_dir / "runs" / run_batch_id
+    if not run_batch_dir.is_dir():
+        raise HTTPException(status_code=400, detail=f"Run batch {run_batch_id} not found")
+    run_artifacts = _load_run_artifacts_from_batch_dir(run_batch_dir)
+    if not run_artifacts:
+        raise HTTPException(status_code=400, detail="Run batch has no artifacts")
+    _validate_run_artifacts(
+        run_artifacts=run_artifacts,
+        selected_run_batch_id=run_batch_id,
+        version=version,
+        case_ids=cases,
+        repeat_count=repeat_count,
+    )
+    return run_artifacts
+
+
 def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     resolved_config = config or PromptLabConfig.from_env()
+    settings = load_settings(resolved_config.settings_path)
     seed_experiments_from_examples(
         experiments_root=resolved_config.experiments_root,
         examples_root=resolved_config.examples_root,
+        settings=settings,
     )
     store = PromptLabStore(
         experiments_root=resolved_config.experiments_root,
@@ -765,6 +1283,15 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     def list_experiments() -> list[dict[str, object]]:
         return [item.model_dump(mode="json") for item in store.list_experiments()]
 
+    @app.get("/api/settings")
+    def get_settings() -> dict[str, object]:
+        return load_settings(resolved_config.settings_path).model_dump(mode="json")
+
+    @app.put("/api/settings")
+    def update_settings(settings: PromptLabSettings) -> dict[str, object]:
+        save_settings(resolved_config.settings_path, settings)
+        return settings.model_dump(mode="json")
+
     @app.put("/api/experiments/{experiment_id}")
     def update_experiment(
         experiment_id: str, experiment: ExperimentArtifact
@@ -804,12 +1331,14 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             experiment_id, version, experiment.template.path
         )
         cases = store.load_cases(experiment_id)
+        validators = store.load_validators(experiment_id)
         return {
             "experiment": experiment.model_dump(mode="json"),
             "version": version,
             "prompt": prompt_template,
             "rubric": _read_optional_text(experiment_dir / "rubric.md"),
             "cases": [case.model_dump(mode="json") for case in cases],
+            "validators": [validator.model_dump(mode="json") for validator in validators],
         }
 
     @app.get("/api/experiments/{experiment_id}/versions/{version}/runs")
@@ -823,6 +1352,48 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             "run_batch_id": run_batch_dir.name,
             "runs": [run.model_dump(mode="json") for run in run_artifacts],
         }
+
+    @app.post("/api/experiments/{experiment_id}/versions/{version}/runs/preview-prompts")
+    def preview_run_prompts(
+        experiment_id: str,
+        version: str,
+    ) -> dict[str, object]:
+        experiment = store.load_experiment(experiment_id)
+        cases = store.load_cases(experiment_id)
+        if not cases:
+            raise HTTPException(status_code=400, detail="Version has no cases")
+        for case in cases:
+            _validate_case_id_path_segment(case.id)
+        repeat_count = experiment.run_defaults.repeat_count
+        template_text = store.read_text(experiment_id, version, experiment.template.path)
+        prompts: list[PromptPreviewItem] = []
+        warnings: list[str] = []
+        if repeat_count > 1:
+            warnings.append(
+                (
+                    "Run prompts are identical across repeats. "
+                    "Showing one prompt per case."
+                )
+            )
+        for case in cases:
+            rendered_prompt = render_prompt(
+                template_text,
+                materialize_case_context(case),
+            )
+            prompts.append(
+                _prompt_preview_item(
+                    kind="run",
+                    title=f"Run case {case.id}",
+                    model=experiment.models.generator_model,
+                    prompt=rendered_prompt,
+                    case_id=case.id,
+                )
+            )
+        return PromptPreviewResponse(
+            workflow_kind="run_version",
+            prompts=prompts,
+            warnings=warnings,
+        ).model_dump(mode="json")
 
     @app.get("/api/jobs/active")
     def get_active_job() -> dict[str, object]:
@@ -922,7 +1493,10 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         except JobAlreadyRunningError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         job_id = job.job_id
-        _remove_runtime_children(version_dir, ["runs", "reviews", "comparisons"])
+        _remove_runtime_children(
+            version_dir,
+            ["runs", "validations", "reviews", "comparisons"],
+        )
 
         def execute_run_job() -> None:
             completed_units = 0
@@ -1031,6 +1605,491 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         background_tasks.add_task(execute_run_job)
         return asdict(job)
 
+    @app.post(
+        "/api/experiments/{experiment_id}/versions/{version}/validations/preview-prompts"
+    )
+    def preview_validation_prompts(
+        experiment_id: str,
+        version: str,
+    ) -> dict[str, object]:
+        experiment = store.load_experiment(experiment_id)
+        version_dir = store.version_dir(experiment_id, version)
+        cases = store.load_cases(experiment_id)
+        case_ids = {case.id for case in cases}
+        cases_by_id = {case.id: case for case in cases}
+        selected_run_batch_id, run_artifacts = _load_latest_validated_run_batch(
+            version_dir=version_dir,
+            version=version,
+            cases=case_ids,
+            repeat_count=experiment.run_defaults.repeat_count,
+        )
+        validators = store.load_validators(experiment_id)
+        active_validators = enabled_validators(validators)
+        if not active_validators:
+            raise HTTPException(
+                status_code=400,
+                detail="Experiment has no enabled validators",
+            )
+        llm_validators = [
+            validator
+            for validator in active_validators
+            if isinstance(validator, LlmQuestionnaireValidatorDefinition)
+        ]
+        warnings: list[str] = []
+        all_preview_run_artifacts = sorted(
+            run_artifacts,
+            key=lambda item: (item.case_id, item.repeat_index),
+        )
+        skipped_prompt_count = sum(
+            1 for run in all_preview_run_artifacts if run.status == "execution_error"
+        )
+        preview_run_artifacts = [
+            run for run in all_preview_run_artifacts if run.status != "execution_error"
+        ]
+        if skipped_prompt_count > 0:
+            warnings.append(
+                (
+                    f"Skipping {skipped_prompt_count} validation prompt previews "
+                    "for execution_error runs because no model output exists."
+                )
+            )
+        total_prompt_count = len(preview_run_artifacts) * len(llm_validators)
+        if total_prompt_count > PROMPT_PREVIEW_MAX_PROMPTS:
+            first_repeat_by_case: dict[str, RunArtifact] = {}
+            for run in preview_run_artifacts:
+                if run.case_id not in first_repeat_by_case:
+                    first_repeat_by_case[run.case_id] = run
+            preview_run_artifacts = list(first_repeat_by_case.values())
+            warnings.append(
+                (
+                    f"Preview has {total_prompt_count} validation prompts, which is "
+                    f"larger than the {PROMPT_PREVIEW_MAX_PROMPTS} prompt limit. "
+                    "Showing every case and LLM validator for the first repeat only."
+                )
+            )
+
+        prompts: list[PromptPreviewItem] = []
+        for run in preview_run_artifacts:
+            case = cases_by_id[run.case_id]
+            case_context = materialize_case_context(case)
+            for validator in llm_validators:
+                try:
+                    validator_prompt = build_llm_validator_prompt(
+                        experiment_id=experiment_id,
+                        version=version,
+                        validation_batch_id="preview",
+                        validator=validator,
+                        run=run,
+                        case=case,
+                        case_context=case_context,
+                    )
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+                prompts.append(
+                    _prompt_preview_item(
+                        kind="validation",
+                        title=(
+                            f"Validate {run.case_id} repeat {run.repeat_index} "
+                            f"with {validator.validator_id}"
+                        ),
+                        model=experiment.models.validator_model,
+                        prompt=validator_prompt,
+                        case_id=run.case_id,
+                        repeat_index=run.repeat_index,
+                        validator_id=validator.validator_id,
+                    )
+                )
+
+        return PromptPreviewResponse(
+            workflow_kind="validation",
+            prompts=prompts,
+            warnings=warnings,
+        ).model_dump(mode="json")
+
+    @app.post("/api/experiments/{experiment_id}/versions/{version}/validations")
+    def validate_experiment_version(
+        experiment_id: str,
+        version: str,
+        request: DryRunRequest | None = None,
+    ) -> dict[str, object]:
+        job_id: str | None = None
+        batch: ValidationBatchArtifact | None = None
+        completed_results = 0
+
+        def persist_terminal_validation_batch(status: str, message: str) -> None:
+            nonlocal batch
+            if job_id is None or batch is None:
+                return
+            current_job = job_manager.get(job_id)
+            if current_job.status not in {"completed", "failed", "cancelled"}:
+                if status == "cancelled":
+                    current_job = job_manager.cancel(job_id, message=message)
+                else:
+                    current_job = job_manager.fail(job_id, message=message)
+            batch = batch.model_copy(
+                update={
+                    "status": status,
+                    "finished_at": current_job.finished_at,
+                    "completed_results": completed_results,
+                }
+            )
+            store.write_validation_artifact(
+                experiment_id,
+                version,
+                f"validations/{job_id}/batch.json",
+                batch.model_dump(mode="json"),
+            )
+
+        try:
+            dry_run = request.dry_run if request is not None else False
+            experiment = store.load_experiment(experiment_id)
+            version_dir = store.version_dir(experiment_id, version)
+            cases = store.load_cases(experiment_id)
+            case_ids = {case.id for case in cases}
+            cases_by_id = {case.id: case for case in cases}
+            selected_run_batch_id, run_artifacts = _load_latest_validated_run_batch(
+                version_dir=version_dir,
+                version=version,
+                cases=case_ids,
+                repeat_count=experiment.run_defaults.repeat_count,
+            )
+            validators = store.load_validators(experiment_id)
+            active_validators = enabled_validators(validators)
+            if not active_validators:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Experiment has no enabled validators",
+                )
+            for validator in active_validators:
+                _validate_validator_id_path_segment(validator.validator_id)
+
+            job_id = start_workflow_job(
+                kind="validation",
+                experiment_id=experiment_id,
+                version=version,
+                total_units=len(run_artifacts) * len(active_validators),
+            )
+            job = job_manager.get(job_id)
+            batch = ValidationBatchArtifact(
+                schema_version="prompt_lab.validation_batch/v1",
+                validation_batch_id=job_id,
+                run_batch_id=selected_run_batch_id,
+                version=version,
+                status="running",
+                started_at=job.started_at,
+                finished_at=None,
+                total_results=len(run_artifacts) * len(active_validators),
+                completed_results=0,
+                validator_model=experiment.models.validator_model,
+                validator_ids=[
+                    validator.validator_id for validator in active_validators
+                ],
+            )
+            store.write_validation_artifact(
+                experiment_id,
+                version,
+                f"validations/{job_id}/batch.json",
+                batch.model_dump(mode="json"),
+            )
+            for validator in active_validators:
+                store.write_validation_artifact(
+                    experiment_id,
+                    version,
+                    (
+                        f"validations/{job_id}/validators_snapshot/"
+                        f"{validator.validator_id}.json"
+                    ),
+                    validator.model_dump(mode="json"),
+                )
+
+            _remove_runtime_children(version_dir, ["reviews", "comparisons"])
+            results: list[ValidationResultArtifact] = []
+            for run in sorted(
+                run_artifacts,
+                key=lambda item: (item.case_id, item.repeat_index),
+            ):
+                case = cases_by_id[run.case_id]
+                for validator in active_validators:
+                    raise_if_workflow_job_cancelled(job_id)
+                    job_manager.update(
+                        job_id,
+                        completed_units=completed_results,
+                        message=(
+                            f"Validating {run.case_id} repeat "
+                            f"{run.repeat_index} with {validator.validator_id}"
+                        ),
+                    )
+                    if run.status == "execution_error":
+                        result = build_skipped_validation_result(
+                            job_id,
+                            run,
+                            validator,
+                            reason=(
+                                "Generator execution_error; validator skipped. "
+                                f"{run.execution_error or ''}"
+                            ).strip(),
+                        )
+                    elif isinstance(validator, LlmQuestionnaireValidatorDefinition):
+                        case_context = materialize_case_context(case)
+                        validator_prompt = build_llm_validator_prompt(
+                            experiment_id=experiment_id,
+                            version=version,
+                            validation_batch_id=job_id,
+                            validator=validator,
+                            run=run,
+                            case=case,
+                            case_context=case_context,
+                        )
+                        check_ids = [check.check_id for check in validator.checks]
+                        if dry_run:
+                            generated = llm_client.generate_structured_from_fake_response(
+                                experiment.models.validator_model,
+                                validator_prompt,
+                                LlmQuestionnaireResponse,
+                                case_context,
+                                dry_validator_response_json(check_ids),
+                            )
+                        else:
+                            generated = generate_structured_for_workflow(
+                                job_id,
+                                experiment.models.validator_model,
+                                validator_prompt,
+                                LlmQuestionnaireResponse,
+                                case_context,
+                            )
+                        output = generated.output
+                        response = (
+                            output
+                            if isinstance(output, LlmQuestionnaireResponse)
+                            else LlmQuestionnaireResponse.model_validate(output)
+                        )
+                        result = build_llm_validation_result(
+                            job_id,
+                            run,
+                            validator,
+                            response,
+                            generated.usage,
+                        )
+                    elif isinstance(validator, AutomaticValidatorDefinition):
+                        result = execute_automatic_validator(job_id, run, validator)
+                    else:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Unsupported validator type: {validator.type}",
+                        )
+                    store.write_validation_artifact(
+                        experiment_id,
+                        version,
+                        _validation_result_relative_path(result),
+                        result.model_dump(mode="json"),
+                    )
+                    results.append(result)
+                    completed_results += 1
+                    job_manager.update(
+                        job_id,
+                        completed_units=completed_results,
+                        message=(
+                            f"Completed {run.case_id} repeat "
+                            f"{run.repeat_index} with {validator.validator_id}"
+                        ),
+                    )
+
+            completed_job = job_manager.complete(job_id, message="Validation completed")
+            batch = batch.model_copy(
+                update={
+                    "status": "completed",
+                    "finished_at": completed_job.finished_at,
+                    "completed_results": completed_results,
+                }
+            )
+            store.write_validation_artifact(
+                experiment_id,
+                version,
+                f"validations/{job_id}/batch.json",
+                batch.model_dump(mode="json"),
+            )
+            return {
+                "validation_batch": batch.model_dump(mode="json"),
+                "validators": [
+                    validator.model_dump(mode="json")
+                    for validator in active_validators
+                ],
+                "results": [result.model_dump(mode="json") for result in results],
+            }
+        except ValueError as exc:
+            persist_terminal_validation_batch("failed", str(exc))
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except llm_client.PromptLabLlmCancelled as exc:
+            persist_terminal_validation_batch("cancelled", "Workflow job was cancelled")
+            raise HTTPException(
+                status_code=409, detail="Workflow job was cancelled"
+            ) from exc
+        except HTTPException as exc:
+            if exc.status_code == 409 and str(exc.detail) == "Workflow job was cancelled":
+                persist_terminal_validation_batch("cancelled", str(exc.detail))
+            else:
+                persist_terminal_validation_batch("failed", str(exc.detail))
+            raise
+        except Exception as exc:
+            persist_terminal_validation_batch(
+                "failed",
+                str(exc) or type(exc).__name__,
+            )
+            raise
+
+    @app.get("/api/experiments/{experiment_id}/versions/{version}/validations/latest")
+    def get_latest_validation_state(
+        experiment_id: str,
+        version: str,
+    ) -> dict[str, object]:
+        version_dir = store.version_dir(experiment_id, version)
+        validation_dir = _select_latest_validation_dir(version_dir)
+        if validation_dir is None:
+            raise HTTPException(status_code=404, detail="Validation batch not found")
+        return _read_validation_state(store, experiment_id, version, validation_dir)
+
+    @app.put(
+        "/api/experiments/{experiment_id}/versions/{version}/validations/"
+        "{validation_batch_id}/inclusion"
+    )
+    def update_validation_inclusion(
+        experiment_id: str,
+        version: str,
+        validation_batch_id: str,
+        update: ValidationInclusionUpdate,
+    ) -> dict[str, object]:
+        version_dir = store.version_dir(experiment_id, version)
+        validation_dir = _resolve_existing_validation_dir(
+            version_dir,
+            validation_batch_id,
+        )
+        results = store.load_validation_results(
+            experiment_id,
+            version,
+            validation_batch_id,
+        )
+        try:
+            updated_results = apply_inclusion_update(results, update)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        for result in updated_results:
+            store.write_validation_artifact(
+                experiment_id,
+                version,
+                _validation_result_relative_path(result),
+                result.model_dump(mode="json"),
+            )
+        _remove_runtime_children(version_dir, ["reviews", "comparisons"])
+        return _read_validation_state(store, experiment_id, version, validation_dir)
+
+    @app.post("/api/experiments/{experiment_id}/versions/{version}/judgments/preview-prompts")
+    def preview_judge_prompts(
+        experiment_id: str,
+        version: str,
+        run_batch_id: str | None = None,
+    ) -> dict[str, object]:
+        experiment = store.load_experiment(experiment_id)
+        version_dir = store.version_dir(experiment_id, version)
+        runs_dir = version_dir / "runs"
+        validation_dir = _select_latest_validation_dir(version_dir)
+        if validation_dir is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Judgment requires a completed validation batch. "
+                    "Run validation before generating a judgment."
+                ),
+            )
+        validation_batch = ValidationBatchArtifact.model_validate(
+            _read_json(validation_dir / "batch.json")
+        )
+        validation_results = store.load_validation_results(
+            experiment_id,
+            version,
+            validation_batch.validation_batch_id,
+        )
+        validator_snapshots = _read_validation_snapshots(validation_dir)
+        prompt_template = store.read_text(
+            experiment_id, version, experiment.template.path
+        )
+        cases = store.load_cases(experiment_id)
+        case_ids = {case.id for case in cases}
+        selected_run_batch_id = validation_batch.run_batch_id
+        if run_batch_id is not None and run_batch_id != selected_run_batch_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Requested run batch does not match latest completed "
+                    "validation batch"
+                ),
+            )
+        run_batch_dir = (runs_dir / selected_run_batch_id).resolve()
+        resolved_runs_dir = runs_dir.resolve()
+        if (
+            run_batch_dir == resolved_runs_dir
+            or not run_batch_dir.is_relative_to(resolved_runs_dir)
+            or not run_batch_dir.is_dir()
+        ):
+            raise HTTPException(status_code=404, detail="Run batch not found")
+        run_artifacts = _load_run_artifacts_from_batch_dir(run_batch_dir)
+        if not run_artifacts:
+            raise HTTPException(status_code=400, detail="Run batch has no artifacts")
+        _validate_run_artifacts(
+            run_artifacts=run_artifacts,
+            selected_run_batch_id=selected_run_batch_id,
+            version=version,
+            case_ids=case_ids,
+            repeat_count=experiment.run_defaults.repeat_count,
+        )
+        _validate_validation_results_for_judge(
+            validation_batch=validation_batch,
+            validation_results=validation_results,
+            validator_snapshots=validator_snapshots,
+            run_artifacts=run_artifacts,
+        )
+        validation_evidence = _build_validation_evidence(
+            results=validation_results,
+            validators=validator_snapshots,
+        )
+
+        model_source = None
+        if experiment.output.type == "pydantic":
+            model_file = experiment.output.model_file
+            model_entrypoint = experiment.output.model_entrypoint
+            assert model_file is not None
+            assert model_entrypoint is not None
+            model_source = store.read_text(experiment_id, version, model_file)
+            output_declaration = (
+                f"pydantic model: {model_entrypoint}\n"
+                f"model file: {model_file}"
+            )
+        else:
+            output_declaration = "text output"
+
+        judge_prompt = build_judge_prompt(
+            experiment_id=experiment_id,
+            version=version,
+            run_batch_id=selected_run_batch_id,
+            validation_batch_id=validation_batch.validation_batch_id,
+            judge_model=experiment.models.judge_model,
+            output_declaration=output_declaration,
+            prompt_template=prompt_template,
+            model_source=model_source,
+            validation_evidence=validation_evidence,
+            run_errors=_run_errors_from_artifacts(run_artifacts),
+        )
+        return PromptPreviewResponse(
+            workflow_kind="judge",
+            prompts=[
+                _prompt_preview_item(
+                    kind="judge",
+                    title="Judge validated run",
+                    model=experiment.models.judge_model,
+                    prompt=judge_prompt,
+                )
+            ],
+        ).model_dump(mode="json")
+
     @app.post("/api/experiments/{experiment_id}/versions/{version}/judgments")
     def judge_experiment_version(
         experiment_id: str,
@@ -1054,46 +2113,70 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             )
             version_dir = store.version_dir(experiment_id, version)
             runs_dir = version_dir / "runs"
-            experiment_dir = store.experiment_dir(experiment_id)
-            rubric_path = experiment_dir / "rubric.md"
-            rubric = _read_optional_text(rubric_path)
+            validation_dir = _select_latest_validation_dir(version_dir)
+            if validation_dir is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Judgment requires a completed validation batch. "
+                        "Run validation before generating a judgment."
+                    ),
+                )
+            validation_batch = ValidationBatchArtifact.model_validate(
+                _read_json(validation_dir / "batch.json")
+            )
+            validation_results = store.load_validation_results(
+                experiment_id,
+                version,
+                validation_batch.validation_batch_id,
+            )
+            validator_snapshots = _read_validation_snapshots(validation_dir)
             prompt_template = store.read_text(
                 experiment_id, version, experiment.template.path
             )
             cases = store.load_cases(experiment_id)
             case_ids = {case.id for case in cases}
-            if run_batch_id is None:
-                selected_run_batch_id, run_artifacts = _load_latest_validated_run_batch(
-                    version_dir=version_dir,
-                    version=version,
-                    cases=case_ids,
-                    repeat_count=experiment.run_defaults.repeat_count,
+            selected_run_batch_id = validation_batch.run_batch_id
+            if run_batch_id is not None and run_batch_id != selected_run_batch_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Requested run batch does not match latest completed "
+                        "validation batch"
+                    ),
                 )
-                run_batch_dir = runs_dir / selected_run_batch_id
-            else:
-                _validate_run_batch_id_path_segment(run_batch_id)
-                selected_run_batch_id = run_batch_id
-                run_batch_dir = (runs_dir / run_batch_id).resolve()
-                resolved_runs_dir = runs_dir.resolve()
-                if (
-                    run_batch_dir == resolved_runs_dir
-                    or not run_batch_dir.is_relative_to(resolved_runs_dir)
-                    or not run_batch_dir.is_dir()
-                ):
-                    raise HTTPException(status_code=404, detail="Run batch not found")
-                run_artifacts = _load_run_artifacts_from_batch_dir(run_batch_dir)
-                if not run_artifacts:
-                    raise HTTPException(
-                        status_code=400, detail="Run batch has no artifacts"
-                    )
-                _validate_run_artifacts(
-                    run_artifacts=run_artifacts,
-                    selected_run_batch_id=selected_run_batch_id,
-                    version=version,
-                    case_ids=case_ids,
-                    repeat_count=experiment.run_defaults.repeat_count,
+            run_batch_dir = (runs_dir / selected_run_batch_id).resolve()
+            resolved_runs_dir = runs_dir.resolve()
+            if (
+                run_batch_dir == resolved_runs_dir
+                or not run_batch_dir.is_relative_to(resolved_runs_dir)
+                or not run_batch_dir.is_dir()
+            ):
+                raise HTTPException(status_code=404, detail="Run batch not found")
+            run_artifacts = _load_run_artifacts_from_batch_dir(run_batch_dir)
+            if not run_artifacts:
+                raise HTTPException(
+                    status_code=400, detail="Run batch has no artifacts"
                 )
+            _validate_run_artifacts(
+                run_artifacts=run_artifacts,
+                selected_run_batch_id=selected_run_batch_id,
+                version=version,
+                case_ids=case_ids,
+                repeat_count=experiment.run_defaults.repeat_count,
+            )
+            _validate_validation_results_for_judge(
+                validation_batch=validation_batch,
+                validation_results=validation_results,
+                validator_snapshots=validator_snapshots,
+                run_artifacts=run_artifacts,
+            )
+            validation_evidence = _build_validation_evidence(
+                results=validation_results,
+                validators=validator_snapshots,
+            )
 
+            model_source = None
             if experiment.output.type == "pydantic":
                 model_file = experiment.output.model_file
                 model_entrypoint = experiment.output.model_entrypoint
@@ -1102,7 +2185,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 model_source = store.read_text(experiment_id, version, model_file)
                 output_declaration = (
                     f"pydantic model: {model_entrypoint}\n"
-                    f"model file: {model_file}\n\n{model_source}"
+                    f"model file: {model_file}"
                 )
             else:
                 output_declaration = "text output"
@@ -1111,12 +2194,13 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 experiment_id=experiment_id,
                 version=version,
                 run_batch_id=selected_run_batch_id,
+                validation_batch_id=validation_batch.validation_batch_id,
                 judge_model=experiment.models.judge_model,
                 output_declaration=output_declaration,
-                rubric=rubric,
                 prompt_template=prompt_template,
-                cases=cases,
-                run_artifacts=run_artifacts,
+                model_source=model_source,
+                validation_evidence=validation_evidence,
+                run_errors=_run_errors_from_artifacts(run_artifacts),
             )
             if dry_run:
                 generated = llm_client.generate_structured_from_fake_response(
@@ -1161,12 +2245,22 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             (review_dir / "judgment.md").write_text(
                 _render_judgment_markdown(judgment), encoding="utf-8"
             )
-            (review_dir / "rubric_snapshot.md").write_text(rubric, encoding="utf-8")
+            validation_context = {
+                "validation_batch_id": validation_batch.validation_batch_id,
+                "run_batch_id": selected_run_batch_id,
+                "validation_evidence": validation_evidence,
+                "validator_snapshots": [
+                    validator.model_dump(mode="json")
+                    for validator in validator_snapshots
+                ],
+            }
+            _write_json(review_dir / "validation_context.json", validation_context)
             _write_json(review_dir / "decisions.json", decisions.model_dump(mode="json"))
             complete_workflow_job(job_id, "Judgment completed")
             return {
                 "review_id": review_id,
                 "run_batch_id": selected_run_batch_id,
+                "validation_batch_id": validation_batch.validation_batch_id,
                 "judgment": judgment.model_dump(mode="json"),
             }
         except ValidationError as exc:
@@ -1212,44 +2306,88 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     @app.post("/api/experiments/{experiment_id}/comparisons")
     def compare_experiment_versions(
         experiment_id: str, request: ComparisonRequest
-    ) -> dict[str, object]:
+    ) -> CompareMatrixResponse:
         experiment = store.load_experiment(experiment_id)
         baseline_version = request.baseline_version
         candidate_version = request.candidate_version
-        dry_run = request.dry_run
         baseline_version_dir = store.version_dir(experiment_id, baseline_version)
         candidate_version_dir = store.version_dir(experiment_id, candidate_version)
 
-        baseline_cases = store.load_cases(experiment_id)
-        candidate_cases = baseline_cases
-        if not baseline_cases:
+        baseline_validation_dir = _select_latest_validation_dir(baseline_version_dir)
+        candidate_validation_dir = _select_latest_validation_dir(candidate_version_dir)
+        if baseline_validation_dir is None or candidate_validation_dir is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Compare requires completed validation batches for both versions. "
+                    "Run validation before comparing."
+                ),
+            )
+
+        baseline_validation_batch = ValidationBatchArtifact.model_validate(
+            _read_json(baseline_validation_dir / "batch.json")
+        )
+        candidate_validation_batch = ValidationBatchArtifact.model_validate(
+            _read_json(candidate_validation_dir / "batch.json")
+        )
+        _validate_validation_batch_dir_identity(
+            validation_dir=baseline_validation_dir,
+            validation_batch=baseline_validation_batch,
+        )
+        _validate_validation_batch_dir_identity(
+            validation_dir=candidate_validation_dir,
+            validation_batch=candidate_validation_batch,
+        )
+        baseline_validator_snapshots = _read_validation_snapshots(
+            baseline_validation_dir
+        )
+        candidate_validator_snapshots = _read_validation_snapshots(
+            candidate_validation_dir
+        )
+        baseline_validation_results = store.load_validation_results(
+            experiment_id,
+            baseline_version,
+            baseline_validation_batch.validation_batch_id,
+        )
+        candidate_validation_results = store.load_validation_results(
+            experiment_id,
+            candidate_version,
+            candidate_validation_batch.validation_batch_id,
+        )
+        cases = store.load_cases(experiment_id)
+        if not cases:
             raise HTTPException(status_code=400, detail="Experiment has no cases")
-        for case in baseline_cases:
+        for case in cases:
             _validate_case_id_path_segment(case.id)
-        shared_case_ids = {case.id for case in baseline_cases}
-
+        case_ids = {case.id for case in cases}
         repeat_count = experiment.run_defaults.repeat_count
-        baseline_run_batch_id, baseline_run_artifacts = _load_latest_validated_run_batch(
+        baseline_run_artifacts = _load_validated_run_batch_by_id(
             version_dir=baseline_version_dir,
+            run_batch_id=baseline_validation_batch.run_batch_id,
             version=baseline_version,
-            cases=shared_case_ids,
+            cases=case_ids,
             repeat_count=repeat_count,
         )
-        candidate_run_batch_id, candidate_run_artifacts = _load_latest_validated_run_batch(
+        candidate_run_artifacts = _load_validated_run_batch_by_id(
             version_dir=candidate_version_dir,
+            run_batch_id=candidate_validation_batch.run_batch_id,
             version=candidate_version,
-            cases=shared_case_ids,
+            cases=case_ids,
             repeat_count=repeat_count,
         )
-
-        experiment_dir = store.experiment_dir(experiment_id)
-        rubric_path = experiment_dir / "rubric.md"
-        rubric = _read_optional_text(rubric_path)
-        baseline_prompt_template = store.read_text(
-            experiment_id, baseline_version, experiment.template.path
+        _validate_validation_results_for_compare(
+            version=baseline_version,
+            validation_batch=baseline_validation_batch,
+            validation_results=baseline_validation_results,
+            validator_snapshots=baseline_validator_snapshots,
+            run_artifacts=baseline_run_artifacts,
         )
-        candidate_prompt_template = store.read_text(
-            experiment_id, candidate_version, experiment.template.path
+        _validate_validation_results_for_compare(
+            version=candidate_version,
+            validation_batch=candidate_validation_batch,
+            validation_results=candidate_validation_results,
+            validator_snapshots=candidate_validator_snapshots,
+            run_artifacts=candidate_run_artifacts,
         )
         job_id = start_workflow_job(
             kind="compare", experiment_id=experiment_id, version=candidate_version
@@ -1257,76 +2395,44 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         job_manager.update(
             job_id,
             completed_units=0,
-            message="Comparing versions",
+            message="Building compare matrix",
         )
         comparison_dir: Path | None = None
         try:
             comparison_id, comparison_dir = _next_comparison_location(
                 candidate_version_dir
             )
-            comparison_prompt = build_comparison_prompt(
+            matrix = build_compare_matrix(
                 experiment_id=experiment_id,
-                baseline_version=baseline_version,
-                candidate_version=candidate_version,
-                rubric=rubric,
-                baseline_prompt_template=baseline_prompt_template,
-                candidate_prompt_template=candidate_prompt_template,
-                baseline_run_batch_ids=[baseline_run_batch_id],
-                candidate_run_batch_ids=[candidate_run_batch_id],
-                baseline_cases=baseline_cases,
-                candidate_cases=candidate_cases,
-                baseline_run_artifacts=baseline_run_artifacts,
-                candidate_run_artifacts=candidate_run_artifacts,
-                comparison_id=comparison_id,
+                versions=[baseline_version, candidate_version],
+                validator_snapshots_by_version={
+                    baseline_version: [
+                        validator.model_dump(mode="json")
+                        for validator in baseline_validator_snapshots
+                    ],
+                    candidate_version: [
+                        validator.model_dump(mode="json")
+                        for validator in candidate_validator_snapshots
+                    ],
+                },
+                results_by_version={
+                    baseline_version: baseline_validation_results,
+                    candidate_version: candidate_validation_results,
+                },
             )
-            if dry_run:
-                generated = llm_client.generate_structured_from_fake_response(
-                    experiment.models.judge_model,
-                    comparison_prompt,
-                    ComparisonArtifact,
-                    None,
-                    dry_comparison_response_json(
-                        comparison_id=comparison_id,
-                        baseline_version=baseline_version,
-                        candidate_version=candidate_version,
-                        baseline_run_batch_id=baseline_run_batch_id,
-                        candidate_run_batch_id=candidate_run_batch_id,
-                        judge_model=experiment.models.judge_model,
-                    ),
-                )
-            else:
-                generated = generate_structured_for_workflow(
-                    job_id,
-                    experiment.models.judge_model,
-                    comparison_prompt,
-                    ComparisonArtifact,
-                    None,
-                )
             raise_if_workflow_job_cancelled(job_id)
-            output = generated.output
-            comparison = (
-                output
-                if isinstance(output, ComparisonArtifact)
-                else ComparisonArtifact.model_validate(output)
-            )
-            _validate_comparison_metadata(
-                comparison=comparison,
-                comparison_id=comparison_id,
-                baseline_version=baseline_version,
-                candidate_version=candidate_version,
-                baseline_run_batch_id=baseline_run_batch_id,
-                candidate_run_batch_id=candidate_run_batch_id,
-                judge_model=experiment.models.judge_model,
-            )
-
             _write_json(
-                comparison_dir / "comparison.json", comparison.model_dump(mode="json")
-            )
-            (comparison_dir / "comparison.md").write_text(
-                _render_comparison_markdown(comparison), encoding="utf-8"
-            )
-            (comparison_dir / "rubric_snapshot.md").write_text(
-                rubric, encoding="utf-8"
+                comparison_dir / "compare_matrix.json",
+                {
+                    "comparison_id": comparison_id,
+                    "baseline_validation_batch_id": (
+                        baseline_validation_batch.validation_batch_id
+                    ),
+                    "candidate_validation_batch_id": (
+                        candidate_validation_batch.validation_batch_id
+                    ),
+                    "matrix": matrix.model_dump(mode="json"),
+                },
             )
             complete_workflow_job(job_id, "Comparison completed")
         except llm_client.PromptLabLlmCancelled as exc:
@@ -1340,12 +2446,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 _cleanup_reserved_comparison_dir(comparison_dir)
             fail_workflow_job_if_running(job_id, str(exc) or type(exc).__name__)
             raise
-        return {
-            "comparison_id": comparison_id,
-            "baseline_run_batch_id": baseline_run_batch_id,
-            "candidate_run_batch_id": candidate_run_batch_id,
-            "comparison": comparison.model_dump(mode="json"),
-        }
+        return matrix
 
     @app.put(
         "/api/experiments/{experiment_id}/versions/{version}/reviews/{review_id}/decisions"
@@ -1365,6 +2466,9 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         )
         saved = decisions.model_dump(mode="json")
         _write_json(review_dir / "decisions.json", saved)
+        proposal_dir = review_dir / "proposal"
+        if proposal_dir.exists():
+            shutil.rmtree(proposal_dir)
         return saved
 
     @app.put(
@@ -1379,6 +2483,9 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         version_dir = store.version_dir(experiment_id, version)
         review_dir = _resolve_existing_review_dir(version_dir, review_id)
         (review_dir / "human_notes.md").write_text(request.notes, encoding="utf-8")
+        proposal_dir = review_dir / "proposal"
+        if proposal_dir.exists():
+            shutil.rmtree(proposal_dir)
         return {"human_notes": request.notes}
 
     @app.get(
@@ -1392,6 +2499,74 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         version_dir = store.version_dir(experiment_id, version)
         review_dir = _resolve_existing_review_dir(version_dir, review_id)
         return _read_proposal_response(review_dir / "proposal")
+
+    @app.post(
+        "/api/experiments/{experiment_id}/versions/{version}/reviews/{review_id}/proposal/preview-prompts"
+    )
+    def preview_proposal_prompts(
+        experiment_id: str,
+        version: str,
+        review_id: str,
+    ) -> dict[str, object]:
+        experiment = store.load_experiment(experiment_id)
+        version_dir = store.version_dir(experiment_id, version)
+        review_dir = _resolve_existing_review_dir(version_dir, review_id)
+        judgment = JudgmentArtifact.model_validate(
+            _read_json(review_dir / "judgment.json")
+        )
+        decisions_path = review_dir / "decisions.json"
+        if not decisions_path.is_file():
+            raise HTTPException(status_code=404, detail="Review decisions not found")
+        decisions = FindingDecisionSet.model_validate(_read_json(decisions_path))
+        _validate_decision_keys_match_judgment(
+            judgment=judgment,
+            decisions=decisions,
+        )
+
+        prompt_template = store.read_text(
+            experiment_id, version, experiment.template.path
+        )
+        validation_context_path = review_dir / "validation_context.json"
+        validation_context = (
+            _read_json(validation_context_path)
+            if validation_context_path.is_file()
+            else {}
+        )
+        human_notes_path = review_dir / "human_notes.md"
+        human_notes = (
+            human_notes_path.read_text(encoding="utf-8")
+            if human_notes_path.is_file()
+            else ""
+        )
+        model_source = None
+        if experiment.output.type == "pydantic":
+            model_file = experiment.output.model_file
+            assert model_file is not None
+            model_source = store.read_text(experiment_id, version, model_file)
+
+        proposal_prompt = build_proposal_prompt(
+            experiment_id=experiment_id,
+            version=version,
+            current_model=experiment.models.generator_model,
+            output_type=experiment.output.type,
+            prompt_template=prompt_template,
+            model_source=model_source,
+            validation_context=validation_context,
+            judgment=judgment,
+            decisions=decisions,
+            human_notes=human_notes,
+        )
+        return PromptPreviewResponse(
+            workflow_kind="proposal",
+            prompts=[
+                _prompt_preview_item(
+                    kind="proposal",
+                    title="Generate proposal",
+                    model=experiment.models.judge_model,
+                    prompt=proposal_prompt,
+                )
+            ],
+        ).model_dump(mode="json")
 
     @app.post(
         "/api/experiments/{experiment_id}/versions/{version}/reviews/{review_id}/proposal"
@@ -1433,11 +2608,11 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             prompt_template = store.read_text(
                 experiment_id, version, experiment.template.path
             )
-            rubric_snapshot_path = review_dir / "rubric_snapshot.md"
-            rubric_snapshot = (
-                rubric_snapshot_path.read_text(encoding="utf-8")
-                if rubric_snapshot_path.is_file()
-                else ""
+            validation_context_path = review_dir / "validation_context.json"
+            validation_context = (
+                _read_json(validation_context_path)
+                if validation_context_path.is_file()
+                else {}
             )
             human_notes_path = review_dir / "human_notes.md"
             human_notes = (
@@ -1458,16 +2633,17 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 output_type=experiment.output.type,
                 prompt_template=prompt_template,
                 model_source=model_source,
-                rubric_snapshot=rubric_snapshot,
+                validation_context=validation_context,
                 judgment=judgment,
                 decisions=decisions,
                 human_notes=human_notes,
             )
+            response_model = proposal_response_model(experiment.output.type)
             if dry_run:
                 generated = llm_client.generate_structured_from_fake_response(
                     experiment.models.judge_model,
                     proposal_prompt,
-                    ProposalDraft,
+                    response_model,
                     None,
                     dry_proposal_response_json(
                         prompt_template=prompt_template,
@@ -1480,16 +2656,24 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                     job_id,
                     experiment.models.judge_model,
                     proposal_prompt,
-                    ProposalDraft,
+                    response_model,
                     None,
                 )
             raise_if_workflow_job_cancelled(job_id)
-            output = generated.output
-            proposal = (
-                output
-                if isinstance(output, ProposalDraft)
-                else ProposalDraft.model_validate(output)
-            )
+            try:
+                typed_proposal = response_model.model_validate(generated.output)
+            except ValidationError as exc:
+                if (
+                    experiment.output.type == "text"
+                    and isinstance(generated.output, dict)
+                    and generated.output.get("model_py") is not None
+                ):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Text output proposals cannot include model_py",
+                    ) from exc
+                raise
+            proposal = proposal_response_to_draft(typed_proposal)
             if experiment.output.type == "text" and proposal.model_py is not None:
                 raise HTTPException(
                     status_code=400,
@@ -1520,6 +2704,9 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 "generated_by_model": experiment.models.judge_model,
                 "output_type": experiment.output.type,
             }
+            validation_batch_id = validation_context.get("validation_batch_id")
+            if isinstance(validation_batch_id, str):
+                source["validation_batch_id"] = validation_batch_id
             _write_json(proposal_dir / "source.json", source)
             complete_workflow_job(job_id, "Proposal completed")
             return {

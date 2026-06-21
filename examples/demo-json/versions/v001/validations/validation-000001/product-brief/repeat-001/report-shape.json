@@ -1,0 +1,45 @@
+{
+  "schema_version": "prompt_lab.validation_result/v1",
+  "validation_result_id": "validation-000001-product-brief-repeat-001-report-shape",
+  "validation_batch_id": "validation-000001",
+  "run_batch_id": "run-000001",
+  "run_id": "run-000001-product-brief-repeat-001",
+  "case_id": "product-brief",
+  "repeat_index": 1,
+  "validator_id": "report-shape",
+  "validator_type": "automatic",
+  "status": "ok",
+  "included_in_judge": true,
+  "check_results": [
+    {
+      "check_id": "summary-present",
+      "grade": 5,
+      "comment": "JSON path $.summary exists.",
+      "included_in_judge": true,
+      "metrics": {
+        "path": "$.summary"
+      }
+    },
+    {
+      "check_id": "three-tags",
+      "grade": 1,
+      "comment": "JSON path $.tags contains 2 items.",
+      "included_in_judge": true,
+      "metrics": {
+        "path": "$.tags",
+        "count": 2
+      }
+    },
+    {
+      "check_id": "risk-count",
+      "grade": 1,
+      "comment": "JSON path $.risks contains 0 items.",
+      "included_in_judge": true,
+      "metrics": {
+        "path": "$.risks",
+        "count": 0
+      }
+    }
+  ],
+  "usage": {}
+}

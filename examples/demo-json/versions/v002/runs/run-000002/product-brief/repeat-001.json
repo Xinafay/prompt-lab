@@ -1,0 +1,31 @@
+{
+  "schema_version": "prompt_lab.run/v1",
+  "run_id": "run-000002-product-brief-repeat-001",
+  "run_batch_id": "run-000002",
+  "version": "v002",
+  "case_id": "product-brief",
+  "repeat_index": 1,
+  "generator_model": "local/demo-generator",
+  "status": "ok",
+  "rendered_prompt": "Create launch-readiness report for product-brief repeat 1.",
+  "raw_output": "{\"summary\":\"Atlas Desk Lamp targets remote designers with focused lighting and ergonomic positioning for home studios.\",\"tags\":[\"lighting\",\"remote-work\",\"design-tools\"],\"risks\":[\"No price anchor is provided for launch messaging.\",\"The brief does not specify battery or power details.\"],\"launch_ready\":false}",
+  "output_type": "pydantic",
+  "usage": {
+    "prompt_tokens": 101,
+    "completion_tokens": 31,
+    "total_tokens": 132
+  },
+  "output_json": {
+    "summary": "Atlas Desk Lamp targets remote designers with focused lighting and ergonomic positioning for home studios.",
+    "tags": [
+      "lighting",
+      "remote-work",
+      "design-tools"
+    ],
+    "risks": [
+      "No price anchor is provided for launch messaging.",
+      "The brief does not specify battery or power details."
+    ],
+    "launch_ready": false
+  }
+}

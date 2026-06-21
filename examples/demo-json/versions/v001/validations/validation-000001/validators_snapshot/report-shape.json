@@ -1,0 +1,50 @@
+{
+  "schema_version": "prompt_lab.validator/v1",
+  "validator_id": "report-shape",
+  "type": "automatic",
+  "title": "Report shape",
+  "description": "Local JSON checks that exercise automatic validators.",
+  "enabled": true,
+  "input_scope": "output_only",
+  "checks": [
+    {
+      "check_id": "summary-present",
+      "title": "Summary present",
+      "description": "The structured output must include a summary field.",
+      "rule": {
+        "kind": "json_path_exists",
+        "source": "output_json",
+        "path": "$.summary"
+      }
+    },
+    {
+      "check_id": "three-tags",
+      "title": "Three tags",
+      "description": "The tags list should contain exactly three items.",
+      "rule": {
+        "kind": "json_path_count",
+        "source": "output_json",
+        "path": "$.tags",
+        "comparison": {
+          "op": "eq",
+          "value": 3
+        }
+      }
+    },
+    {
+      "check_id": "risk-count",
+      "title": "Risk count",
+      "description": "The risks list should contain between one and three items.",
+      "rule": {
+        "kind": "json_path_count",
+        "source": "output_json",
+        "path": "$.risks",
+        "comparison": {
+          "op": "between",
+          "min_value": 1,
+          "max_value": 3
+        }
+      }
+    }
+  ]
+}

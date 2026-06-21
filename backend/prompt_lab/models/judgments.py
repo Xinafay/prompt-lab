@@ -9,12 +9,6 @@ FindingSeverity = Literal[
     "recommended", "optional", "do_not_change_yet", "regression_risk"
 ]
 FindingDecisionValue = Literal["accepted", "rejected", "deferred"]
-ComparisonRecommendation = Literal[
-    "keep_new_version",
-    "revise_new_version",
-    "revert_to_baseline",
-    "inconclusive",
-]
 NonEmptyString = Annotated[str, Field(min_length=1)]
 
 
@@ -72,28 +66,6 @@ class JudgmentArtifact(BaseModel):
     summary: NonEmptyString
     what_looks_correct: list[EvidenceFinding]
     findings: list[JudgmentFinding]
-    decision_points: list[DecisionPoint]
-
-
-class ComparisonArtifact(BaseModel):
-    """Structured comparison of a candidate version against a baseline."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    schema_version: Literal["prompt_lab.comparison/v1"]
-    comparison_id: NonEmptyString
-    baseline_version: NonEmptyString
-    candidate_version: NonEmptyString
-    baseline_run_batch_ids: list[NonEmptyString] = Field(min_length=1)
-    candidate_run_batch_ids: list[NonEmptyString] = Field(min_length=1)
-    judge_model: NonEmptyString
-    summary: NonEmptyString
-    improvements: list[NonEmptyString]
-    regressions: list[NonEmptyString]
-    unchanged_problems: list[NonEmptyString]
-    new_problems: list[NonEmptyString]
-    stability_changes: list[NonEmptyString]
-    recommendation: ComparisonRecommendation
     decision_points: list[DecisionPoint]
 
 

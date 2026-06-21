@@ -1,0 +1,44 @@
+{
+  "schema_version": "prompt_lab.judgment/v1",
+  "judgment_id": "review-001",
+  "version": "v002",
+  "run_batch_ids": [
+    "run-000002"
+  ],
+  "judge_model": "openai/demo-judge",
+  "summary": "The revised support reply prompt fixes the missing-location issue while keeping the answer concise.",
+  "what_looks_correct": [
+    {
+      "finding_id": "ok-answer",
+      "description": "The answer gives a concrete location and next step.",
+      "evidence": [
+        "reply-quality/answers-question returned grade 5",
+        "reply-stats/word-count returned grade 5"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "finding_id": "keep-fallback-specific",
+      "severity": "recommended",
+      "area": "prompt",
+      "category": "support quality",
+      "description": "The fallback asks for browser information but could also ask whether the user has export permission.",
+      "evidence": [
+        "The output tells the customer to refresh and share browser information."
+      ],
+      "suggested_change": "Ask for browser and workspace permission context when export is still unavailable."
+    }
+  ],
+  "decision_points": [
+    {
+      "decision_id": "permission-fallback",
+      "description": "Should the prompt include permission troubleshooting in fallback text?",
+      "options": [
+        "Add permission fallback",
+        "Keep browser-only fallback"
+      ],
+      "recommended_option": "Add permission fallback"
+    }
+  ]
+}

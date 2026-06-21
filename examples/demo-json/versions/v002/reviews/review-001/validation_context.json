@@ -1,0 +1,18 @@
+{
+  "validation_batch_id": "validation-000002",
+  "run_batch_id": "run-000002",
+  "evidence": [
+    {
+      "validator_id": "report-shape",
+      "check_id": "three-tags",
+      "grade": 5,
+      "comment": "JSON path $.tags contains 3 items."
+    },
+    {
+      "validator_id": "report-quality",
+      "check_id": "actionable-risks",
+      "grade": 5,
+      "comment": "Risks are concrete."
+    }
+  ]
+}

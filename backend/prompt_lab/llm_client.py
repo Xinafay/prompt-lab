@@ -20,6 +20,19 @@ from shared.llm.structured_lite import structured_lite
 class PromptLabStructuredValidationError(Exception):
     """Raised when structured generation exhausts validation repair attempts."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        raw_output: str | None = None,
+        conversation: list[dict[str, Any]] | None = None,
+        executed_prompt: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.raw_output = raw_output
+        self.conversation = conversation or []
+        self.executed_prompt = executed_prompt
+
 
 class PromptLabLlmCancelled(Exception):
     """Raised when a Prompt Lab workflow cancels an active LLM request."""
@@ -37,6 +50,7 @@ class GeneratedStructured:
     output: BaseModel
     usage: dict[str, Any]
     raw_response: Any
+    executed_prompt: str
 
 
 def _raw_response(result: Any) -> Any:
@@ -47,6 +61,28 @@ def _raw_response(result: Any) -> Any:
     if hasattr(result, "conversation"):
         return result.conversation
     raise AttributeError("LLM result has neither non-None response nor conversation.")
+
+
+def _last_assistant_content(conversation: list[dict[str, Any]]) -> str | None:
+    for message in reversed(conversation):
+        if message.get("role") != "assistant":
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+    return None
+
+
+def _first_user_content(conversation: Any) -> str | None:
+    if not isinstance(conversation, list):
+        return None
+    for message in conversation:
+        if not isinstance(message, dict) or message.get("role") != "user":
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+    return None
 
 
 def cancellation_callbacks(is_cancelled: Callable[[], bool]) -> StreamCallbacks:
@@ -105,11 +141,18 @@ def generate_structured(
     except LlmRequestCancelled as exc:
         raise PromptLabLlmCancelled(str(exc)) from exc
     except StructuredLiteExhaustedError as exc:
-        raise PromptLabStructuredValidationError(str(exc)) from exc
+        raise PromptLabStructuredValidationError(
+            str(exc),
+            raw_output=_last_assistant_content(exc.conversation),
+            conversation=exc.conversation,
+            executed_prompt=_first_user_content(exc.conversation) or prompt,
+        ) from exc
+    raw_response = _raw_response(result)
     return GeneratedStructured(
         output=result.output,
         usage=result.usage or {},
-        raw_response=_raw_response(result),
+        raw_response=raw_response,
+        executed_prompt=_first_user_content(raw_response) or prompt,
     )
 
 
@@ -161,10 +204,15 @@ def generate_structured_from_fake_response(
             fix_retry=0,
         )
     except StructuredLiteExhaustedError as exc:
-        raise PromptLabStructuredValidationError(str(exc)) from exc
+        raise PromptLabStructuredValidationError(
+            str(exc),
+            raw_output=_last_assistant_content(exc.conversation),
+            conversation=exc.conversation,
+        ) from exc
 
     return GeneratedStructured(
         output=output,
         usage={"dry_run": True},
         raw_response=conversation,
+        executed_prompt=_first_user_content(conversation) or prompt,
     )

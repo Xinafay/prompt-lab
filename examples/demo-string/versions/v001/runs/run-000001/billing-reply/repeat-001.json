@@ -1,0 +1,19 @@
+{
+  "schema_version": "prompt_lab.run/v1",
+  "run_id": "run-000001-billing-reply-repeat-001",
+  "run_batch_id": "run-000001",
+  "version": "v001",
+  "case_id": "billing-reply",
+  "repeat_index": 1,
+  "generator_model": "local/demo-generator",
+  "status": "ok",
+  "rendered_prompt": "Reply to billing-reply repeat 1.",
+  "raw_output": "We will check billing.",
+  "output_type": "text",
+  "usage": {
+    "prompt_tokens": 101,
+    "completion_tokens": 31,
+    "total_tokens": 132
+  },
+  "output_text": "We will check billing."
+}

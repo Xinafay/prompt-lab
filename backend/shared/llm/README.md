@@ -139,7 +139,7 @@ revert to file-based loading. The lower-level `prepare_chat_request`,
 | `LLM_MODEL` | — | Default model reference (e.g. `openai/gpt-4o-mini`). Used when `model` is not passed in the request preset. |
 | `LLM_CACHE` | `false` | Enable SQLite response cache by default. Accepted truthy values: `1`, `true`, `yes`, `on`. Individual requests may override this with `cache_enabled`. |
 | `LLM_CACHE_DB_PATH` | `.cache/llm_cache.db` | Path to the SQLite cache database. Created automatically on first use. |
-| `LLM_TRANSPORT_RETRIES` | `1` | Maximum number of retries on transient transport errors (rate limits, timeouts, connection errors). |
+| `LLM_TRANSPORT_RETRIES` | `1` | Maximum number of retries on transient transport errors (rate limits, timeouts, connection errors). This is the single retry layer for OpenAI SDK calls; SDK retries are disabled. |
 | `LLM_LOG_PROGRESS` | `1` | Log request progress and token usage. Set to `0`, `false`, `no`, or `off` to disable. |
 
 ### Code examples
@@ -223,7 +223,8 @@ print(result.usage)  # {"prompt_tokens": ..., "completion_tokens": ..., "total_t
 #### Counting tokens
 
 `count_tokens` returns the token count of a text fragment for a given model,
-over the network, using the engine's tokenize protocol:
+over the network, using the engine's tokenize protocol. Hosted OpenAI token
+counting uses the same `LLM_TRANSPORT_RETRIES` policy as chat and embeddings:
 
 ```python
 from shared.llm import count_tokens

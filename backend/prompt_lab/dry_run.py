@@ -59,57 +59,39 @@ def dry_judgment_response_json(
     )
 
 
+def dry_validator_response_json(check_ids: list[str]) -> str:
+    return json.dumps(
+        {
+            "check_results": [
+                {
+                    "check_id": check_id,
+                    "grade": 5,
+                    "comment": f"dry-run validator response for {check_id}",
+                }
+                for check_id in check_ids
+            ]
+        },
+        ensure_ascii=False,
+    )
+
+
 def dry_proposal_response_json(
     *,
     prompt_template: str,
     model_source: str | None,
     output_type: str,
 ) -> str:
-    payload = {
+    payload: dict[str, str | None] = {
         "prompt_md": prompt_template
         or "Dry-run prompt proposal placeholder.",
-        "model_py": model_source if output_type == "pydantic" else None,
         "rationale_md": (
             "Dry-run proposal generated from deterministic fake LLM JSON. "
             "No live model was called."
         ),
     }
+    if output_type == "pydantic":
+        payload["model_py"] = model_source
     return json.dumps(payload, ensure_ascii=False)
-
-
-def dry_comparison_response_json(
-    *,
-    comparison_id: str,
-    baseline_version: str,
-    candidate_version: str,
-    baseline_run_batch_id: str,
-    candidate_run_batch_id: str,
-    judge_model: str,
-) -> str:
-    return json.dumps(
-        {
-            "schema_version": "prompt_lab.comparison/v1",
-            "comparison_id": comparison_id,
-            "baseline_version": baseline_version,
-            "candidate_version": candidate_version,
-            "baseline_run_batch_ids": [baseline_run_batch_id],
-            "candidate_run_batch_ids": [candidate_run_batch_id],
-            "judge_model": judge_model,
-            "summary": "Dry-run comparison generated from deterministic fake LLM JSON.",
-            "improvements": [
-                "Dry-run candidate artifacts were available for comparison."
-            ],
-            "regressions": [],
-            "unchanged_problems": [],
-            "new_problems": [],
-            "stability_changes": [
-                "Dry-run comparison validated the artifact writing workflow."
-            ],
-            "recommendation": "inconclusive",
-            "decision_points": [],
-        },
-        ensure_ascii=False,
-    )
 
 
 def sample_model_payload(

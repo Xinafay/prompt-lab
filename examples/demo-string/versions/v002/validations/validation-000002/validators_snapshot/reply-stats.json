@@ -1,0 +1,37 @@
+{
+  "schema_version": "prompt_lab.validator/v1",
+  "validator_id": "reply-stats",
+  "type": "automatic",
+  "title": "Reply stats",
+  "description": "Local text checks for word, sentence, and character count.",
+  "enabled": true,
+  "input_scope": "output_only",
+  "checks": [
+    {
+      "check_id": "word-count",
+      "title": "Word count",
+      "description": "The reply should stay under 80 words.",
+      "rule": {
+        "kind": "word_count",
+        "source": "output_text",
+        "comparison": {
+          "op": "lt",
+          "value": 80
+        }
+      }
+    },
+    {
+      "check_id": "sentence-count",
+      "title": "Sentence count",
+      "description": "The reply should contain at least two sentences.",
+      "rule": {
+        "kind": "sentence_count",
+        "source": "output_text",
+        "comparison": {
+          "op": "gte",
+          "value": 2
+        }
+      }
+    }
+  ]
+}

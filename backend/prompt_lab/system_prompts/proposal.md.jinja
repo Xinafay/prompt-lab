@@ -1,11 +1,6 @@
 You are generating a Prompt Lab proposal for one reviewed experiment version.
 
-Return JSON matching ProposalDraft exactly.
-
-Return only JSON matching this response model:
-```json
-<<MODEL>>
-```
+Return JSON matching the provided output-specific response schema exactly.
 
 Rules:
 
@@ -19,11 +14,17 @@ Rules:
 
 - preserve task scope.
 
-- change `model.py` only when contract changes are clearly needed.
+- Human notes and other human-authored inputs may be in another language; do not switch output language to match them. The prompts and models being edited are assumed to be English, so write prompt_md, model_py, and rationale_md in English.
 
-- If the experiment output is text, normally leave model_py absent.
+- change `model.py` contents only when contract changes are clearly needed.
 
-- If the experiment output is pydantic, prefer prompt changes unless the output contract clearly needs a model.py change.
+- Use the output-specific response schema. Text-output proposals return only `prompt_md` and `rationale_md`; pydantic-output proposals return `prompt_md`, `model_py`, and `rationale_md`.
+
+- If the experiment output is text, do not propose `model.py` changes.
+
+- If the experiment output is pydantic, always return complete `model_py`. If the output contract does not change, copy CURRENT_MODEL_PY unchanged.
+
+- If CURRENT_PROMPT_MD contains `[OUTPUT_MODEL_SCHEMA: see CURRENT_MODEL_PY]`, treat it as the generator prompt's structured-output schema insertion point. If you return a pydantic `prompt_md` that keeps structured output, write that marker in the actual prompt file as two `<` characters, then `MODEL`, then two `>` characters.
 
 - `prompt_md`, `model_py`, and `rationale_md` values must be raw file contents, not fenced Markdown code blocks. Do not wrap them in ```text, ```markdown, ```python, or closing ``` fences.
 
@@ -41,7 +42,7 @@ Output type: {{ output_type }}
 
 {{ current_prompt_section }}
 
-{{ rubric_section }}
+{{ validation_metadata_section }}
 
 {{ human_notes_section }}
 
@@ -49,4 +50,8 @@ Output type: {{ output_type }}
 
 {{ rejected_findings_section }}
 
-{{ proposal_schema_section }}
+Return only JSON matching this response model:
+
+```json
+<<MODEL>>
+```

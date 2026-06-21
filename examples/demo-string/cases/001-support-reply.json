@@ -1,0 +1,23 @@
+{
+  "schema_version": "prompt_lab.case/v2",
+  "id": "support-reply",
+  "title": "Support reply",
+  "stores": {
+    "case": {
+      "kind": "flat_file_tree",
+      "values": {
+        "ticket": {
+          "__carmilla_flat_file_node__": "file",
+          "value": "A customer cannot find the export button after the dashboard redesign. Reply with a calm, concise support answer."
+        }
+      }
+    }
+  },
+  "bindings": {
+    "ticket": {
+      "kind": "store_scope",
+      "store": "case",
+      "path": "ticket"
+    }
+  }
+}

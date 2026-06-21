@@ -9,7 +9,12 @@ from fastapi.testclient import TestClient
 
 from prompt_lab.api import create_app
 from prompt_lab.config import PromptLabConfig
-from test_judge import valid_judgment_payload, write_json
+from test_judge import (
+    valid_judgment_payload,
+    write_demo_experiment as write_judge_demo_experiment,
+    write_json,
+    write_run_batch,
+)
 
 
 def write_demo_review(root: Path, *, finding_ids: list[str] | None = None) -> Path:
@@ -27,7 +32,7 @@ def write_demo_review(root: Path, *, finding_ids: list[str] | None = None) -> Pa
             "active_version": "v001",
             "output": {"type": "text"},
             "template": {"engine": "jinja2", "path": "prompt.md"},
-            "models": {"generator_model": "local/a", "judge_model": "openai/judge"},
+            "models": {"generator_model": "local/a", "validator_model": "openai/judge", "judge_model": "openai/judge"},
             "run_defaults": {
                 "repeat_count": 1,
                 "llm_cache": "disabled",
@@ -273,6 +278,39 @@ def test_api_returns_404_for_missing_review_without_creating_it() -> None:
         assert not missing_review_dir.exists()
 
 
+def test_api_previews_judge_prompt_without_creating_review_artifacts() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        version_dir = write_judge_demo_experiment(root, repeat_count=2)
+        write_run_batch(version_dir, "batch-001")
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        runtime_reviews_dir = (
+            root / "experiments" / "demo" / "versions" / "v001" / "reviews"
+        )
+
+        response = TestClient(app).post(
+            "/api/experiments/demo/versions/v001/judgments/preview-prompts"
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["workflow_kind"] == "judge"
+        assert body["warnings"] == []
+        assert len(body["prompts"]) == 1
+        prompt = body["prompts"][0]
+        assert prompt["kind"] == "judge"
+        assert prompt["title"] == "Judge validated run"
+        assert prompt["model"] == "openai/judge"
+        assert prompt["case_id"] is None
+        assert prompt["repeat_index"] is None
+        assert prompt["validator_id"] is None
+        assert "JUDGMENT_METADATA_JSON" in prompt["prompt"]
+        assert "VALIDATION_EVIDENCE_JSON" in prompt["prompt"]
+        assert prompt["character_count"] == len(prompt["prompt"])
+        assert prompt["word_count"] == len(prompt["prompt"].split())
+        assert not (runtime_reviews_dir / "review-001").exists()
+
+
 def main() -> int:
     tests: list[Any] = [
         test_api_updates_one_finding_decision_to_rejected,
@@ -284,6 +322,7 @@ def main() -> int:
         test_api_reads_latest_review_state,
         test_api_rejects_unsafe_review_id_without_reading_parent_paths,
         test_api_returns_404_for_missing_review_without_creating_it,
+        test_api_previews_judge_prompt_without_creating_review_artifacts,
     ]
     for test in tests:
         test()

@@ -1,0 +1,38 @@
+You are validating one Prompt Lab run result.
+
+Rules:
+- Validate only the single run result provided in this prompt.
+- Return only JSON matching the response schema at the end of this prompt.
+- Answer every check exactly once.
+- Use only the provided validation context.
+- Do not suggest prompt changes, model changes, or workflow changes.
+- Treat QUESTIONNAIRE_JSON as the checklist you must answer.
+- Treat OUTPUT_TEXT, OUTPUT_JSON, or INVALID_OUTPUT_TEXT as the run result being validated.
+- If VALIDATION_ERROR is present, the generator produced INVALID_OUTPUT_TEXT but it failed the structured-output contract.
+- Use RENDERED_PROMPT or CASE_CONTEXT_JSON only as supporting evidence when present.
+- Validator definitions and case context may include human-authored input in another language; do not switch output language to match it. The prompt and model being validated are assumed to be English, so write validation comments in English.
+- Use `5` for very good: the result satisfies the check with no meaningful issue.
+- Use `4` for good: the result satisfies the check with minor improvement opportunities.
+- Use `3` for acceptable but improvable: the result partially satisfies the check.
+- Use `2` for weak: the result mostly fails the check, but contains some useful evidence.
+- Use `1` for bad: the result fails the check.
+- Use `null` only when the provided evidence is insufficient or ambiguous.
+- Do not use `3` as a substitute for missing evidence.
+
+{{ validator_section }}
+
+{{ output_section }}
+
+{% if rendered_prompt_section %}
+{{ rendered_prompt_section }}
+
+{% endif %}
+{% if case_context_section %}
+{{ case_context_section }}
+
+{% endif %}
+Return only JSON matching this response model:
+
+```json
+<<MODEL>>
+```

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { Experiment, JobStatus, WorkflowMode } from "../types";
+import "./WorkflowToolbar.css";
 
 interface WorkflowToolbarProps {
   experiment: Experiment;
@@ -14,6 +15,8 @@ interface WorkflowToolbarProps {
   onWorkflowModeChange: (mode: WorkflowMode) => void;
   onCancelJob?: () => void;
   primaryAction: ReactNode;
+  secondaryAction?: ReactNode;
+  unsavedChangesAction?: ReactNode;
   showDryRunControls: boolean;
 }
 
@@ -29,6 +32,8 @@ export function WorkflowToolbar({
   onCancelJob,
   onWorkflowModeChange,
   primaryAction,
+  secondaryAction = null,
+  unsavedChangesAction = null,
   showDryRunControls
 }: WorkflowToolbarProps) {
   const statusMessage =
@@ -37,7 +42,12 @@ export function WorkflowToolbar({
       : `${jobStatus.status}: ${jobStatus.message} (${jobStatus.completed_units}/${jobStatus.total_units})`;
   const showCancelAction =
     jobStatus?.status === "running" && onCancelJob !== undefined;
-  const showActions = showDryRunControls || primaryAction !== null || showCancelAction;
+  const showActions =
+    showDryRunControls ||
+    primaryAction !== null ||
+    secondaryAction !== null ||
+    unsavedChangesAction !== null ||
+    showCancelAction;
 
   return (
     <div className="workflow-toolbar" aria-label="Workflow context">
@@ -80,6 +90,8 @@ export function WorkflowToolbar({
               <span>Dry-run</span>
             </label>
           ) : null}
+          {unsavedChangesAction}
+          {secondaryAction}
           {primaryAction}
           {showCancelAction ? (
             <button

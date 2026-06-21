@@ -1,22 +1,13 @@
 from __future__ import annotations
 
-import random
-import time
 from typing import Any, Callable
 
 from shared.llm.chat_result import LlmResponse
 from shared.llm.cancellation import LlmRequestCancelled
 from shared.llm.stream_callbacks import StreamCallbacks, notify_stream_phase
+from shared.llm.transport_retry import run_with_transport_retry
 
 _DEFAULT_MAX_RETRIES = 1
-
-
-def _is_retryable(exc: Exception) -> bool:
-    try:
-        import openai
-        return isinstance(exc, (openai.RateLimitError, openai.APIConnectionError, openai.APITimeoutError))
-    except ImportError:
-        return False
 
 
 class RetryingChatClient:
@@ -29,24 +20,17 @@ class RetryingChatClient:
         fn: Callable[[], Any],
         stream_callback: StreamCallbacks | None,
     ) -> LlmResponse:
-        delay = 1.0
-        for attempt in range(self._max_retries + 1):
-            try:
-                return fn()
-            except LlmRequestCancelled:
-                raise
-            except Exception as exc:
-                if not _is_retryable(exc) or attempt >= self._max_retries:
-                    raise
-                notify_stream_phase(
-                    stream_callback,
-                    "transport_retry",
-                    reset=True,
-                    meta={"attempt": attempt + 1},
-                )
-                time.sleep(delay * random.uniform(0.8, 1.2))
-                delay *= 2
-        raise RuntimeError("unreachable")
+        return run_with_transport_retry(
+            fn,
+            max_retries=self._max_retries,
+            cancellation_error=LlmRequestCancelled,
+            on_retry=lambda attempt: notify_stream_phase(
+                stream_callback,
+                "transport_retry",
+                reset=True,
+                meta={"attempt": attempt},
+            ),
+        )
 
     def complete(
         self,

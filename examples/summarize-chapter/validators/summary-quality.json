@@ -1,0 +1,26 @@
+{
+  "schema_version": "prompt_lab.validator/v1",
+  "validator_id": "summary-quality",
+  "type": "llm_questionnaire",
+  "title": "Summary quality",
+  "description": "Checks whether a chapter summary is faithful and useful for later processing.",
+  "enabled": true,
+  "input_scope": "output_and_prompt",
+  "checks": [
+    {
+      "check_id": "completeness",
+      "title": "Completeness",
+      "question": "Does the summary preserve the key events and context from the source?"
+    },
+    {
+      "check_id": "no-hallucinations",
+      "title": "No hallucinations",
+      "question": "Does the summary avoid adding facts not present in the source?"
+    },
+    {
+      "check_id": "future-context",
+      "title": "Future context",
+      "question": "Would this summary be useful as context for processing later story parts?"
+    }
+  ]
+}

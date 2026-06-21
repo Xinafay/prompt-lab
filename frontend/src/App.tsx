@@ -8,45 +8,68 @@ import {
   generateProposal,
   getActiveJob,
   getExperimentVersions,
+  getGlobalSettings,
   getJob,
   getLatestReviewState,
+  getLatestValidationState,
   getReviewProposal,
   getReviewState,
   getVersionOverview,
   getVersionRuns,
   judgeVersion,
   jobEventsStreamUrl,
+  previewJudgePrompts,
+  previewProposalPrompts,
+  previewRunPrompts,
+  previewValidationPrompts,
   runVersion,
+  validateVersion,
   updateExperiment,
+  updateGlobalSettings,
   updateHumanNotes,
-  updateReviewDecisions
+  updateReviewDecisions,
+  updateValidationInclusion
 } from "./api";
 import { CaseBrowser } from "./components/CaseBrowser";
 import { ComparisonView } from "./components/ComparisonView";
 import { ExperimentSettings } from "./components/ExperimentSettings";
 import { ExperimentsList } from "./components/ExperimentsList";
+import { GlobalSettings } from "./components/GlobalSettings";
+import { PromptPreviewModal } from "./components/PromptPreviewModal";
 import { ProposalView } from "./components/ProposalView";
 import { ReviewView } from "./components/ReviewView";
 import { RunsView } from "./components/RunsView";
 import { TooltipButton } from "./components/TooltipButton";
+import {
+  buildValidationInclusionUpdate,
+  ValidationView
+} from "./components/ValidationView";
+import { ValidatorsPreview } from "./components/ValidatorsPreview";
+import { snapshotReviewState } from "./components/reviewStateSnapshot";
+import { snapshotValidationState } from "./components/validationStateSnapshot";
 import { WorkbenchTabs } from "./components/WorkbenchTabs";
 import { WorkflowToolbar } from "./components/WorkflowToolbar";
 import type {
-  ComparisonArtifact,
+  CompareMatrixResponse,
   CreatedVersionResponse,
   Experiment,
   FindingDecisionValue,
+  GlobalSettings as GlobalSettingsModel,
   JobEvent,
   JobStatus,
+  PromptPreviewResponse,
   ProposalResponse,
   ReviewState,
   RunsResponse,
+  ValidationState,
   VersionOverview,
   VersionSummary,
   WorkflowMode
 } from "./types";
 import {
+  buildGlobalSettingsPath,
   buildExperimentPath,
+  isGlobalSettingsRoute,
   parseExperimentRoute,
   type WorkbenchTab
 } from "./urlState";
@@ -54,8 +77,10 @@ import {
   getCompareActionState,
   getJudgeActionState,
   getProposalActionLabel,
-  getRunActionLabel
+  getRunActionLabel,
+  getValidateActionState
 } from "./workflowActions";
+import "./components/PromptPreviewModal.css";
 
 type LoadState =
   | { status: "loading" }
@@ -68,10 +93,18 @@ type DetailState =
   | { status: "loaded"; overview: VersionOverview; runs: RunsResponse }
   | { status: "error"; message: string };
 
+type GlobalSettingsState =
+  | { status: "loading" }
+  | { status: "loaded"; settings: GlobalSettingsModel }
+  | { status: "error"; message: string };
+
 type HistoryMode = "push" | "replace";
+type AppView = "experiment" | "globalSettings";
+type PromptPreviewAction = () => void | Promise<void>;
 
 type PendingNavigation =
   | { kind: "experiment"; experiment: Experiment | null }
+  | { kind: "globalSettings" }
   | { kind: "route"; route: ReturnType<typeof currentExperimentRoute> }
   | { kind: "tab"; tab: WorkbenchTab }
   | { kind: "version"; version: string };
@@ -85,24 +118,45 @@ const SHOW_DRY_RUN_CONTROLS =
 
 function workflowCompletionMessage(kind: string): string {
   if (kind === "run_version") return "Active run completed.";
+  if (kind === "validation") return "Validation loaded.";
   if (kind === "judge") return "Active review loaded.";
   if (kind === "proposal") return "Proposal generated.";
   if (kind === "compare") return "Comparison loaded.";
   return "Workflow action completed.";
 }
 
+function hasCompletedValidation(state: ValidationState | null): boolean {
+  return state?.validation_batch.status === "completed";
+}
+
 function App() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const [appView, setAppView] = useState<AppView>(() =>
+    isGlobalSettingsRoute(new URL(window.location.href))
+      ? "globalSettings"
+      : "experiment"
+  );
   const [selectedExperiment, setSelectedExperiment] =
     useState<Experiment | null>(null);
   const [detailState, setDetailState] = useState<DetailState>({ status: "idle" });
+  const [globalSettingsState, setGlobalSettingsState] =
+    useState<GlobalSettingsState>({ status: "loading" });
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
+  const [validationState, setValidationState] = useState<ValidationState | null>(
+    null
+  );
+  const committedValidationStateRef = useRef<ValidationState | null>(null);
+  const [validationDirty, setValidationDirty] = useState(false);
+  const [compareValidationByVersion, setCompareValidationByVersion] = useState<
+    Record<string, boolean>
+  >({});
   const [reviewState, setReviewState] = useState<ReviewState | null>(null);
+  const committedReviewStateRef = useRef<ReviewState | null>(null);
   const [proposalResponse, setProposalResponse] =
     useState<ProposalResponse | null>(null);
   const [createdVersion, setCreatedVersion] =
     useState<CreatedVersionResponse | null>(null);
-  const [comparison, setComparison] = useState<ComparisonArtifact | null>(null);
+  const [comparison, setComparison] = useState<CompareMatrixResponse | null>(null);
   const [versionSummaries, setVersionSummaries] = useState<VersionSummary[]>([]);
   const [activeTab, setActiveTab] = useState<WorkbenchTab>(
     () => currentExperimentRoute().tab
@@ -112,10 +166,20 @@ function App() {
   const [candidateVersion, setCandidateVersion] = useState("v001");
   const [workflowBusy, setWorkflowBusy] = useState(false);
   const [workflowMessage, setWorkflowMessage] = useState<string | null>(null);
+  const [promptPreview, setPromptPreview] =
+    useState<PromptPreviewResponse | null>(null);
+  const [promptPreviewAction, setPromptPreviewAction] =
+    useState<PromptPreviewAction | null>(null);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<Experiment | null>(null);
+  const [globalSettingsBusy, setGlobalSettingsBusy] = useState(false);
+  const [globalSettingsMessage, setGlobalSettingsMessage] =
+    useState<string | null>(null);
+  const [globalSettingsDirty, setGlobalSettingsDirty] = useState(false);
+  const [globalSettingsDraft, setGlobalSettingsDraft] =
+    useState<GlobalSettingsModel | null>(null);
   const [pendingNavigation, setPendingNavigation] =
     useState<PendingNavigation | null>(null);
   const [navigationError, setNavigationError] = useState<string | null>(null);
@@ -141,6 +205,24 @@ function App() {
     window.history[method](window.history.state, "", url);
   }
 
+  function writeGlobalSettingsRoute(historyMode: HistoryMode) {
+    const url = new URL(window.location.href);
+    url.pathname = buildGlobalSettingsPath();
+    url.search = "";
+    const method = historyMode === "push" ? "pushState" : "replaceState";
+    window.history[method](window.history.state, "", url);
+  }
+
+  function writeCurrentRoute(historyMode: HistoryMode) {
+    if (appView === "globalSettings") {
+      writeGlobalSettingsRoute(historyMode);
+      return;
+    }
+    if (selectedExperiment !== null) {
+      writeExperimentRoute(selectedExperiment.id, activeTab, historyMode);
+    }
+  }
+
   function activateTab(tab: WorkbenchTab, historyMode: HistoryMode = "replace") {
     setActiveTab(tab);
     if (selectedExperiment !== null) {
@@ -162,12 +244,16 @@ function App() {
     runRequestIdRef.current += 1;
     workflowRequestIdRef.current += 1;
     setSelectedExperiment(experiment);
-    setReviewState(null);
+    setCommittedValidationState(null);
+    setCompareValidationByVersion({});
+    setCommittedReviewState(null);
     setProposalResponse(null);
     setCreatedVersion(null);
     setComparison(null);
     setVersionSummaries([]);
     setWorkflowMessage(null);
+    setPromptPreview(null);
+    setPromptPreviewAction(null);
     setSettingsMessage(null);
     setWorkflowBusy(false);
     setSettingsBusy(false);
@@ -176,8 +262,7 @@ function App() {
     setPendingNavigation(null);
     setNavigationError(null);
     setNavigationSaving(false);
-    setDecisionsDirty(false);
-    setHumanNotesDirty(false);
+    setAppView("experiment");
     setActiveTab(nextTab);
     if (experiment !== null) {
       if (options?.updateUrl !== false) {
@@ -194,8 +279,108 @@ function App() {
     }
   }
 
-  function shouldBlockSettingsNavigation(): boolean {
-    return activeTab === "settings" && settingsDirty && !settingsBusy;
+  function selectGlobalSettings(options?: { historyMode?: HistoryMode }) {
+    selectedKeyRef.current = null;
+    runRequestIdRef.current += 1;
+    workflowRequestIdRef.current += 1;
+    setAppView("globalSettings");
+    setSelectedExperiment(null);
+    setDetailState({ status: "idle" });
+    setJobStatus(null);
+    setCommittedValidationState(null);
+    setCompareValidationByVersion({});
+    setCommittedReviewState(null);
+    setProposalResponse(null);
+    setCreatedVersion(null);
+    setComparison(null);
+    setVersionSummaries([]);
+    setWorkflowMessage(null);
+    setPromptPreview(null);
+    setPromptPreviewAction(null);
+    setWorkflowBusy(false);
+    setSettingsMessage(null);
+    setSettingsBusy(false);
+    setSettingsDirty(false);
+    setSettingsDraft(null);
+    setPendingNavigation(null);
+    setNavigationError(null);
+    setNavigationSaving(false);
+    writeGlobalSettingsRoute(options?.historyMode ?? "replace");
+  }
+
+  function unsavedNavigationKind(): "settings" | "validation" | "review" | null {
+    if (
+      appView === "experiment" &&
+      activeTab === "validation" &&
+      validationDirty &&
+      !workflowBusy
+    ) {
+      return "validation";
+    }
+    if (
+      appView === "experiment" &&
+      activeTab === "review" &&
+      (decisionsDirty || humanNotesDirty) &&
+      !workflowBusy
+    ) {
+      return "review";
+    }
+    if (
+      appView === "experiment" &&
+      activeTab === "settings" &&
+      settingsDirty &&
+      !settingsBusy
+    ) {
+      return "settings";
+    }
+    if (
+      appView === "globalSettings" &&
+      globalSettingsDirty &&
+      !globalSettingsBusy
+    ) {
+      return "settings";
+    }
+    return null;
+  }
+
+  function shouldBlockUnsavedNavigation(): boolean {
+    return unsavedNavigationKind() !== null;
+  }
+
+  function canSavePendingNavigation(): boolean {
+    const kind = unsavedNavigationKind();
+    if (kind === "validation") {
+      return validationState !== null;
+    }
+    if (kind === "review") {
+      return reviewState !== null;
+    }
+    if (appView === "globalSettings") {
+      return globalSettingsDraft !== null;
+    }
+    return settingsDraft !== null;
+  }
+
+  function pendingNavigationCopy(): { title: string; body: string } {
+    if (unsavedNavigationKind() === "validation") {
+      return {
+        title: "Unsaved validation changes",
+        body:
+          "Save validation inclusion before leaving this view, or discard the unsaved changes."
+      };
+    }
+    if (unsavedNavigationKind() === "review") {
+      return {
+        title: "Unsaved review changes",
+        body:
+          "Save review changes before leaving this view, or discard the unsaved changes."
+      };
+    }
+    return {
+      title: "Unsaved settings changes",
+      body:
+        "Save the current settings before leaving this view, or discard the draft changes."
+    };
   }
 
   function experimentForRoute(route: ReturnType<typeof currentExperimentRoute>) {
@@ -217,6 +402,10 @@ function App() {
       selectExperiment(navigation.experiment, { historyMode: "push" });
       return;
     }
+    if (navigation.kind === "globalSettings") {
+      selectGlobalSettings({ historyMode: "push" });
+      return;
+    }
     if (navigation.kind === "route") {
       selectExperiment(experimentForRoute(navigation.route), {
         historyMode: "push",
@@ -232,10 +421,10 @@ function App() {
   }
 
   function requestExperimentSelection(experiment: Experiment | null) {
-    if (experiment?.id === selectedExperiment?.id) {
+    if (appView === "experiment" && experiment?.id === selectedExperiment?.id) {
       return;
     }
-    if (shouldBlockSettingsNavigation()) {
+    if (shouldBlockUnsavedNavigation()) {
       setNavigationError(null);
       setPendingNavigation({ kind: "experiment", experiment });
       return;
@@ -243,11 +432,23 @@ function App() {
     selectExperiment(experiment, { historyMode: "push" });
   }
 
+  function requestGlobalSettingsSelection() {
+    if (appView === "globalSettings") {
+      return;
+    }
+    if (shouldBlockUnsavedNavigation()) {
+      setNavigationError(null);
+      setPendingNavigation({ kind: "globalSettings" });
+      return;
+    }
+    selectGlobalSettings({ historyMode: "push" });
+  }
+
   function requestTabChange(tab: WorkbenchTab) {
     if (tab === activeTab) {
       return;
     }
-    if (shouldBlockSettingsNavigation()) {
+    if (shouldBlockUnsavedNavigation()) {
       setNavigationError(null);
       setPendingNavigation({ kind: "tab", tab });
       return;
@@ -265,24 +466,51 @@ function App() {
       return;
     }
     const navigation = pendingNavigation;
-    setSettingsDirty(false);
-    setSettingsDraft(null);
+    const kind = unsavedNavigationKind();
+    if (kind === "validation") {
+      restoreCommittedValidationState();
+    } else if (kind === "review") {
+      restoreCommittedReviewState();
+    } else if (appView === "globalSettings") {
+      setGlobalSettingsDirty(false);
+      setGlobalSettingsDraft(null);
+    } else {
+      setSettingsDirty(false);
+      setSettingsDraft(null);
+    }
     setPendingNavigation(null);
     setNavigationError(null);
     performPendingNavigation(navigation);
   }
 
   async function handleSaveSettingsAndContinue() {
-    if (pendingNavigation === null || settingsDraft === null) {
+    if (pendingNavigation === null) {
       return;
     }
     const navigation = pendingNavigation;
+    const kind = unsavedNavigationKind();
     setNavigationSaving(true);
     setNavigationError(null);
     try {
-      await handleSaveExperimentSettings(settingsDraft);
-      setSettingsDirty(false);
-      setSettingsDraft(null);
+      if (kind === "validation") {
+        await handleSaveValidationInclusion({ rethrow: true });
+      } else if (kind === "review") {
+        await handleSaveReviewChanges({ rethrow: true });
+      } else if (appView === "globalSettings") {
+        if (globalSettingsDraft === null) {
+          return;
+        }
+        await handleSaveGlobalSettings(globalSettingsDraft);
+        setGlobalSettingsDirty(false);
+        setGlobalSettingsDraft(null);
+      } else {
+        if (settingsDraft === null) {
+          return;
+        }
+        await handleSaveExperimentSettings(settingsDraft);
+        setSettingsDirty(false);
+        setSettingsDraft(null);
+      }
       setPendingNavigation(null);
       performPendingNavigation(navigation);
     } catch (error) {
@@ -309,6 +537,32 @@ function App() {
     return requestId;
   }
 
+  function setCommittedValidationState(state: ValidationState | null) {
+    const displayState = snapshotValidationState(state);
+    committedValidationStateRef.current = snapshotValidationState(state);
+    setValidationState(displayState);
+    setValidationDirty(false);
+  }
+
+  function restoreCommittedValidationState() {
+    setValidationState(snapshotValidationState(committedValidationStateRef.current));
+    setValidationDirty(false);
+  }
+
+  function setCommittedReviewState(state: ReviewState | null) {
+    const displayState = snapshotReviewState(state);
+    committedReviewStateRef.current = snapshotReviewState(state);
+    setReviewState(displayState);
+    setDecisionsDirty(false);
+    setHumanNotesDirty(false);
+  }
+
+  function restoreCommittedReviewState() {
+    setReviewState(snapshotReviewState(committedReviewStateRef.current));
+    setDecisionsDirty(false);
+    setHumanNotesDirty(false);
+  }
+
   function isWorkflowCurrent(requestId: number, selectionKey: string): boolean {
     return (
       workflowRequestIdRef.current === requestId && isSelectionCurrent(selectionKey)
@@ -320,9 +574,10 @@ function App() {
     if (!isSelectionCurrent(selectionKey)) {
       return;
     }
-    const [overview, runs, latestReview] = await Promise.all([
+    const [overview, runs, latestValidation, latestReview] = await Promise.all([
       getVersionOverview(job.experiment_id, job.version),
       getVersionRuns(job.experiment_id, job.version),
+      getLatestValidationState(job.experiment_id, job.version),
       getLatestReviewState(job.experiment_id, job.version)
     ]);
     const latestProposal =
@@ -337,11 +592,18 @@ function App() {
       return;
     }
     setDetailState({ status: "loaded", overview, runs });
-    setReviewState(latestReview);
+    setCommittedValidationState(latestValidation);
+    setCompareValidationByVersion((current) => ({
+      ...current,
+      [job.version]: hasCompletedValidation(latestValidation)
+    }));
+    setCommittedReviewState(latestReview);
     setProposalResponse(latestProposal);
-    setDecisionsDirty(false);
-    setHumanNotesDirty(false);
-    if (job.kind === "run_version" || job.kind === "judge") {
+    if (
+      job.kind === "run_version" ||
+      job.kind === "validation" ||
+      job.kind === "judge"
+    ) {
       setCreatedVersion(null);
       setComparison(null);
     }
@@ -408,16 +670,20 @@ function App() {
           setState({ status: "loaded", experiments });
           if (selectedKeyRef.current === null) {
             const requestedRoute = currentExperimentRoute();
-            const requestedExperiment =
-              requestedRoute.experimentId === null
-                ? null
-                : experiments.find(
-                    (experiment) => experiment.id === requestedRoute.experimentId
-                  ) ?? null;
-            selectExperiment(requestedExperiment ?? experiments[0] ?? null, {
-              historyMode: "replace",
-              tab: requestedRoute.tab
-            });
+            if (isGlobalSettingsRoute(new URL(window.location.href))) {
+              selectGlobalSettings({ historyMode: "replace" });
+            } else {
+              const requestedExperiment =
+                requestedRoute.experimentId === null
+                  ? null
+                  : experiments.find(
+                      (experiment) => experiment.id === requestedRoute.experimentId
+                    ) ?? null;
+              selectExperiment(requestedExperiment ?? experiments[0] ?? null, {
+                historyMode: "replace",
+                tab: requestedRoute.tab
+              });
+            }
           }
         }
       } catch (error) {
@@ -438,19 +704,52 @@ function App() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadSettings() {
+      try {
+        const settings = await getGlobalSettings();
+        if (!cancelled) {
+          setGlobalSettingsState({ status: "loaded", settings });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setGlobalSettingsState({
+            status: "error",
+            message: error instanceof Error ? error.message : "Unknown error"
+          });
+        }
+      }
+    }
+
+    void loadSettings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (state.status !== "loaded") {
       return;
     }
     const loadedExperiments = state.experiments;
 
     function handlePopState() {
+      const url = new URL(window.location.href);
       const requestedRoute = currentExperimentRoute();
-      if (shouldBlockSettingsNavigation()) {
-        if (selectedExperiment !== null) {
-          writeExperimentRoute(selectedExperiment.id, activeTab, "replace");
-        }
+      if (shouldBlockUnsavedNavigation()) {
+        writeCurrentRoute("replace");
         setNavigationError(null);
-        setPendingNavigation({ kind: "route", route: requestedRoute });
+        setPendingNavigation(
+          isGlobalSettingsRoute(url)
+            ? { kind: "globalSettings" }
+            : { kind: "route", route: requestedRoute }
+        );
+        return;
+      }
+      if (isGlobalSettingsRoute(url)) {
+        selectGlobalSettings({ historyMode: "replace" });
         return;
       }
       const requestedExperiment =
@@ -469,10 +768,31 @@ function App() {
     return () => {
       window.removeEventListener("popstate", handlePopState);
     };
-  }, [activeTab, selectedExperiment, settingsBusy, settingsDirty, state]);
+  }, [
+    activeTab,
+    appView,
+    decisionsDirty,
+    globalSettingsBusy,
+    globalSettingsDirty,
+    humanNotesDirty,
+    reviewState,
+    selectedExperiment,
+    settingsBusy,
+    settingsDirty,
+    validationDirty,
+    validationState,
+    workflowBusy,
+    state
+  ]);
 
   useEffect(() => {
-    if (!settingsDirty) {
+    if (
+      !settingsDirty &&
+      !globalSettingsDirty &&
+      !validationDirty &&
+      !decisionsDirty &&
+      !humanNotesDirty
+    ) {
       return;
     }
 
@@ -485,23 +805,32 @@ function App() {
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, [settingsDirty]);
+  }, [
+    decisionsDirty,
+    globalSettingsDirty,
+    humanNotesDirty,
+    settingsDirty,
+    validationDirty
+  ]);
 
   useEffect(() => {
     if (selectedExperiment === null) {
       setDetailState({ status: "idle" });
+      setCommittedValidationState(null);
       return;
     }
 
     let cancelled = false;
     setDetailState({ status: "loading" });
     setJobStatus(null);
+    setCommittedValidationState(null);
 
     async function loadDetails(experiment: Experiment) {
       try {
-        const [overview, runs, latestReview] = await Promise.all([
+        const [overview, runs, latestValidation, latestReview] = await Promise.all([
           getVersionOverview(experiment.id, experiment.active_version),
           getVersionRuns(experiment.id, experiment.active_version),
+          getLatestValidationState(experiment.id, experiment.active_version),
           getLatestReviewState(experiment.id, experiment.active_version)
         ]);
         const latestProposal =
@@ -514,10 +843,9 @@ function App() {
               );
         if (!cancelled) {
           setDetailState({ status: "loaded", overview, runs });
-          setReviewState(latestReview);
+          setCommittedValidationState(latestValidation);
+          setCommittedReviewState(latestReview);
           setProposalResponse(latestProposal);
-          setDecisionsDirty(false);
-          setHumanNotesDirty(false);
         }
       } catch (error) {
         if (!cancelled) {
@@ -568,6 +896,47 @@ function App() {
 
   useEffect(() => {
     if (selectedExperiment === null) {
+      setCompareValidationByVersion({});
+      return;
+    }
+
+    let cancelled = false;
+    const experimentId = selectedExperiment.id;
+    const versions = [...new Set([baselineVersion, candidateVersion])];
+    setCompareValidationByVersion({});
+
+    async function loadCompareValidationState() {
+      try {
+        const entries = await Promise.all(
+          versions.map(async (version) => {
+            const state = await getLatestValidationState(experimentId, version);
+            return [version, hasCompletedValidation(state)] as const;
+          })
+        );
+        if (!cancelled) {
+          setCompareValidationByVersion(Object.fromEntries(entries));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setCompareValidationByVersion({});
+          setWorkflowMessage(
+            error instanceof Error
+              ? error.message
+              : "Could not load validation state for comparison."
+          );
+        }
+      }
+    }
+
+    void loadCompareValidationState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [baselineVersion, candidateVersion, selectedExperiment]);
+
+  useEffect(() => {
+    if (selectedExperiment === null) {
       return;
     }
 
@@ -596,12 +965,15 @@ function App() {
   }, [selectedExperiment]);
 
   const subtitle = useMemo(() => {
+    if (appView === "globalSettings") {
+      return "Application-level configuration";
+    }
     if (state.status !== "loaded") {
       return "Loading local experiment manifests";
     }
     const count = state.experiments.length;
     return `${count} experiment${count === 1 ? "" : "s"} available`;
-  }, [state]);
+  }, [appView, state]);
 
   async function handleRunVersion() {
     if (selectedExperiment === null || detailState.status !== "loaded") {
@@ -640,12 +1012,15 @@ function App() {
         return;
       }
       setJobStatus(job);
-      setReviewState(null);
+      setCommittedValidationState(null);
+      setCompareValidationByVersion((current) => ({
+        ...current,
+        [version]: false
+      }));
+      setCommittedReviewState(null);
       setProposalResponse(null);
       setCreatedVersion(null);
       setComparison(null);
-      setDecisionsDirty(false);
-      setHumanNotesDirty(false);
 
       job = await followJobEvents(job.job_id, job, isCurrentRequest);
       if (job.status === "cancelled") {
@@ -678,6 +1053,132 @@ function App() {
         status: "error",
         message: error instanceof Error ? error.message : "Unknown error"
       });
+    }
+  }
+
+  function handleRejectPromptPreview() {
+    setPromptPreview(null);
+    setPromptPreviewAction(null);
+  }
+
+  function handleAcceptPromptPreview() {
+    const action = promptPreviewAction;
+    setPromptPreview(null);
+    setPromptPreviewAction(null);
+    if (action !== null) {
+      void action();
+    }
+  }
+
+  async function handlePreviewRunPrompts() {
+    if (selectedExperiment === null || detailState.status !== "loaded") {
+      return;
+    }
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    try {
+      setWorkflowBusy(true);
+      setWorkflowMessage("Preparing prompt preview...");
+      const preview = await previewRunPrompts(experimentId, version);
+      setPromptPreview(preview);
+      setPromptPreviewAction(() => handleRunVersion);
+      setWorkflowMessage(null);
+    } catch (error) {
+      setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
+
+  async function handlePreviewValidationPrompts() {
+    if (selectedExperiment === null || detailState.status !== "loaded") {
+      return;
+    }
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
+    if (detailState.runs.runs.length === 0) {
+      setWorkflowMessage("Create a run before validating.");
+      return;
+    }
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    try {
+      setWorkflowBusy(true);
+      setWorkflowMessage("Preparing validation prompt preview...");
+      const preview = await previewValidationPrompts(experimentId, version);
+      setPromptPreview(preview);
+      setPromptPreviewAction(() => handleValidateVersion);
+      setWorkflowMessage(null);
+    } catch (error) {
+      setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
+
+  async function handlePreviewJudgePrompts() {
+    if (selectedExperiment === null) return;
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
+    if (!hasCompletedValidation(validationState)) {
+      setWorkflowMessage("Validate the active run before judging.");
+      return;
+    }
+    if (validationDirty) {
+      setWorkflowMessage("Save validation inclusion before judging.");
+      return;
+    }
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    try {
+      setWorkflowBusy(true);
+      setWorkflowMessage("Preparing judge prompt preview...");
+      const preview = await previewJudgePrompts(experimentId, version);
+      setPromptPreview(preview);
+      setPromptPreviewAction(() => handleJudgeVersion);
+      setWorkflowMessage(null);
+    } catch (error) {
+      setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
+
+  async function handlePreviewProposalPrompts() {
+    if (selectedExperiment === null || reviewState === null) return;
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
+    if (decisionsDirty || humanNotesDirty) {
+      setWorkflowMessage("Save review changes before generating a proposal.");
+      return;
+    }
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    try {
+      setWorkflowBusy(true);
+      setWorkflowMessage("Preparing proposal prompt preview...");
+      const preview = await previewProposalPrompts(
+        experimentId,
+        version,
+        reviewState.review_id
+      );
+      setPromptPreview(preview);
+      setPromptPreviewAction(() => handleGenerateProposal);
+      setWorkflowMessage(null);
+    } catch (error) {
+      setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setWorkflowBusy(false);
     }
   }
 
@@ -753,10 +1254,117 @@ function App() {
     });
   }
 
+  async function handleValidateVersion() {
+    if (selectedExperiment === null || detailState.status !== "loaded") {
+      return;
+    }
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
+    if (detailState.runs.runs.length === 0) {
+      setWorkflowMessage("Create a run before validating.");
+      return;
+    }
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    const selectionKey = `${experimentId}:${version}`;
+    const dryRun = workflowMode === "dry-run";
+    const requestId = beginWorkflow(
+      selectionKey,
+      dryRun ? "Dry-run validating active run..." : "Validating active run..."
+    );
+    try {
+      const latestValidation = await validateVersion(experimentId, version, dryRun);
+      if (!isWorkflowCurrent(requestId, selectionKey)) return;
+      setCommittedValidationState(latestValidation);
+      setCompareValidationByVersion((current) => ({
+        ...current,
+        [version]: hasCompletedValidation(latestValidation)
+      }));
+      setCommittedReviewState(null);
+      setProposalResponse(null);
+      setCreatedVersion(null);
+      setComparison(null);
+      setWorkflowMessage(
+        dryRun
+          ? "Dry-run validation loaded."
+          : "Validation completed."
+      );
+      activateTab("validation");
+    } catch (error) {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+      }
+    } finally {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowBusy(false);
+      }
+    }
+  }
+
+  function handleValidationStateChange(nextState: ValidationState) {
+    setValidationState(nextState);
+    setValidationDirty(true);
+    setWorkflowMessage(null);
+    setCommittedReviewState(null);
+    setProposalResponse(null);
+    setCreatedVersion(null);
+    setComparison(null);
+  }
+
+  async function handleSaveValidationInclusion(options?: { rethrow?: boolean }) {
+    if (selectedExperiment === null || validationState === null) {
+      return;
+    }
+    const experimentId = selectedExperiment.id;
+    const version = selectedExperiment.active_version;
+    const selectionKey = `${experimentId}:${version}`;
+    const requestId = beginWorkflow(selectionKey, "Saving validation inclusion...");
+    try {
+      const savedValidation = await updateValidationInclusion(
+        experimentId,
+        version,
+        validationState.validation_batch.validation_batch_id,
+        buildValidationInclusionUpdate(validationState)
+      );
+      if (!isWorkflowCurrent(requestId, selectionKey)) return;
+      setCommittedValidationState(savedValidation);
+      setCompareValidationByVersion((current) => ({
+        ...current,
+        [version]: hasCompletedValidation(savedValidation)
+      }));
+      setCommittedReviewState(null);
+      setProposalResponse(null);
+      setCreatedVersion(null);
+      setComparison(null);
+      setWorkflowMessage("Validation inclusion saved.");
+    } catch (error) {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+      }
+      if (options?.rethrow) {
+        throw error;
+      }
+    } finally {
+      if (isWorkflowCurrent(requestId, selectionKey)) {
+        setWorkflowBusy(false);
+      }
+    }
+  }
+
   async function handleJudgeVersion() {
     if (selectedExperiment === null) return;
     if (workflowLocked) {
       setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
+    if (!hasCompletedValidation(validationState)) {
+      setWorkflowMessage("Validate the active run before judging.");
+      return;
+    }
+    if (validationDirty) {
+      setWorkflowMessage("Save validation inclusion before judging.");
       return;
     }
     const experimentId = selectedExperiment.id;
@@ -771,11 +1379,9 @@ function App() {
       const response = await judgeVersion(experimentId, version, dryRun);
       const review = await getReviewState(experimentId, version, response.review_id);
       if (!isWorkflowCurrent(requestId, selectionKey)) return;
-      setReviewState(review);
+      setCommittedReviewState(review);
       setProposalResponse(null);
       setCreatedVersion(null);
-      setDecisionsDirty(false);
-      setHumanNotesDirty(false);
       setWorkflowMessage(
         dryRun
           ? "Dry-run review loaded as the active review."
@@ -815,34 +1421,48 @@ function App() {
       };
     });
     setDecisionsDirty(true);
+    setWorkflowMessage(null);
     setProposalResponse(null);
     setCreatedVersion(null);
   }
 
-  async function handleSaveDecisions() {
+  async function handleSaveReviewChanges(options?: { rethrow?: boolean }) {
     if (selectedExperiment === null || reviewState === null) return;
     const experimentId = selectedExperiment.id;
     const version = selectedExperiment.active_version;
     const selectionKey = `${experimentId}:${version}`;
-    const requestId = beginWorkflow(selectionKey);
+    const draftReview = snapshotReviewState(reviewState);
+    if (draftReview === null) return;
+    const requestId = beginWorkflow(selectionKey, "Saving review changes...");
     try {
-      const decisions = await updateReviewDecisions(
-        experimentId,
-        version,
-        reviewState.review_id,
-        reviewState.decisions
-      );
+      let savedReview = draftReview;
+      if (decisionsDirty) {
+        const decisions = await updateReviewDecisions(
+          experimentId,
+          version,
+          draftReview.review_id,
+          draftReview.decisions
+        );
+        savedReview = { ...savedReview, decisions };
+      }
+      if (humanNotesDirty) {
+        const response = await updateHumanNotes(
+          experimentId,
+          version,
+          draftReview.review_id,
+          draftReview.human_notes
+        );
+        savedReview = { ...savedReview, human_notes: response.human_notes };
+      }
       if (!isWorkflowCurrent(requestId, selectionKey)) return;
-      setReviewState((current) =>
-        current === null || current.review_id !== reviewState.review_id
-          ? current
-          : { ...current, decisions }
-      );
-      setDecisionsDirty(false);
-      setWorkflowMessage("Decisions saved.");
+      setCommittedReviewState(savedReview);
+      setWorkflowMessage("Review changes saved.");
     } catch (error) {
       if (isWorkflowCurrent(requestId, selectionKey)) {
         setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
+      }
+      if (options?.rethrow) {
+        throw error;
       }
     } finally {
       if (isWorkflowCurrent(requestId, selectionKey)) {
@@ -856,40 +1476,9 @@ function App() {
       current === null ? current : { ...current, human_notes: notes }
     );
     setHumanNotesDirty(true);
+    setWorkflowMessage(null);
     setProposalResponse(null);
     setCreatedVersion(null);
-  }
-
-  async function handleSaveHumanNotes() {
-    if (selectedExperiment === null || reviewState === null) return;
-    const experimentId = selectedExperiment.id;
-    const version = selectedExperiment.active_version;
-    const selectionKey = `${experimentId}:${version}`;
-    const requestId = beginWorkflow(selectionKey);
-    try {
-      const response = await updateHumanNotes(
-        experimentId,
-        version,
-        reviewState.review_id,
-        reviewState.human_notes
-      );
-      if (!isWorkflowCurrent(requestId, selectionKey)) return;
-      setReviewState((current) =>
-        current === null || current.review_id !== reviewState.review_id
-          ? current
-          : { ...current, human_notes: response.human_notes }
-      );
-      setHumanNotesDirty(false);
-      setWorkflowMessage("Human notes saved.");
-    } catch (error) {
-      if (isWorkflowCurrent(requestId, selectionKey)) {
-        setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
-      }
-    } finally {
-      if (isWorkflowCurrent(requestId, selectionKey)) {
-        setWorkflowBusy(false);
-      }
-    }
   }
 
   async function handleGenerateProposal() {
@@ -899,7 +1488,7 @@ function App() {
       return;
     }
     if (decisionsDirty || humanNotesDirty) {
-      setWorkflowMessage("Save decisions and human notes before generating a proposal.");
+      setWorkflowMessage("Save review changes before generating a proposal.");
       return;
     }
     const experimentId = selectedExperiment.id;
@@ -989,8 +1578,12 @@ function App() {
       );
       return;
     }
-    if (!hasRuns) {
-      setWorkflowMessage("Run both versions before comparing.");
+    if (hasUnsavedCompareValidationChanges) {
+      setWorkflowMessage("Save validation inclusion before comparing.");
+      return;
+    }
+    if (!hasComparedValidation) {
+      setWorkflowMessage("Validate both versions before comparing.");
       return;
     }
     const dryRun = workflowMode === "dry-run";
@@ -1012,7 +1605,7 @@ function App() {
       ) {
         return;
       }
-      setComparison(response.comparison);
+      setComparison(response);
       setWorkflowMessage(
         dryRun
           ? "Dry-run comparison loaded."
@@ -1045,16 +1638,19 @@ function App() {
   }
 
   async function refreshExperimentsAfterSettingsSave(savedExperiment: Experiment) {
-    const [experiments, overview, runs, versions] = await Promise.all([
+    const [experiments, overview, runs, latestValidation, versions] = await Promise.all([
       apiGet<Experiment[]>("/api/experiments"),
       getVersionOverview(savedExperiment.id, savedExperiment.active_version),
       getVersionRuns(savedExperiment.id, savedExperiment.active_version),
+      getLatestValidationState(savedExperiment.id, savedExperiment.active_version),
       getExperimentVersions(savedExperiment.id)
     ]);
     setState({ status: "loaded", experiments });
     setSelectedExperiment(savedExperiment);
     selectedKeyRef.current = `${savedExperiment.id}:${savedExperiment.active_version}`;
     setDetailState({ status: "loaded", overview, runs });
+    setCommittedValidationState(latestValidation);
+    setCompareValidationByVersion({});
     setVersionSummaries(versions.versions);
     setCandidateVersion(savedExperiment.active_version);
     candidateVersionRef.current = savedExperiment.active_version;
@@ -1086,8 +1682,32 @@ function App() {
     setSettingsMessage(null);
   }
 
+  async function handleSaveGlobalSettings(settings: GlobalSettingsModel) {
+    setGlobalSettingsBusy(true);
+    setGlobalSettingsMessage(null);
+    try {
+      const savedSettings = await updateGlobalSettings(settings);
+      setGlobalSettingsState({ status: "loaded", settings: savedSettings });
+      setGlobalSettingsMessage("Global settings saved.");
+      setGlobalSettingsDirty(false);
+      setGlobalSettingsDraft(null);
+      writeGlobalSettingsRoute("replace");
+    } catch (error) {
+      setGlobalSettingsMessage(
+        error instanceof Error ? error.message : "Unknown error"
+      );
+      throw error;
+    } finally {
+      setGlobalSettingsBusy(false);
+    }
+  }
+
+  function handleResetGlobalSettings() {
+    setGlobalSettingsMessage(null);
+  }
+
   async function handleActiveVersionChange(version: string) {
-    if (shouldBlockSettingsNavigation()) {
+    if (shouldBlockUnsavedNavigation()) {
       setNavigationError(null);
       setPendingNavigation({ kind: "version", version });
       return;
@@ -1101,12 +1721,14 @@ function App() {
     }
     setWorkflowBusy(true);
     setWorkflowMessage(`Switching to ${version}...`);
-    setReviewState(null);
+    setPromptPreview(null);
+    setPromptPreviewAction(null);
+    setCommittedValidationState(null);
+    setCompareValidationByVersion({});
+    setCommittedReviewState(null);
     setProposalResponse(null);
     setCreatedVersion(null);
     setComparison(null);
-    setDecisionsDirty(false);
-    setHumanNotesDirty(false);
     try {
       const savedExperiment = await updateExperiment(selectedExperiment.id, {
         ...selectedExperiment,
@@ -1150,19 +1772,77 @@ function App() {
   }, [createdVersion, selectedExperiment, versionSummaries]);
 
   const hasRuns = detailState.status === "loaded" && detailState.runs.runs.length > 0;
+  const hasValidation = hasCompletedValidation(validationState);
+  const hasComparedValidation =
+    baselineVersion !== candidateVersion &&
+    Boolean(compareValidationByVersion[baselineVersion]) &&
+    Boolean(compareValidationByVersion[candidateVersion]);
+  const activeVersion = selectedExperiment?.active_version ?? null;
+  const hasUnsavedCompareValidationChanges =
+    validationDirty &&
+    activeVersion !== null &&
+    (baselineVersion === activeVersion || candidateVersion === activeVersion);
   const workflowLocked = workflowBusy || jobStatus?.status === "running";
   const judgeAction = getJudgeActionState({
     hasReview: reviewState !== null,
     hasRuns,
+    hasUnsavedValidationChanges: validationDirty,
+    hasValidation,
+    isBusy: workflowLocked
+  });
+  const validateAction = getValidateActionState({
+    hasRuns,
+    hasValidation,
     isBusy: workflowLocked
   });
   const compareAction = getCompareActionState({
     hasComparison: comparison !== null,
-    hasRuns,
+    hasUnsavedValidationChanges: hasUnsavedCompareValidationChanges,
+    hasValidation: hasComparedValidation,
     isBusy: workflowLocked,
     sameVersion: baselineVersion === candidateVersion,
     versionCount: knownVersions.length
   });
+  const pendingNavigationDialog = pendingNavigationCopy();
+  const pendingNavigationSaveDisabled =
+    navigationSaving || !canSavePendingNavigation();
+  const hasUnsavedReviewChanges = decisionsDirty || humanNotesDirty;
+  const workflowUnsavedChangesAction =
+    activeTab === "validation" && validationDirty ? (
+      <div className="workflow-unsaved-action">
+        <span>Unsaved inclusion changes.</span>
+        <TooltipButton
+          className="secondary-action"
+          disabled={workflowLocked || validationState === null}
+          disabledReason={
+            workflowLocked
+              ? "Wait for the current workflow action to finish."
+              : "Change validation inclusion before saving."
+          }
+          onClick={() => void handleSaveValidationInclusion()}
+          type="button"
+        >
+          Save
+        </TooltipButton>
+      </div>
+    ) : activeTab === "review" && hasUnsavedReviewChanges ? (
+      <div className="workflow-unsaved-action">
+        <span>Unsaved review changes.</span>
+        <TooltipButton
+          className="secondary-action"
+          disabled={workflowLocked || reviewState === null}
+          disabledReason={
+            workflowLocked
+              ? "Wait for the current workflow action to finish."
+              : "Change review decisions or human notes before saving."
+          }
+          onClick={() => void handleSaveReviewChanges()}
+          type="button"
+        >
+          Save
+        </TooltipButton>
+      </div>
+    ) : null;
 
   return (
     <main className="app-shell">
@@ -1171,6 +1851,17 @@ function App() {
           <h1>Prompt Lab</h1>
           <p>{subtitle}</p>
         </div>
+        <button
+          className={
+            appView === "globalSettings"
+              ? "header-settings-button is-active"
+              : "header-settings-button"
+          }
+          onClick={requestGlobalSettingsSelection}
+          type="button"
+        >
+          Global settings
+        </button>
       </header>
 
       <section className="workspace" aria-live="polite">
@@ -1185,35 +1876,60 @@ function App() {
           </div>
         ) : null}
 
-        {state.status === "loaded" && state.experiments.length === 0 ? (
-          <div className="empty-state">No experiments found.</div>
-        ) : null}
-
-        {state.status === "loaded" && state.experiments.length > 0 ? (
+        {state.status === "loaded" ? (
           <div className="tool-layout">
             <ExperimentsList
               experiments={state.experiments}
               onSelect={requestExperimentSelection}
-              selectedExperimentId={selectedExperiment?.id ?? null}
+              selectedExperimentId={
+                appView === "experiment" ? selectedExperiment?.id ?? null : null
+              }
             />
 
             <div className="detail-panel">
-              {detailState.status === "idle" ? (
+              {appView === "globalSettings" ? (
+                globalSettingsState.status === "loading" ? (
+                  <div className="empty-state">Loading global settings...</div>
+                ) : globalSettingsState.status === "error" ? (
+                  <div className="error-state">
+                    <h2>Could not load global settings</h2>
+                    <p>{globalSettingsState.message}</p>
+                  </div>
+                ) : (
+                  <GlobalSettings
+                    isBusy={globalSettingsBusy}
+                    message={globalSettingsMessage}
+                    onDirtyChange={setGlobalSettingsDirty}
+                    onDraftChange={setGlobalSettingsDraft}
+                    onReset={handleResetGlobalSettings}
+                    onSave={handleSaveGlobalSettings}
+                    settings={globalSettingsState.settings}
+                  />
+                )
+              ) : null}
+
+              {appView === "experiment" && state.experiments.length === 0 ? (
+                <div className="empty-state">No experiments found.</div>
+              ) : null}
+
+              {appView === "experiment" &&
+              state.experiments.length > 0 &&
+              detailState.status === "idle" ? (
                 <div className="empty-state">Select an experiment.</div>
               ) : null}
 
-              {detailState.status === "loading" ? (
+              {appView === "experiment" && detailState.status === "loading" ? (
                 <div className="empty-state">Loading experiment details...</div>
               ) : null}
 
-              {detailState.status === "error" ? (
+              {appView === "experiment" && detailState.status === "error" ? (
                 <div className="error-state">
                   <h2>Could not load experiment details</h2>
                   <p>{detailState.message}</p>
                 </div>
               ) : null}
 
-              {detailState.status === "loaded" ? (
+              {appView === "experiment" && detailState.status === "loaded" ? (
                 <>
                   <WorkflowToolbar
                     activeVersion={detailState.overview.version}
@@ -1227,6 +1943,61 @@ function App() {
                     showDryRunControls={SHOW_DRY_RUN_CONTROLS}
                     workflowMessage={workflowMessage}
                     workflowMode={workflowMode}
+                    unsavedChangesAction={workflowUnsavedChangesAction}
+                    secondaryAction={
+                      activeTab === "runs" ? (
+                        <TooltipButton
+                          className="secondary-action"
+                          disabled={workflowLocked}
+                          disabledReason="Wait for the current run to finish."
+                          onClick={handlePreviewRunPrompts}
+                          type="button"
+                        >
+                          Preview prompts
+                        </TooltipButton>
+                      ) : activeTab === "validation" ? (
+                        <TooltipButton
+                          className="secondary-action"
+                          disabled={validateAction.disabled}
+                          disabledReason={validateAction.disabledReason}
+                          onClick={handlePreviewValidationPrompts}
+                          type="button"
+                        >
+                          Preview prompts
+                        </TooltipButton>
+                      ) : activeTab === "review" ? (
+                        <TooltipButton
+                          className="secondary-action"
+                          disabled={judgeAction.disabled}
+                          disabledReason={judgeAction.disabledReason}
+                          onClick={handlePreviewJudgePrompts}
+                          type="button"
+                        >
+                          Preview prompts
+                        </TooltipButton>
+                      ) : activeTab === "proposal" ? (
+                        <TooltipButton
+                          className="secondary-action"
+                          disabled={
+                            workflowLocked ||
+                            reviewState === null ||
+                            decisionsDirty ||
+                            humanNotesDirty
+                          }
+                          disabledReason={
+                            workflowLocked
+                              ? "Wait for the current workflow action to finish."
+                              : reviewState === null
+                                ? "Judge the active run before generating a proposal."
+                                : "Save review changes before generating a proposal."
+                          }
+                          onClick={handlePreviewProposalPrompts}
+                          type="button"
+                        >
+                          Preview prompts
+                        </TooltipButton>
+                      ) : null
+                    }
                     primaryAction={
                       activeTab === "review" ? (
                         <TooltipButton
@@ -1252,7 +2023,7 @@ function App() {
                               ? "Wait for the current workflow action to finish."
                               : reviewState === null
                                 ? "Judge the active run before generating a proposal."
-                                : "Save review decisions and human notes before generating a proposal."
+                                : "Save review changes before generating a proposal."
                           }
                           onClick={handleGenerateProposal}
                           type="button"
@@ -1271,6 +2042,16 @@ function App() {
                           type="button"
                         >
                           {compareAction.label}
+                        </TooltipButton>
+                      ) : activeTab === "validation" ? (
+                        <TooltipButton
+                          className="primary-action"
+                          disabled={validateAction.disabled}
+                          disabledReason={validateAction.disabledReason}
+                          onClick={handleValidateVersion}
+                          type="button"
+                        >
+                          {validateAction.label}
                         </TooltipButton>
                       ) : activeTab === "runs" ? (
                         <TooltipButton
@@ -1315,15 +2096,18 @@ function App() {
                           <pre className="code-block">{detailState.overview.prompt}</pre>
                         </div>
 
-                        <div className="overview-section">
+                        <div className="overview-section overview-section-wide">
                           <div className="section-heading">
-                            <h3>Rubric</h3>
+                            <h3>Validators</h3>
+                            <span>
+                              {(detailState.overview.validators ?? []).length}
+                            </span>
                           </div>
-                          <pre className="text-block">
-                            {detailState.overview.rubric.trim() ||
-                              "No rubric found."}
-                          </pre>
+                          <ValidatorsPreview
+                            validators={detailState.overview.validators ?? []}
+                          />
                         </div>
+
                       </section>
                     ) : null}
 
@@ -1351,18 +2135,24 @@ function App() {
                       />
                     ) : null}
 
+                    {activeTab === "validation" ? (
+                      <ValidationView
+                        hasRuns={hasRuns}
+                        isBusy={workflowLocked}
+                        onStateChange={handleValidationStateChange}
+                        runs={detailState.runs.runs}
+                        validationState={validationState}
+                      />
+                    ) : null}
+
                     {activeTab === "review" ? (
                       <ReviewView
-                        hasUnsavedDecisionChanges={decisionsDirty}
-                        hasUnsavedHumanNotesChanges={humanNotesDirty}
                         isBusy={workflowLocked}
                         judgeDisabled={judgeAction.disabled}
                         judgeDisabledReason={judgeAction.disabledReason}
                         onDecisionChange={handleDecisionChange}
                         onHumanNotesChange={handleHumanNotesChange}
                         onJudge={handleJudgeVersion}
-                        onSaveDecisions={handleSaveDecisions}
-                        onSaveHumanNotes={handleSaveHumanNotes}
                         reviewState={reviewState}
                       />
                     ) : null}
@@ -1370,7 +2160,7 @@ function App() {
                     {activeTab === "proposal" ? (
                       <ProposalView
                         createdVersion={createdVersion}
-                        hasUnsavedReviewChanges={decisionsDirty || humanNotesDirty}
+                        hasUnsavedReviewChanges={hasUnsavedReviewChanges}
                         isBusy={workflowLocked}
                         onCreateVersion={handleCreateVersion}
                         onGenerateProposal={handleGenerateProposal}
@@ -1384,7 +2174,10 @@ function App() {
                         baselineVersion={baselineVersion}
                         candidateVersion={candidateVersion}
                         comparison={comparison}
-                        hasRuns={hasRuns}
+                        hasUnsavedValidationChanges={
+                          hasUnsavedCompareValidationChanges
+                        }
+                        hasValidation={hasComparedValidation}
                         isBusy={workflowLocked}
                         knownVersions={knownVersions}
                         onBaselineVersionChange={handleBaselineVersionChange}
@@ -1400,6 +2193,15 @@ function App() {
         ) : null}
       </section>
 
+      {promptPreview !== null ? (
+        <PromptPreviewModal
+          isAccepting={workflowLocked}
+          onAccept={handleAcceptPromptPreview}
+          onReject={handleRejectPromptPreview}
+          preview={promptPreview}
+        />
+      ) : null}
+
       {pendingNavigation !== null ? (
         <div className="modal-backdrop" role="presentation">
           <section
@@ -1409,11 +2211,8 @@ function App() {
             role="dialog"
           >
             <div>
-              <h2 id="settings-navigation-title">Unsaved settings changes</h2>
-              <p>
-                Save the current experiment settings before leaving this view, or
-                discard the draft changes.
-              </p>
+              <h2 id="settings-navigation-title">{pendingNavigationDialog.title}</h2>
+              <p>{pendingNavigationDialog.body}</p>
             </div>
             {navigationError !== null ? (
               <div className="settings-error">{navigationError}</div>
@@ -1437,7 +2236,7 @@ function App() {
               </button>
               <button
                 className="primary-action"
-                disabled={navigationSaving || settingsDraft === null}
+                disabled={pendingNavigationSaveDisabled}
                 onClick={() => void handleSaveSettingsAndContinue()}
                 type="button"
               >
