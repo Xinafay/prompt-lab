@@ -1647,15 +1647,18 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             case = cases_by_id[run.case_id]
             case_context = materialize_case_context(case)
             for validator in llm_validators:
-                validator_prompt = build_llm_validator_prompt(
-                    experiment_id=experiment_id,
-                    version=version,
-                    validation_batch_id="preview",
-                    validator=validator,
-                    run=run,
-                    case=case,
-                    case_context=case_context,
-                )
+                try:
+                    validator_prompt = build_llm_validator_prompt(
+                        experiment_id=experiment_id,
+                        version=version,
+                        validation_batch_id="preview",
+                        validator=validator,
+                        run=run,
+                        case=case,
+                        case_context=case_context,
+                    )
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
                 prompts.append(
                     _prompt_preview_item(
                         kind="validation",

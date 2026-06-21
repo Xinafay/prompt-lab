@@ -994,6 +994,38 @@ def test_api_previews_validation_prompts_with_first_repeat_when_too_large() -> N
         api_module.PROMPT_PREVIEW_MAX_PROMPTS = original_limit
 
 
+def test_api_validation_prompt_preview_reports_unresolved_model_marker() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        version_dir = write_runtime_preview_experiment(root, repeat_count=2)
+        write_preview_run_batch(version_dir)
+        write_preview_validators(root)
+        validator_path = root / "experiments" / "demo" / "validators" / "quality.json"
+        validator = json.loads(validator_path.read_text(encoding="utf-8"))
+        validator["input_scope"] = "output_and_prompt"
+        write_json(validator_path, validator)
+        run_path = (
+            version_dir
+            / "runs"
+            / "run-preview-001"
+            / "case-a"
+            / "repeat-001.json"
+        )
+        run_artifact = json.loads(run_path.read_text(encoding="utf-8"))
+        run_artifact["rendered_prompt"] = "Return JSON matching:\n<<MODEL>>"
+        write_json(run_path, run_artifact)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/api/experiments/demo/versions/v001/validations/preview-prompts"
+        )
+
+        assert response.status_code == 400
+        assert "rendered_prompt contains unresolved <<MODEL>>" in (
+            response.json()["detail"]
+        )
+
+
 def test_api_dry_run_pydantic_version_avoids_live_llm() -> None:
     def fail_live_generate_structured(
         model: str,
@@ -1439,6 +1471,7 @@ def main() -> int:
         test_api_runs_pydantic_version,
         test_api_previews_run_prompts_and_preserves_model_marker,
         test_api_previews_validation_prompts_with_first_repeat_when_too_large,
+        test_api_validation_prompt_preview_reports_unresolved_model_marker,
         test_api_dry_run_pydantic_version_avoids_live_llm,
         test_api_dry_run_validation_for_pydantic_experiment,
         test_api_validation_skips_llm_validator_for_execution_error_runs,
