@@ -1,13 +1,36 @@
 import { readFileSync } from "node:fs";
-import { registerHooks } from "node:module";
+import { createRequire, registerHooks } from "node:module";
+import { fileURLToPath } from "node:url";
+
+const require = createRequire(import.meta.url);
+const viteRequire = createRequire(require.resolve("vite/package.json"));
+const { transformSync } = viteRequire("esbuild");
 
 registerHooks({
   load(url, context, nextLoad) {
-    if (url.endsWith(".tsx")) {
+    if (url.endsWith(".css")) {
       return {
-        format: "module-typescript",
+        format: "module",
         shortCircuit: true,
-        source: readFileSync(new URL(url), "utf8")
+        source: ""
+      };
+    }
+
+    if (url.endsWith(".tsx")) {
+      const sourcefile = fileURLToPath(url);
+      const source = readFileSync(sourcefile, "utf8");
+      const result = transformSync(source, {
+        format: "esm",
+        jsx: "automatic",
+        loader: "tsx",
+        sourcefile,
+        target: "node24"
+      });
+
+      return {
+        format: "module",
+        shortCircuit: true,
+        source: result.code
       };
     }
 

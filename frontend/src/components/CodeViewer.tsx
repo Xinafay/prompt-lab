@@ -13,6 +13,8 @@ import { unifiedMergeView } from "@codemirror/merge";
 import { basicSetup } from "codemirror";
 import React, { useEffect, useRef } from "react";
 
+import "./CodeViewer.css";
+
 export type CodeViewerProps = {
   label: string;
   language: "markdown-jinja" | "python";
