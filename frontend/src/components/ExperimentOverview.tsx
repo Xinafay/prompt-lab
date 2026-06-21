@@ -1,10 +1,12 @@
 import type { Case, VersionOverview } from "../types";
+import { CodeViewer } from "./CodeViewer";
 import { ValidatorsPreview } from "./ValidatorsPreview";
 
 interface ExperimentOverviewProps {
   overview: VersionOverview;
   isRunning: boolean;
   onRunVersion: () => void;
+  showRunAction?: boolean;
 }
 
 function formatCaseContract(artifactCase: Case): string {
@@ -29,8 +31,12 @@ function summarizeCaseContract(artifactCase: Case): string {
 export function ExperimentOverview({
   overview,
   isRunning,
-  onRunVersion
+  onRunVersion,
+  showRunAction = true
 }: ExperimentOverviewProps) {
+  const isPydanticOutput = overview.experiment.output.type === "pydantic";
+  const modelFile = overview.model_file ?? "model.py";
+
   return (
     <section className="overview-grid" aria-label="Experiment overview">
       <div className="overview-header">
@@ -38,22 +44,56 @@ export function ExperimentOverview({
           <h2>{overview.experiment.title}</h2>
           <p>{overview.experiment.description || "No description provided."}</p>
         </div>
-        <button
-          className="primary-action"
-          disabled={isRunning}
-          onClick={onRunVersion}
-          type="button"
-        >
-          {isRunning ? "Running..." : "Run version"}
-        </button>
+        {showRunAction ? (
+          <button
+            className="primary-action"
+            disabled={isRunning}
+            onClick={onRunVersion}
+            type="button"
+          >
+            {isRunning ? "Running..." : "Run version"}
+          </button>
+        ) : null}
       </div>
 
-      <div className="overview-section">
-        <div className="section-heading">
-          <h3>Prompt</h3>
-          <span>{overview.version}</span>
+      <div
+        className={`overview-source-grid${
+          isPydanticOutput ? "" : " overview-source-grid-single"
+        }`}
+      >
+        <div className="overview-section">
+          <div className="section-heading">
+            <h3>Prompt</h3>
+            <span>{overview.version}</span>
+          </div>
+          <div className="overview-code-viewer">
+            <CodeViewer
+              label="Prompt"
+              language="markdown-jinja"
+              value={overview.prompt}
+            />
+          </div>
         </div>
-        <pre className="code-block">{overview.prompt}</pre>
+
+        {isPydanticOutput ? (
+          <div className="overview-section">
+            <div className="section-heading">
+              <h3>Model</h3>
+              <span>{modelFile}</span>
+            </div>
+            {overview.model_py ? (
+              <div className="overview-code-viewer">
+                <CodeViewer
+                  label={modelFile}
+                  language="python"
+                  value={overview.model_py}
+                />
+              </div>
+            ) : (
+              <p className="overview-inline-empty">Model source unavailable.</p>
+            )}
+          </div>
+        ) : null}
       </div>
 
       <div className="overview-section overview-section-wide">

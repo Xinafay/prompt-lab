@@ -1,14 +1,19 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import type { CreatedVersionResponse, ProposalResponse, ReviewState } from "../types";
+import { CodeViewer, DiffViewer } from "./CodeViewer";
 import { TooltipButton } from "./TooltipButton";
 
-type ProposalSection = "prompt" | "model" | "rationale";
+type ProposalViewMode = "new" | "diff";
 
 interface ProposalViewProps {
   reviewState: ReviewState | null;
   proposalResponse: ProposalResponse | null;
   createdVersion: CreatedVersionResponse | null;
+  currentPrompt: string;
+  currentModel: string | null;
+  currentModelFile: string | null;
+  initialViewMode?: ProposalViewMode;
   isBusy: boolean;
   hasUnsavedReviewChanges: boolean;
   onGenerateProposal: () => void;
@@ -19,22 +24,18 @@ export function ProposalView({
   reviewState,
   proposalResponse,
   createdVersion,
+  currentPrompt,
+  currentModel,
+  currentModelFile,
+  initialViewMode = "new",
   isBusy,
   hasUnsavedReviewChanges,
   onGenerateProposal,
   onCreateVersion
 }: ProposalViewProps) {
-  const [activeSection, setActiveSection] = useState<ProposalSection>("prompt");
+  const [viewMode, setViewMode] = useState<ProposalViewMode>(initialViewMode);
   const hasModel = Boolean(proposalResponse?.proposal.model_py);
-  const visibleSections: ProposalSection[] = hasModel
-    ? ["prompt", "model", "rationale"]
-    : ["prompt", "rationale"];
-
-  useEffect(() => {
-    if (activeSection === "model" && !hasModel) {
-      setActiveSection("prompt");
-    }
-  }, [activeSection, hasModel]);
+  const modelFile = currentModelFile?.trim() || "model.py";
 
   return (
     <section className="proposal-panel" aria-label="Proposal">
@@ -72,25 +73,21 @@ export function ProposalView({
       ) : (
         <div className="proposal-content">
           <div className="proposal-toolbar">
-            <div className="proposal-tabs" role="tablist" aria-label="Proposal sections">
-              {visibleSections.map((section) => (
+            <div className="proposal-tabs" role="tablist" aria-label="Proposal view">
+              {(["new", "diff"] as const).map((mode) => (
                 <button
-                  aria-selected={activeSection === section}
+                  aria-selected={viewMode === mode}
                   className={
-                    activeSection === section
+                    viewMode === mode
                       ? "proposal-tab is-active"
                       : "proposal-tab"
                   }
-                  key={section}
-                  onClick={() => setActiveSection(section)}
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
                   role="tab"
                   type="button"
                 >
-                  {section === "prompt"
-                    ? "Prompt"
-                    : section === "model"
-                      ? "Model"
-                      : "Rationale"}
+                  {mode === "new" ? "New version" : "Diff"}
                 </button>
               ))}
             </div>
@@ -105,26 +102,60 @@ export function ProposalView({
             </TooltipButton>
           </div>
 
-          {activeSection === "prompt" ? (
+          <div
+            className={
+              hasModel
+                ? "proposal-artifact-grid"
+                : "proposal-artifact-grid proposal-artifact-grid-single"
+            }
+          >
             <div className="proposal-section">
-              <h4>Proposed prompt</h4>
-              <pre className="code-block">{proposalResponse.proposal.prompt_md}</pre>
+              <div className="artifact-caption">prompt.md</div>
+              {viewMode === "new" ? (
+                <CodeViewer
+                  label="Proposed prompt"
+                  language="markdown-jinja"
+                  value={proposalResponse.proposal.prompt_md}
+                />
+              ) : (
+                <DiffViewer
+                  label="Prompt diff"
+                  language="markdown-jinja"
+                  original={currentPrompt}
+                  value={proposalResponse.proposal.prompt_md}
+                />
+              )}
             </div>
-          ) : null}
 
-          {activeSection === "model" && proposalResponse.proposal.model_py ? (
-            <div className="proposal-section">
-              <h4>Proposed model</h4>
-              <pre className="code-block">{proposalResponse.proposal.model_py}</pre>
-            </div>
-          ) : null}
+            {proposalResponse.proposal.model_py ? (
+              <div className="proposal-section">
+                <div className="artifact-caption">{modelFile}</div>
+                {viewMode === "new" ? (
+                  <CodeViewer
+                    label="Proposed model"
+                    language="python"
+                    value={proposalResponse.proposal.model_py}
+                  />
+                ) : currentModel === null ? (
+                  <div className="empty-inline">
+                    Current model source unavailable; diff cannot be shown.
+                  </div>
+                ) : (
+                  <DiffViewer
+                    label="Model diff"
+                    language="python"
+                    original={currentModel}
+                    value={proposalResponse.proposal.model_py}
+                  />
+                )}
+              </div>
+            ) : null}
+          </div>
 
-          {activeSection === "rationale" ? (
-            <div className="proposal-section">
-              <h4>Rationale</h4>
-              <pre className="text-block">{proposalResponse.proposal.rationale_md}</pre>
-            </div>
-          ) : null}
+          <div className="proposal-rationale">
+            <h4>Rationale</h4>
+            <pre className="text-block">{proposalResponse.proposal.rationale_md}</pre>
+          </div>
 
           {createdVersion !== null ? (
             <p className="success-copy">Created {createdVersion.version}</p>

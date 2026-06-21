@@ -1330,12 +1330,24 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         prompt_template = store.read_text(
             experiment_id, version, experiment.template.path
         )
+        model_file = (
+            experiment.output.model_file
+            if experiment.output.type == "pydantic"
+            else None
+        )
+        model_source = (
+            store.read_text(experiment_id, version, model_file)
+            if model_file is not None
+            else None
+        )
         cases = store.load_cases(experiment_id)
         validators = store.load_validators(experiment_id)
         return {
             "experiment": experiment.model_dump(mode="json"),
             "version": version,
             "prompt": prompt_template,
+            "model_py": model_source,
+            "model_file": model_file,
             "rubric": _read_optional_text(experiment_dir / "rubric.md"),
             "cases": [case.model_dump(mode="json") for case in cases],
             "validators": [validator.model_dump(mode="json") for validator in validators],

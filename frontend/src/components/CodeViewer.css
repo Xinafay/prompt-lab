@@ -1,0 +1,154 @@
+.code-viewer {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.code-viewer-label {
+  padding: 10px 12px 0;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.code-viewer-editor {
+  min-height: 0;
+  overflow: hidden;
+  border-top: 1px solid #e4e7ec;
+  border-radius: 0 0 8px 8px;
+}
+
+.code-viewer .cm-editor {
+  min-height: 120px;
+  background: #fcfcfd;
+  color: #111827;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.code-viewer .cm-editor.cm-focused {
+  outline: none;
+}
+
+.code-viewer .cm-scroller {
+  max-height: 520px;
+  overflow: auto;
+}
+
+.code-viewer .cm-content {
+  caret-color: transparent;
+  padding: 12px 0;
+}
+
+.code-viewer .cm-line {
+  padding: 0 12px;
+}
+
+.code-viewer .cm-gutters {
+  border-right: 1px solid #e4e7ec;
+  background: #f9fafb;
+  color: #667085;
+}
+
+.code-viewer .cm-activeLine,
+.code-viewer .cm-activeLineGutter {
+  background: transparent;
+}
+
+.code-viewer .cm-selectionBackground,
+.code-viewer .cm-focused .cm-selectionBackground {
+  background: #d1e9ff;
+}
+
+.code-viewer .cm-jinja-token {
+  border-radius: 4px;
+  padding: 0 1px;
+  font-weight: 700;
+}
+
+.code-viewer .cm-jinja-variable {
+  background: #eef4ff;
+  color: #3538cd;
+}
+
+.code-viewer .cm-jinja-block {
+  background: #f4f3ff;
+  color: #5925dc;
+}
+
+.code-viewer .cm-jinja-comment {
+  background: #f2f4f7;
+  color: #667085;
+  font-style: italic;
+}
+
+.code-viewer .cm-model-marker {
+  border-radius: 4px;
+  background: #f5f3ff;
+  color: #6d28d9;
+  font-weight: 800;
+}
+
+.code-viewer .cm-changedLine,
+.code-viewer .cm-inlineChangedLine {
+  background: #ecfdf3;
+}
+
+.code-viewer .cm-changedText {
+  background: #abefc6;
+}
+
+.code-viewer .cm-deletedChunk,
+.code-viewer .cm-deletedLine {
+  background: #fff1f3;
+}
+
+.code-viewer .cm-deletedText {
+  background: #fecdd6;
+}
+
+.code-viewer .cm-insertedLine {
+  background: #dcfae6;
+  text-decoration: none;
+}
+
+.code-viewer-fallback {
+  overflow: hidden;
+}
+
+.code-viewer-fallback-content {
+  margin: 0;
+  overflow: auto;
+  padding: 12px;
+  border-top: 1px solid #e4e7ec;
+  background: #fcfcfd;
+  color: #111827;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.code-viewer-fallback-diff {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.code-viewer-fallback-diff .code-viewer-fallback-content + .code-viewer-fallback-content {
+  border-left: 1px solid #e4e7ec;
+}
+
+@media (max-width: 760px) {
+  .code-viewer-fallback-diff {
+    grid-template-columns: 1fr;
+  }
+
+  .code-viewer-fallback-diff .code-viewer-fallback-content + .code-viewer-fallback-content {
+    border-left: 0;
+  }
+}

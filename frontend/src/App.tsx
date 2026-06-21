@@ -33,6 +33,7 @@ import {
 import { CaseBrowser } from "./components/CaseBrowser";
 import { ComparisonView } from "./components/ComparisonView";
 import { ExperimentSettings } from "./components/ExperimentSettings";
+import { ExperimentOverview } from "./components/ExperimentOverview";
 import { ExperimentsList } from "./components/ExperimentsList";
 import { GlobalSettings } from "./components/GlobalSettings";
 import { PromptPreviewModal } from "./components/PromptPreviewModal";
@@ -44,7 +45,6 @@ import {
   buildValidationInclusionUpdate,
   ValidationView
 } from "./components/ValidationView";
-import { ValidatorsPreview } from "./components/ValidatorsPreview";
 import { snapshotReviewState } from "./components/reviewStateSnapshot";
 import { snapshotValidationState } from "./components/validationStateSnapshot";
 import { WorkbenchTabs } from "./components/WorkbenchTabs";
@@ -2077,38 +2077,12 @@ function App() {
 
                   <div className="workbench-body">
                     {activeTab === "overview" ? (
-                      <section className="overview-grid" aria-label="Experiment overview">
-                        <div className="overview-header">
-                          <div>
-                            <h2>{detailState.overview.experiment.title}</h2>
-                            <p>
-                              {detailState.overview.experiment.description ||
-                                "No description provided."}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="overview-section">
-                          <div className="section-heading">
-                            <h3>Prompt</h3>
-                            <span>{detailState.overview.version}</span>
-                          </div>
-                          <pre className="code-block">{detailState.overview.prompt}</pre>
-                        </div>
-
-                        <div className="overview-section overview-section-wide">
-                          <div className="section-heading">
-                            <h3>Validators</h3>
-                            <span>
-                              {(detailState.overview.validators ?? []).length}
-                            </span>
-                          </div>
-                          <ValidatorsPreview
-                            validators={detailState.overview.validators ?? []}
-                          />
-                        </div>
-
-                      </section>
+                      <ExperimentOverview
+                        overview={detailState.overview}
+                        isRunning={workflowLocked}
+                        onRunVersion={handleRunVersion}
+                        showRunAction={false}
+                      />
                     ) : null}
 
                     {activeTab === "settings" ? (
@@ -2160,6 +2134,9 @@ function App() {
                     {activeTab === "proposal" ? (
                       <ProposalView
                         createdVersion={createdVersion}
+                        currentModel={detailState.overview.model_py ?? null}
+                        currentModelFile={detailState.overview.model_file ?? null}
+                        currentPrompt={detailState.overview.prompt}
                         hasUnsavedReviewChanges={hasUnsavedReviewChanges}
                         isBusy={workflowLocked}
                         onCreateVersion={handleCreateVersion}

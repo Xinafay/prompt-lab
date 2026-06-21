@@ -474,6 +474,30 @@ select {
   grid-column: 1 / -1;
 }
 
+.overview-source-grid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  min-width: 0;
+}
+
+.overview-source-grid-single {
+  grid-template-columns: 1fr;
+}
+
+.overview-code-viewer {
+  padding: 14px;
+}
+
+.overview-inline-empty {
+  margin: 0;
+  padding: 16px;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .settings-form {
   display: grid;
   gap: 14px;
@@ -1497,6 +1521,7 @@ select {
 .review-summary,
 .review-section,
 .proposal-section,
+.proposal-rationale,
 .comparison-list {
   min-width: 0;
 }
@@ -1504,6 +1529,7 @@ select {
 .review-summary h4,
 .review-section h4,
 .proposal-section h4,
+.proposal-rationale h4,
 .comparison-list h4 {
   margin: 0 0 8px;
   color: #111827;
@@ -2149,6 +2175,31 @@ select {
   align-items: center;
 }
 
+.proposal-artifact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  min-width: 0;
+}
+
+.proposal-artifact-grid-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.artifact-caption {
+  margin-bottom: 8px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.proposal-rationale {
+  display: grid;
+  gap: 8px;
+}
+
 .proposal-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -2482,6 +2533,8 @@ select {
 
   .tool-layout,
   .overview-grid,
+  .overview-source-grid,
+  .proposal-artifact-grid,
   .case-row {
     grid-template-columns: 1fr;
   }

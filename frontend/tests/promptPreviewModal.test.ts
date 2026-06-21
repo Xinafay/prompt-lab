@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -40,7 +41,20 @@ test("prompt preview modal renders warnings, metadata, counts, and actions", () 
   assert.match(html, /repeat 1/);
   assert.match(html, /29 characters/);
   assert.match(html, /4 words/);
+  assert.match(html, /code-viewer/);
+  assert.match(html, /data-language="markdown-jinja"/);
   assert.match(html, /hello world prompt/);
   assert.match(html, /Reject/);
   assert.match(html, /Accept/);
+  assert.doesNotMatch(html, /prompt-preview-body/);
+});
+
+test("prompt preview uses the app light surface instead of a dark code block", () => {
+  const css = readFileSync(
+    new URL("../src/components/PromptPreviewModal.css", import.meta.url),
+    "utf-8"
+  );
+
+  assert.doesNotMatch(css, /background:\s*#101828/i);
+  assert.doesNotMatch(css, /color:\s*#f8fafc/i);
 });

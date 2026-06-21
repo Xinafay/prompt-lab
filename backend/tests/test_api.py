@@ -514,10 +514,33 @@ def test_api_gets_version_overview() -> None:
         assert body["experiment"]["id"] == "demo"
         assert body["version"] == "v001"
         assert body["prompt"] == "Say {{ value }}"
+        assert body["model_py"] is None
+        assert body["model_file"] is None
         assert body["rubric"] == "Prefer concise answers."
         assert body["cases"][0]["id"] == "a"
         assert body["validators"][0]["validator_id"] == "quality"
         assert body["validators"][0]["checks"][0]["check_id"] == "has-answer"
+
+
+def test_api_gets_pydantic_version_overview_model_source() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_demo_pydantic_experiment(root)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).get("/api/experiments/demo/versions/v001")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["experiment"]["output"]["type"] == "pydantic"
+        assert body["version"] == "v001"
+        assert body["prompt"] == "Say {{ value }}\n\n<<MODEL>>"
+        assert body["model_file"] == "model.py"
+        assert body["model_py"] == (
+            "from pydantic import BaseModel\n\n"
+            "class DemoOutput(BaseModel):\n"
+            "    answer: str\n"
+        )
 
 
 def test_api_lists_experiment_versions() -> None:
@@ -1460,6 +1483,7 @@ def main() -> int:
         test_api_seeds_examples_into_experiments_on_startup,
         test_api_ignores_old_example_directories_when_seeding,
         test_api_gets_version_overview,
+        test_api_gets_pydantic_version_overview_model_source,
         test_api_lists_experiment_versions,
         test_api_lists_latest_run_artifacts,
         test_api_lists_empty_runs_when_version_has_no_batches,

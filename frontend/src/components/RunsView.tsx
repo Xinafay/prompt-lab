@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Case, RunArtifact } from "../types";
+import { CodeViewer, type CodeViewerProps } from "./CodeViewer";
 
 interface RunsViewProps {
   cases: Case[];
@@ -88,11 +89,11 @@ function caseLabel(
 function ArtifactBlock({
   label,
   value,
-  variant = "text",
+  language = "text",
 }: {
   label: string;
   value?: string | null;
-  variant?: "json" | "text";
+  language?: CodeViewerProps["language"];
 }) {
   if (!value) {
     return null;
@@ -100,10 +101,7 @@ function ArtifactBlock({
 
   return (
     <div className="run-detail-block">
-      <h4>{label}</h4>
-      <pre className={variant === "json" ? "code-block" : "text-block"}>
-        {value}
-      </pre>
+      <CodeViewer label={label} language={language} value={value} />
     </div>
   );
 }
@@ -281,13 +279,20 @@ export function RunsView({ cases, runBatchId, runs }: RunsViewProps) {
                       : "Output text"
                   }
                   value={outputBody(selectedRun)}
-                  variant={
+                  language={
                     hasParsedJsonOutput(selectedRun) ? "json" : "text"
                   }
                 />
-                <ArtifactBlock label="Raw output" value={selectedRun.raw_output} />
+                <ArtifactBlock
+                  label="Raw output"
+                  language={
+                    selectedRun.output_type === "pydantic" ? "json" : "text"
+                  }
+                  value={selectedRun.raw_output}
+                />
                 <ArtifactBlock
                   label="Rendered prompt"
+                  language="markdown-jinja"
                   value={selectedRun.rendered_prompt}
                 />
                 <ArtifactBlock

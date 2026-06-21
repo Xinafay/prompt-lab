@@ -3,6 +3,7 @@
 .servers.jsonc
 .models.jsonc
 .cache/
+.worktrees/
 experiments/
 .venv/
 venv/
