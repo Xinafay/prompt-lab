@@ -1,11 +1,12 @@
 import type { Case, VersionOverview } from "../types";
-import { CodeViewer } from "./CodeViewer.tsx";
-import { ValidatorsPreview } from "./ValidatorsPreview.tsx";
+import { CodeViewer } from "./CodeViewer";
+import { ValidatorsPreview } from "./ValidatorsPreview";
 
 interface ExperimentOverviewProps {
   overview: VersionOverview;
   isRunning: boolean;
   onRunVersion: () => void;
+  showRunAction?: boolean;
 }
 
 function formatCaseContract(artifactCase: Case): string {
@@ -30,7 +31,8 @@ function summarizeCaseContract(artifactCase: Case): string {
 export function ExperimentOverview({
   overview,
   isRunning,
-  onRunVersion
+  onRunVersion,
+  showRunAction = true
 }: ExperimentOverviewProps) {
   const isPydanticOutput = overview.experiment.output.type === "pydantic";
   const modelFile = overview.model_file ?? "model.py";
@@ -42,14 +44,16 @@ export function ExperimentOverview({
           <h2>{overview.experiment.title}</h2>
           <p>{overview.experiment.description || "No description provided."}</p>
         </div>
-        <button
-          className="primary-action"
-          disabled={isRunning}
-          onClick={onRunVersion}
-          type="button"
-        >
-          {isRunning ? "Running..." : "Run version"}
-        </button>
+        {showRunAction ? (
+          <button
+            className="primary-action"
+            disabled={isRunning}
+            onClick={onRunVersion}
+            type="button"
+          >
+            {isRunning ? "Running..." : "Run version"}
+          </button>
+        ) : null}
       </div>
 
       <div

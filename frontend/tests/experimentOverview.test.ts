@@ -1,10 +1,30 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ExperimentOverview } from "../src/components/ExperimentOverview.tsx";
 import type { VersionOverview } from "../src/types.ts";
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    const isRelative = specifier.startsWith("./") || specifier.startsWith("../");
+    const hasExtension = /\.[a-z]+$/i.test(specifier);
+    if (isRelative && !hasExtension && context.parentURL?.endsWith(".tsx")) {
+      try {
+        return nextResolve(`${specifier}.tsx`, context);
+      } catch {
+        return nextResolve(specifier, context);
+      }
+    }
+    return nextResolve(specifier, context);
+  }
+});
+
+const { ExperimentOverview } = await import(
+  "../src/components/ExperimentOverview.tsx"
+);
 
 function buildOverview(
   outputType: "text" | "pydantic",
@@ -77,4 +97,43 @@ test("pydantic output overview renders prompt and model source", () => {
   assert.match(html, /model\.py/);
   assert.match(html, /from pydantic import BaseModel/);
   assert.match(html, /class Answer\(BaseModel\)/);
+});
+
+test("overview can hide its local run action for workbench toolbar layouts", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(ExperimentOverview, {
+      overview: buildOverview("text"),
+      isRunning: false,
+      onRunVersion: () => undefined,
+      showRunAction: false
+    })
+  );
+
+  assert.doesNotMatch(html, /Run version/);
+});
+
+test("production workbench overview delegates to ExperimentOverview", () => {
+  const source = readFileSync(
+    new URL("../src/App.tsx", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(
+    source,
+    /import \{ ExperimentOverview \} from "\.\/components\/ExperimentOverview"/
+  );
+  assert.match(
+    source,
+    /<ExperimentOverview\s+overview=\{detailState\.overview\}/
+  );
+  assert.match(source, /isRunning=\{workflowLocked\}/);
+  assert.match(source, /onRunVersion=\{handleRunVersion\}/);
+  assert.doesNotMatch(
+    source,
+    /<pre className="code-block">\{detailState\.overview\.prompt\}<\/pre>/
+  );
+  assert.doesNotMatch(
+    source,
+    /import \{ ValidatorsPreview \} from "\.\/components\/ValidatorsPreview"/
+  );
 });
