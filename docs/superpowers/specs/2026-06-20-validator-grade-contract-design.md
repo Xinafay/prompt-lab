@@ -2,12 +2,12 @@
 
 Date: 2026-06-20
 
-Status: approved design for planning
+Status: implemented
 
 ## Context
 
-Prompt Lab validation checks currently return `verdict: yes | no | unknown`.
-That contract is simple, but it hides useful quality gradients. Many LLM
+Prompt Lab validation checks originally returned `verdict: yes | no | unknown`.
+That contract was simple, but it hid useful quality gradients. Many LLM
 validators need to say that an output is excellent, good, acceptable, weak, or
 bad rather than only whether it passed. The judge can use that gradient to
 separate hard failures from weaker areas worth improving.
@@ -87,6 +87,10 @@ Existing automatic validators remain binary in the first implementation:
 
 They continue to store raw measurements in `metrics`, for example
 `{"value": 742}`.
+
+They should also write a short measurement comment so UI and judge evidence are
+useful without decoding metrics, for example `Word count 742.` or
+`JSON path count scenes 12.`.
 
 Future automatic validators can map distance from an ideal value onto `1..5`
 without changing the artifact contract. For example, an ideal-length validator

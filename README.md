@@ -137,6 +137,7 @@ Frontend checks:
 ```bash
 cd frontend
 pnpm lint
+pnpm test
 pnpm build
 ```
 
@@ -148,9 +149,11 @@ pnpm build
 4. Optionally enable `Dry-run` in the workflow toolbar to generate deterministic artifacts without calling model providers.
 5. Run the active version.
 6. Validate the active run.
-7. Review validation results and optionally exclude weak evidence.
+7. Review validation results and optionally exclude weak evidence, then save
+   inclusion changes from the sticky workflow toolbar if prompted.
 8. Judge the validated run.
-9. Reject or defer at least one finding and add human notes.
+9. Reject or defer at least one finding and add human notes, then save review
+   changes from the sticky workflow toolbar if prompted.
 10. Generate a proposal.
 11. Create the next version.
 12. Compare validation results between versions.

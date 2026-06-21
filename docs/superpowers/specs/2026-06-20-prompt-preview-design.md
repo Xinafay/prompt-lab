@@ -36,6 +36,10 @@ Validation preview builds LLM questionnaire validator prompts for the latest val
 Judge preview uses `build_judge_prompt` with the latest completed validation batch and the same validation evidence used by the real judgment action.
 
 Proposal preview uses `build_proposal_prompt` with the selected review's judgment, saved decisions, human notes, validation context, current prompt, and model source.
+Text-output proposal prompts use a text-only response schema. Pydantic-output
+proposal prompts use a schema that requires both `prompt_md` and complete
+`model_py`; if the output contract does not change, the model must copy the
+current `model.py` unchanged.
 
 ## Frontend
 
@@ -48,12 +52,12 @@ Add a reusable full-page `PromptPreviewModal` component. It receives a preview r
 
 The modal displays any warnings first, then prompt cards in order. Each card shows the title, model, available case/repeat/validator metadata, character count, word count, and a preformatted prompt body. The footer stays visible with secondary `Reject` and primary `Accept` buttons.
 
-Wire secondary `Preview prompts` buttons into:
+Wire secondary `Preview prompts` buttons into the sticky workflow toolbar for:
 
-- the workflow toolbar for run preview
-- `ValidationView` for validation preview
-- `ReviewView` for judge preview
-- `ProposalView` for proposal preview
+- run preview
+- validation preview
+- judge preview
+- proposal preview
 
 Disable preview buttons under the same prerequisites as their corresponding send action. Accept reuses the current live or dry-run mode by calling the existing action handler.
 

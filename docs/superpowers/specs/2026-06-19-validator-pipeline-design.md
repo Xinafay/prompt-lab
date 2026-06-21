@@ -234,24 +234,35 @@ overwrite their individual settings.
 
 ## LLM Questionnaire Prompting
 
-The LLM questionnaire prompt includes:
+The LLM questionnaire prompt is intentionally minimal. It includes:
 
-- validator definition and checks
+- validator questionnaire definition and checks as `QUESTIONNAIRE_JSON`
 - exact expected check ids
-- run metadata
-- run status
-- generator validation or execution errors
-- selected output fields according to `input_scope`
-- optional rendered prompt according to `input_scope`
-- optional materialized case context according to `input_scope`
+- exactly one output mode:
+  - `OUTPUT_TEXT` for text run output
+  - `OUTPUT_JSON` for successful structured output
+  - `INVALID_OUTPUT_TEXT` plus `VALIDATION_ERROR` for structured-output
+    validation failures
+- optional executed `RENDERED_PROMPT` according to `input_scope`
+- optional materialized `CASE_CONTEXT_JSON` according to `input_scope`
 - response schema
+
+Generator run `execution_error` artifacts are not sent to LLM validators; they
+are saved as skipped validation results with `included_in_judge=false`.
+
+For Pydantic generator runs, `RENDERED_PROMPT` must be the actual prompt sent to
+the generator after `<<MODEL>>` was replaced by the generator output schema. If
+`rendered_prompt` still contains `<<MODEL>>`, validation should fail with a
+clear rerun-needed error instead of sending an ambiguous validator prompt.
 
 The response must include one result for every check id. Missing, duplicate, or
 unknown check ids are response validation errors and should become validation
 result errors, not suite failures.
 
 The validator prompt should not ask for prompt improvement. It answers only the
-validator checks.
+validator checks. Validator definitions, case context, and human-authored notes
+may be in another language, but validator comments remain English because the
+prompts and models being evaluated are assumed to be English.
 
 ## Judge Flow
 
@@ -362,7 +373,17 @@ The Validation tab shows:
 - grouped validation results by case/repeat and validator
 - check grades and comments
 - result-level and check-level `included in judge` checkboxes
-- save action for inclusion edits
+
+Unsaved validation inclusion changes are surfaced in the sticky workflow toolbar
+with a single `Save` action. Leaving the dirty Validation tab uses the shared
+`Save and continue`, `Discard changes`, and `Stay` navigation modal; discarding
+restores the last committed validation state.
+
+The Review tab lets the user edit judge finding decisions and human notes.
+Unsaved review changes are also surfaced in the sticky workflow toolbar with a
+single `Save` action that persists dirty decisions and/or notes. Leaving the
+dirty Review tab uses the same `Save and continue`, `Discard changes`, and
+`Stay` modal; discarding restores the last committed review state.
 
 Validator definition editing can remain file-based in the MVP. A simple
 enable/disable UI may be added if it stays small, but a full question/rule editor

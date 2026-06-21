@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add application-level Prompt Lab settings stored in `config/settings.json`, editable from a dedicated **Global settings** UI tab. The first settings are the default generator model, default judge model, and default repeat count used when runtime experiments are created from committed examples.
+Add application-level Prompt Lab settings stored in `config/settings.json`, editable from a dedicated **Global settings** UI tab. The first settings are the default generator model, default validator model, default judge model, and default repeat count used when runtime experiments are created from committed examples.
 
 ## Storage Contract
 
@@ -11,8 +11,9 @@ Global settings are stored as formatted JSON at `config/settings.json`.
 ```json
 {
   "schema_version": "prompt_lab.settings/v1",
-  "default_generator_model": "local/llama",
-  "default_judge_model": "openai/gpt-4.1-mini",
+  "default_generator_model": "local/gpt-oss-120b",
+  "default_validator_model": "openai/example-large-model",
+  "default_judge_model": "openai/example-large-model",
   "default_repeat_count": 3
 }
 ```
@@ -39,6 +40,7 @@ Both endpoints use the Pydantic settings model as the API contract.
 When `seed_experiments_from_examples()` copies an example into the runtime `experiments/` workspace, it rewrites only the copied `experiment.json` fields that correspond to global defaults:
 
 - `models.generator_model`
+- `models.validator_model`
 - `models.judge_model`
 - `run_defaults.repeat_count`
 
@@ -48,9 +50,10 @@ Existing runtime experiments are not migrated or rewritten, because those values
 
 The app adds a top-level **Global settings** tab separate from the per-experiment `Settings` tab. The view loads `GET /api/settings`, edits a local draft, and saves through `PUT /api/settings`.
 
-The first form section is **Experiment defaults** with three controls:
+The first form section is **Experiment defaults** with four controls:
 
 - Default generator model text input.
+- Default validator model text input.
 - Default judge model text input.
 - Default repeat count numeric input, minimum `1`.
 

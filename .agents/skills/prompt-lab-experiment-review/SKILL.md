@@ -48,3 +48,7 @@ When comparing versions, also include:
 
 Accepted judge findings feed proposal generation. Rejected findings become constraints. Deferred findings are ignored unless human notes mention them. Human notes override judge findings.
 
+In the UI, validation inclusion edits and review edits are saved from the sticky
+workflow toolbar. Before judging or generating proposals, resolve dirty state
+with `Save`, `Discard changes`, or `Stay`; proposal generation uses only saved
+review decisions and human notes.

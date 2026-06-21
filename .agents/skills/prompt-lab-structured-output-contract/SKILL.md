@@ -34,6 +34,8 @@ Use this skill when an experiment uses `output.type = "pydantic"` or when a text
 - `<<MODEL>>` is the only place where the response model schema should enter the prompt. Do not also render `model_json_schema()` or a `*_SCHEMA_JSON` section for the same response model.
 - Keep `<<MODEL>>` visible in the prompt template itself, not hidden in a Jinja variable supplied by Python code.
 - Put the `<<MODEL>>` block near the end of the prompt, after contextual/evidence sections.
+- Stored structured run `rendered_prompt` must be the executed prompt after schema substitution. Unresolved `<<MODEL>>` in a run artifact means the run should be regenerated before validation.
+- Proposal generation uses output-specific response models: text proposals return prompt content only, while Pydantic proposals must return both `prompt_md` and complete `model_py`. If the Pydantic contract does not change, copy `model.py` unchanged.
 - Field order can affect LLM behavior; put fields in the order you want the model to reason about them.
 - Field descriptions are prompt text. Keep them concrete and aligned with `prompt.md`.
 - Validators should enforce hard constraints, not subjective quality preferences.
