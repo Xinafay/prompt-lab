@@ -286,14 +286,16 @@ export function validateValidatorDraft(
       if (check.title.trim().length === 0) {
         errors.push(`Check ${check.check_id || "(new)"} needs a title.`);
       }
-      if (
-        validator.type === "llm_questionnaire" &&
-        check.question.trim().length === 0
-      ) {
-        errors.push(`Check ${check.check_id} needs a question.`);
-      }
-      if (validator.type === "automatic") {
-        const rule = check.rule;
+      if (validator.type === "llm_questionnaire") {
+        const llmCheck =
+          check as LlmQuestionnaireValidatorDefinition["checks"][number];
+        if (llmCheck.question.trim().length === 0) {
+          errors.push(`Check ${check.check_id} needs a question.`);
+        }
+      } else {
+        const automaticCheck =
+          check as AutomaticValidatorDefinition["checks"][number];
+        const rule = automaticCheck.rule;
         const checkLabel = `check ${check.check_id || "(new)"} in ${validator.validator_id}`;
 
         if (isJsonPathRule(rule.kind)) {

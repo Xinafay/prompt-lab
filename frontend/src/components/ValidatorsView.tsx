@@ -262,7 +262,7 @@ export function ValidatorsView({
   const [viewMode, setViewMode] = useState<"structured" | "json">("structured");
   const [jsonText, setJsonText] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
-  const lastDraftEmissionRef = useRef<string | undefined>(undefined);
+  const lastDraftEmissionRef = useRef(JSON.stringify(null));
 
   useEffect(() => {
     setDraft(cloneValidators(validators));

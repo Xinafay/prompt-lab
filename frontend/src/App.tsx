@@ -248,6 +248,7 @@ function App() {
   const workflowRequestIdRef = useRef(0);
   const baselineVersionRef = useRef("v001");
   const candidateVersionRef = useRef("v001");
+  const preserveNextValidatorsCleanMessageRef = useRef(false);
   const sourceDirty = useMemo(() => {
     if (detailState.status !== "loaded" || sourceDraft === null) {
       return false;
@@ -304,6 +305,7 @@ function App() {
   ) {
     setValidatorsDraft(null);
     setValidatorsDirty(false);
+    preserveNextValidatorsCleanMessageRef.current = false;
     if (options.clearPendingOverwrite ?? true) {
       setPendingValidatorsOverwrite(null);
     }
@@ -1295,9 +1297,17 @@ function App() {
   }
 
   function handleValidatorsDraftChange(draft: VersionValidatorsDraft | null) {
+    const hadDirtyDraft = validatorsDirty;
     setValidatorsDraft(draft);
     setValidatorsDirty(draft !== null);
+    if (draft === null && preserveNextValidatorsCleanMessageRef.current) {
+      preserveNextValidatorsCleanMessageRef.current = false;
+      return;
+    }
     if (draft !== null) {
+      preserveNextValidatorsCleanMessageRef.current = false;
+      setWorkflowMessage(null);
+    } else if (hadDirtyDraft) {
       setWorkflowMessage(null);
     }
   }
@@ -1408,11 +1418,13 @@ function App() {
         setComparison(null);
         await refreshExperimentsAfterSettingsSave(savedExperiment);
         clearValidatorEditor();
+        preserveNextValidatorsCleanMessageRef.current = true;
         setWorkflowMessage(`Created ${response.version} and switched to it.`);
         activateTab("validators");
       } else {
         await refreshCurrentVersionAfterValidatorsOverwrite(experiment, version);
         clearValidatorEditor({ clearPendingOverwrite: false });
+        preserveNextValidatorsCleanMessageRef.current = true;
         setWorkflowMessage(
           `Overwrote validators for ${version} and cleared generated validation artifacts.`
         );
