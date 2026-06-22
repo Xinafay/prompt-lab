@@ -259,6 +259,24 @@ export type ValidatorDefinition =
   | LlmQuestionnaireValidatorDefinition
   | AutomaticValidatorDefinition;
 
+export type VersionValidatorsSaveMode = "create_next" | "overwrite_current";
+
+export interface VersionValidatorsDraft {
+  validators: ValidatorDefinition[];
+}
+
+export interface VersionValidatorsUpdateRequest
+  extends VersionValidatorsDraft {
+  mode: VersionValidatorsSaveMode;
+}
+
+export interface VersionValidatorsUpdateResponse {
+  version: string;
+  source_version: string;
+  mode: VersionValidatorsSaveMode;
+  version_dir: string;
+}
+
 export interface ValidationBatch {
   schema_version: "prompt_lab.validation_batch/v1";
   validation_batch_id: string;

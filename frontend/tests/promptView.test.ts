@@ -5,7 +5,12 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import type { VersionOverview } from "../src/types.ts";
+import { updateVersionValidators } from "../src/api.ts";
+import type {
+  VersionOverview,
+  VersionValidatorsUpdateRequest,
+  VersionValidatorsUpdateResponse
+} from "../src/types.ts";
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -250,4 +255,44 @@ test("production workbench delegates prompt and validators tabs", () => {
     source,
     /import \{ ValidatorsPreview \} from "\.\/components\/ValidatorsPreview"/
   );
+});
+
+test("validator source API helper posts encoded version update requests", async () => {
+  const request: VersionValidatorsUpdateRequest = {
+    mode: "create_next",
+    validators: []
+  };
+  const expected: VersionValidatorsUpdateResponse = {
+    version: "v2",
+    source_version: "v1",
+    mode: "create_next",
+    version_dir: "/tmp/demo/v2"
+  };
+  const originalFetch = globalThis.fetch;
+  const calls: Array<[RequestInfo | URL, RequestInit | undefined]> = [];
+  globalThis.fetch = async (input, init) => {
+    calls.push([input, init]);
+    return new Response(JSON.stringify(expected), {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    });
+  };
+
+  try {
+    const response = await updateVersionValidators(
+      "demo experiment",
+      "v1/edit",
+      request
+    );
+
+    assert.deepEqual(response, expected);
+    assert.equal(
+      calls[0]?.[0],
+      "/api/experiments/demo%20experiment/versions/v1%2Fedit/validators"
+    );
+    assert.equal(calls[0]?.[1]?.method, "POST");
+    assert.equal(calls[0]?.[1]?.body, JSON.stringify(request));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

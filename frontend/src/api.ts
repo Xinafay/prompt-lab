@@ -17,6 +17,8 @@ import type {
   VersionOverview,
   VersionSourceUpdateRequest,
   VersionSourceUpdateResponse,
+  VersionValidatorsUpdateRequest,
+  VersionValidatorsUpdateResponse,
   VersionsResponse
 } from "./types";
 
@@ -361,6 +363,19 @@ export function updateVersionSource(
     `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
       version
     )}/source`,
+    request
+  );
+}
+
+export function updateVersionValidators(
+  experimentId: string,
+  version: string,
+  request: VersionValidatorsUpdateRequest
+): Promise<VersionValidatorsUpdateResponse> {
+  return apiPost<VersionValidatorsUpdateResponse>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/versions/${encodeURIComponent(
+      version
+    )}/validators`,
     request
   );
 }
