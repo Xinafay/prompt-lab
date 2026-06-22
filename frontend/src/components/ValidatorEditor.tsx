@@ -82,6 +82,91 @@ function defaultComparison(op: CountComparison["op"] = "gte"): CountComparison {
   return { op, value: 1 };
 }
 
+function isFiniteNumber(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function nullableNumberInputValue(valueAsNumber: number): number | null {
+  return Number.isFinite(valueAsNumber) ? valueAsNumber : null;
+}
+
+function isJsonPathRule(kind: AutomaticRule["kind"]): boolean {
+  return kind === "json_path_count" || kind === "json_path_exists";
+}
+
+function defaultPath(kind: AutomaticRule["kind"]): string {
+  return kind === "json_path_count" ? "$.items" : "$.field";
+}
+
+function comparisonForRule(rule: AutomaticRule): CountComparison {
+  return rule.comparison ?? defaultComparison();
+}
+
+export function normalizeAutomaticRule(rule: AutomaticRule): AutomaticRule {
+  if (rule.kind === "json_path_exists") {
+    return {
+      kind: rule.kind,
+      source: "output_json",
+      path: rule.path ?? defaultPath(rule.kind)
+    };
+  }
+
+  if (rule.kind === "json_path_count") {
+    return {
+      kind: rule.kind,
+      source: "output_json",
+      path: rule.path ?? defaultPath(rule.kind),
+      comparison: comparisonForRule(rule)
+    };
+  }
+
+  return {
+    kind: rule.kind,
+    source: rule.source,
+    comparison: comparisonForRule(rule)
+  };
+}
+
+export function convertValidatorType(
+  validator: ValidatorDefinition,
+  type: ValidatorType
+): ValidatorDefinition {
+  if (type === validator.type) return validator;
+
+  const base = {
+    schema_version: validator.schema_version,
+    validator_id: validator.validator_id,
+    title: validator.title,
+    description: validator.description,
+    enabled: validator.enabled,
+    input_scope: validator.input_scope
+  };
+
+  if (type === "automatic") {
+    return {
+      ...base,
+      type,
+      checks: validator.checks.map((check) => ({
+        check_id: check.check_id,
+        title: check.title,
+        description: check.description,
+        rule: defaultRule()
+      }))
+    };
+  }
+
+  return {
+    ...base,
+    type,
+    checks: validator.checks.map((check) => ({
+      check_id: check.check_id,
+      title: check.title,
+      description: check.description,
+      question: "Does the output satisfy this check?"
+    }))
+  };
+}
+
 export function createDefaultValidator(
   type: ValidatorType,
   existingValidatorIds: string[]
@@ -207,10 +292,90 @@ export function validateValidatorDraft(
       ) {
         errors.push(`Check ${check.check_id} needs a question.`);
       }
+      if (validator.type === "automatic") {
+        const rule = check.rule;
+        const checkLabel = `check ${check.check_id || "(new)"} in ${validator.validator_id}`;
+
+        if (isJsonPathRule(rule.kind)) {
+          if (rule.source !== "output_json") {
+            errors.push(
+              `Rule for ${checkLabel} must use output_json for ${rule.kind}.`
+            );
+          }
+          if (
+            rule.path === null ||
+            rule.path === undefined ||
+            rule.path.trim() === ""
+          ) {
+            errors.push(`Rule for ${checkLabel} needs a JSON path.`);
+          }
+        } else if (rule.path !== null && rule.path !== undefined) {
+          errors.push(`Rule for ${checkLabel} cannot include a JSON path.`);
+        }
+
+        if (rule.kind === "json_path_exists") {
+          if (rule.comparison !== null && rule.comparison !== undefined) {
+            errors.push(`Rule for ${checkLabel} cannot include a comparison.`);
+          }
+        } else {
+          validateComparisonDraft(rule.comparison, checkLabel, errors);
+        }
+      }
     }
   }
 
   return errors;
+}
+
+function validateComparisonDraft(
+  comparison: CountComparison | null | undefined,
+  checkLabel: string,
+  errors: string[]
+) {
+  if (comparison === null || comparison === undefined) {
+    errors.push(`Rule for ${checkLabel} needs a comparison.`);
+    return;
+  }
+
+  if (comparison.op === "between") {
+    if (
+      comparison.min_value === null ||
+      comparison.min_value === undefined ||
+      comparison.max_value === null ||
+      comparison.max_value === undefined
+    ) {
+      errors.push(`Comparison for ${checkLabel} needs minimum and maximum values.`);
+      return;
+    }
+    if (
+      !isFiniteNumber(comparison.min_value) ||
+      !isFiniteNumber(comparison.max_value)
+    ) {
+      errors.push(`Comparison for ${checkLabel} needs finite minimum and maximum values.`);
+      return;
+    }
+    if (comparison.min_value > comparison.max_value) {
+      errors.push(`Comparison for ${checkLabel} minimum cannot exceed maximum.`);
+    }
+    if (comparison.value !== null && comparison.value !== undefined) {
+      errors.push(`Comparison for ${checkLabel} cannot include a value.`);
+    }
+    return;
+  }
+
+  if (comparison.value === null || comparison.value === undefined) {
+    errors.push(`Comparison for ${checkLabel} needs a value.`);
+    return;
+  }
+  if (!isFiniteNumber(comparison.value)) {
+    errors.push(`Comparison for ${checkLabel} needs a finite value.`);
+  }
+  if (
+    (comparison.min_value !== null && comparison.min_value !== undefined) ||
+    (comparison.max_value !== null && comparison.max_value !== undefined)
+  ) {
+    errors.push(`Comparison for ${checkLabel} cannot include minimum or maximum values.`);
+  }
 }
 
 interface ValidatorEditorProps {
@@ -219,23 +384,14 @@ interface ValidatorEditorProps {
   validator: ValidatorDefinition;
 }
 
-export function ValidatorEditor({
-  existingValidatorIds,
-  onChange,
-  validator
-}: ValidatorEditorProps) {
+export function ValidatorEditor({ onChange, validator }: ValidatorEditorProps) {
   function updateBase(update: ValidatorBasePatch) {
     onChange({ ...validator, ...update });
   }
 
   function changeType(type: ValidatorType) {
     if (type === validator.type) return;
-    onChange(
-      createDefaultValidator(
-        type,
-        existingValidatorIds.filter((id) => id !== validator.validator_id)
-      )
-    );
+    onChange(convertValidatorType(validator, type));
   }
 
   return (
@@ -426,7 +582,10 @@ function AutomaticChecksEditor({
               onChange={(event) =>
                 updateRule(
                   index,
-                  defaultRule(event.target.value as AutomaticRule["kind"])
+                  normalizeAutomaticRule({
+                    ...check.rule,
+                    kind: event.target.value as AutomaticRule["kind"]
+                  })
                 )
               }
             >
@@ -442,10 +601,13 @@ function AutomaticChecksEditor({
             <select
               value={check.rule.source}
               onChange={(event) =>
-                updateRule(index, {
-                  ...check.rule,
-                  source: event.target.value as AutomaticRule["source"]
-                })
+                updateRule(
+                  index,
+                  normalizeAutomaticRule({
+                    ...check.rule,
+                    source: event.target.value as AutomaticRule["source"]
+                  })
+                )
               }
             >
               {ruleSources.map((source) => (
@@ -462,7 +624,13 @@ function AutomaticChecksEditor({
               <input
                 value={check.rule.path ?? ""}
                 onChange={(event) =>
-                  updateRule(index, { ...check.rule, path: event.target.value })
+                  updateRule(
+                    index,
+                    normalizeAutomaticRule({
+                      ...check.rule,
+                      path: event.target.value
+                    })
+                  )
                 }
               />
             </label>
@@ -471,7 +639,7 @@ function AutomaticChecksEditor({
             <ComparisonEditor
               comparison={check.rule.comparison ?? defaultComparison()}
               onChange={(comparison) =>
-                updateRule(index, { ...check.rule, comparison })
+                updateRule(index, normalizeAutomaticRule({ ...check.rule, comparison }))
               }
             />
           ) : null}
@@ -521,9 +689,12 @@ function ComparisonEditor({
             <span>Minimum</span>
             <input
               type="number"
-              value={comparison.min_value ?? 0}
+              value={comparison.min_value ?? ""}
               onChange={(event) =>
-                onChange({ ...comparison, min_value: event.target.valueAsNumber })
+                onChange({
+                  ...comparison,
+                  min_value: nullableNumberInputValue(event.target.valueAsNumber)
+                })
               }
             />
           </label>
@@ -531,9 +702,12 @@ function ComparisonEditor({
             <span>Maximum</span>
             <input
               type="number"
-              value={comparison.max_value ?? 0}
+              value={comparison.max_value ?? ""}
               onChange={(event) =>
-                onChange({ ...comparison, max_value: event.target.valueAsNumber })
+                onChange({
+                  ...comparison,
+                  max_value: nullableNumberInputValue(event.target.valueAsNumber)
+                })
               }
             />
           </label>
@@ -543,9 +717,12 @@ function ComparisonEditor({
           <span>Value</span>
           <input
             type="number"
-            value={comparison.value ?? 0}
+            value={comparison.value ?? ""}
             onChange={(event) =>
-              onChange({ ...comparison, value: event.target.valueAsNumber })
+              onChange({
+                ...comparison,
+                value: nullableNumberInputValue(event.target.valueAsNumber)
+              })
             }
           />
         </label>
