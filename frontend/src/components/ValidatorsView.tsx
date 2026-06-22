@@ -203,6 +203,49 @@ export function getValidatorEditorActionState({
   };
 }
 
+export function applyValidatorJsonDraftEdit(
+  currentDraft: ValidatorDefinition[],
+  selectedIndex: number,
+  value: string
+): {
+  draft: ValidatorDefinition[];
+  jsonError: string | null;
+  jsonText: string;
+} {
+  const result = parseValidatorJsonDraft(value);
+  if (!result.ok) {
+    return {
+      draft: currentDraft,
+      jsonError: result.error,
+      jsonText: value
+    };
+  }
+
+  return {
+    draft: currentDraft.map((validator, validatorIndex) =>
+      validatorIndex === selectedIndex ? result.validator : validator
+    ),
+    jsonError: null,
+    jsonText: value
+  };
+}
+
+export function createValidatorJsonResetState(
+  validators: ValidatorDefinition[]
+): {
+  draft: ValidatorDefinition[];
+  jsonError: string | null;
+  jsonText: string;
+  selectedIndex: number;
+} {
+  return {
+    draft: cloneValidators(validators),
+    jsonError: null,
+    jsonText: "",
+    selectedIndex: validators.length > 0 ? 0 : -1
+  };
+}
+
 export function ValidatorsView({
   isBusy = false,
   message = null,
@@ -308,10 +351,11 @@ export function ValidatorsView({
   }
 
   function resetDraft() {
-    setDraft(cloneValidators(validators));
-    setSelectedIndex(validators.length > 0 ? 0 : -1);
-    setJsonError(null);
-    setJsonText("");
+    const nextState = createValidatorJsonResetState(validators);
+    setDraft(nextState.draft);
+    setSelectedIndex(nextState.selectedIndex);
+    setJsonError(nextState.jsonError);
+    setJsonText(nextState.jsonText);
     onReset();
   }
 
@@ -323,14 +367,10 @@ export function ValidatorsView({
   }
 
   function updateJson(value: string) {
-    setJsonText(value);
-    const result = parseValidatorJsonDraft(value);
-    if (!result.ok) {
-      setJsonError(result.error);
-      return;
-    }
-    updateSelected(result.validator);
-    setJsonError(null);
+    const nextState = applyValidatorJsonDraftEdit(draft, selectedIndex, value);
+    setJsonText(nextState.jsonText);
+    setDraft(nextState.draft);
+    setJsonError(nextState.jsonError);
   }
 
   return (

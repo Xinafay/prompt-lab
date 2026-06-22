@@ -229,6 +229,8 @@ test("ValidatorEditor renders llm and automatic controls", () => {
 });
 
 const {
+  applyValidatorJsonDraftEdit,
+  createValidatorJsonResetState,
   getValidatorEditorActionState,
   parseValidatorJsonDraft,
   shouldEmitValidatorsDraft,
@@ -310,4 +312,49 @@ test("validator editor action state blocks unsafe controls while JSON is invalid
   assert.equal(state.jsonUnsafeActionsDisabled, true);
   assert.equal(state.saveDisabled, true);
   assert.equal(state.resetDisabled, false);
+});
+
+test("invalid validator JSON keeps editor text without updating draft", () => {
+  const validator = createDefaultValidator("llm_questionnaire", []);
+  const invalidText = '{ "validator_id": "changed",';
+
+  const nextState = applyValidatorJsonDraftEdit([validator], 0, invalidText);
+
+  assert.equal(nextState.jsonText, invalidText);
+  assert.notEqual(nextState.jsonError, null);
+  assert.equal(nextState.draft[0].validator_id, validator.validator_id);
+});
+
+test("valid validator JSON updates only the selected draft", () => {
+  const first = createDefaultValidator("llm_questionnaire", []);
+  const second = createDefaultValidator("automatic", [first.validator_id]);
+  const changed = { ...second, title: "Changed title" };
+
+  const nextState = applyValidatorJsonDraftEdit(
+    [first, second],
+    1,
+    JSON.stringify(changed)
+  );
+
+  assert.equal(nextState.jsonError, null);
+  assert.equal(nextState.jsonText, JSON.stringify(changed));
+  assert.equal(nextState.draft[0].title, first.title);
+  assert.equal(nextState.draft[1].title, "Changed title");
+});
+
+test("reset validator JSON state clears invalid text and error", () => {
+  const validator = createDefaultValidator("llm_questionnaire", []);
+
+  assert.deepEqual(createValidatorJsonResetState([validator]), {
+    draft: [validator],
+    jsonError: null,
+    jsonText: "",
+    selectedIndex: 0
+  });
+  assert.deepEqual(createValidatorJsonResetState([]), {
+    draft: [],
+    jsonError: null,
+    jsonText: "",
+    selectedIndex: -1
+  });
 });
