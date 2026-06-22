@@ -5,6 +5,7 @@ import logging
 import re
 import shutil
 import time
+import uuid
 from collections.abc import Iterator
 from dataclasses import asdict
 from pathlib import Path, PureWindowsPath
@@ -1157,14 +1158,69 @@ def _write_version_validator_files(
     validators_dir = _resolve_version_local_write_path(
         version_dir, "validators/.validator-dir"
     ).parent
-    if validators_dir.is_dir():
-        shutil.rmtree(validators_dir)
-    for validator in validators:
-        target = _resolve_version_local_write_path(
-            version_dir,
-            f"validators/{validator.validator_id}.json",
+
+    temp_dir = _unique_version_local_temp_dir(version_dir, "validators")
+    backup_dir = _unique_version_local_temp_dir(version_dir, "validators-old")
+    moved_existing = False
+    published = False
+    temp_dir.mkdir()
+
+    try:
+        for validator in validators:
+            target = _resolve_version_local_write_path(
+                version_dir,
+                f"{temp_dir.name}/{validator.validator_id}.json",
+            )
+            _write_json(target, validator.model_dump(mode="json"))
+
+        if validators_dir.exists():
+            validators_dir.rename(backup_dir)
+            moved_existing = True
+        temp_dir.rename(validators_dir)
+        published = True
+    finally:
+        if published:
+            if backup_dir.exists():
+                _remove_path(backup_dir)
+        else:
+            if temp_dir.exists():
+                _remove_path(temp_dir)
+            if moved_existing and backup_dir.exists() and not validators_dir.exists():
+                backup_dir.rename(validators_dir)
+
+
+def _unique_version_local_temp_dir(version_dir: Path, prefix: str) -> Path:
+    for _ in range(100):
+        temp_dir = _resolve_version_local_write_path(
+            version_dir, f".{prefix}.{uuid.uuid4().hex}.tmp"
         )
-        _write_json(target, validator.model_dump(mode="json"))
+        if not temp_dir.exists():
+            return temp_dir
+    raise RuntimeError("Could not allocate temporary version directory")
+
+
+def _unique_version_staging_dir(versions_root: Path, version: str) -> Path:
+    for _ in range(100):
+        staging_dir = versions_root / f".{version}.{uuid.uuid4().hex}.tmp"
+        if not staging_dir.exists():
+            return staging_dir
+    raise RuntimeError("Could not allocate temporary staging directory")
+
+
+def _cleanup_version_staging_dir(staging_dir: Path) -> None:
+    if staging_dir.exists():
+        shutil.rmtree(staging_dir)
+
+
+def _remove_path(path: Path) -> None:
+    if path.is_dir():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+
+
+def _is_version_publish_collision(target: Path) -> bool:
+    return target.exists()
 
 
 def _load_validated_proposal_source(
@@ -1521,24 +1577,29 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
 
         if request.mode == "create_next":
             versions_root = source_version_dir.parent
-            new_version, new_version_dir = _next_numeric_version_dir(versions_root)
-            staging_dir = versions_root / f".{new_version}.tmp"
-            if staging_dir.exists():
-                shutil.rmtree(staging_dir)
-            try:
-                shutil.copytree(source_version_dir, staging_dir)
-                _remove_generated_version_dirs(staging_dir)
-                legacy_cases_dir = staging_dir / "cases"
-                if legacy_cases_dir.exists():
-                    shutil.rmtree(legacy_cases_dir)
-                _write_version_validator_files(staging_dir, request.validators)
-                staging_dir.rename(new_version_dir)
-            except Exception:
-                if staging_dir.exists():
-                    shutil.rmtree(staging_dir)
-                if new_version_dir.exists():
-                    shutil.rmtree(new_version_dir)
-                raise
+            for _ in range(100):
+                new_version, new_version_dir = _next_numeric_version_dir(versions_root)
+                staging_dir = _unique_version_staging_dir(versions_root, new_version)
+                try:
+                    shutil.copytree(source_version_dir, staging_dir)
+                    _remove_generated_version_dirs(staging_dir)
+                    legacy_cases_dir = staging_dir / "cases"
+                    if legacy_cases_dir.exists():
+                        shutil.rmtree(legacy_cases_dir)
+                    _write_version_validator_files(staging_dir, request.validators)
+                    try:
+                        staging_dir.rename(new_version_dir)
+                    except OSError:
+                        if _is_version_publish_collision(new_version_dir):
+                            _cleanup_version_staging_dir(staging_dir)
+                            continue
+                        raise
+                except Exception:
+                    _cleanup_version_staging_dir(staging_dir)
+                    raise
+                break
+            else:
+                raise RuntimeError("Could not allocate next version")
             return {
                 "version": new_version,
                 "source_version": version,
