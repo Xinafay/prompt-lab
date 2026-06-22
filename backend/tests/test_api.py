@@ -114,8 +114,8 @@ def write_demo_pydantic_experiment(root: Path) -> None:
 
 
 def write_quality_validator(root: Path, *, validator_id: str = "quality") -> None:
-    validator_dir = root / "examples" / "demo" / "validators"
-    validator_dir.mkdir(exist_ok=True)
+    validator_dir = root / "examples" / "demo" / "versions" / "v001" / "validators"
+    validator_dir.mkdir(parents=True, exist_ok=True)
     (validator_dir / "quality.json").write_text(
         json.dumps(
             {
@@ -236,7 +236,7 @@ def write_execution_error_run_batch(version_dir: Path) -> None:
 
 
 def write_preview_validators(root: Path) -> None:
-    validators_dir = root / "experiments" / "demo" / "validators"
+    validators_dir = root / "experiments" / "demo" / "versions" / "v001" / "validators"
     validators_dir.mkdir(parents=True)
     for validator_id in ["quality", "style"]:
         write_json(
@@ -1023,7 +1023,15 @@ def test_api_validation_prompt_preview_reports_unresolved_model_marker() -> None
         version_dir = write_runtime_preview_experiment(root, repeat_count=2)
         write_preview_run_batch(version_dir)
         write_preview_validators(root)
-        validator_path = root / "experiments" / "demo" / "validators" / "quality.json"
+        validator_path = (
+            root
+            / "experiments"
+            / "demo"
+            / "versions"
+            / "v001"
+            / "validators"
+            / "quality.json"
+        )
         validator = json.loads(validator_path.read_text(encoding="utf-8"))
         validator["input_scope"] = "output_and_prompt"
         write_json(validator_path, validator)

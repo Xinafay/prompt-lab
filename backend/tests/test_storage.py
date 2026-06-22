@@ -223,8 +223,7 @@ def test_store_loads_validators_sorted_by_filename() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
         experiment = root / "experiments" / "demo"
-        validators = experiment / "validators"
-        (experiment / "versions" / "v001").mkdir(parents=True)
+        validators = experiment / "versions" / "v001" / "validators"
         validators.mkdir(parents=True)
         write_experiment_manifest(experiment / "experiment.json")
         (validators / "b.json").write_text(
@@ -272,7 +271,7 @@ def test_store_loads_validators_sorted_by_filename() -> None:
             examples_root=root / "examples",
         )
 
-        loaded = store.load_validators("demo")
+        loaded = store.load_validators("demo", "v001")
 
         assert [validator.validator_id for validator in loaded] == [
             "clarity",
@@ -292,7 +291,7 @@ def test_store_returns_empty_validators_when_directory_missing() -> None:
             examples_root=root / "examples",
         )
 
-        assert store.load_validators("demo") == []
+        assert store.load_validators("demo", "v001") == []
 
 
 def test_store_writes_validation_artifact_and_rejects_path_escape() -> None:

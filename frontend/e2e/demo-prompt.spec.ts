@@ -62,6 +62,7 @@ test("demo json proposal shows new prompt and model plus diff", async ({
   page
 }) => {
   await page.goto("/demo-json/proposal");
+  await page.getByLabel("Version").selectOption("v002");
 
   const proposal = page.getByRole("region", { name: "Proposal" });
   await expect(proposal.getByRole("heading", { name: "Rationale" })).toBeVisible();

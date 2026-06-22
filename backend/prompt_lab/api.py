@@ -1403,7 +1403,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             else None
         )
         cases = store.load_cases(experiment_id)
-        validators = store.load_validators(experiment_id)
+        validators = store.load_validators(experiment_id, version)
         return {
             "experiment": experiment.model_dump(mode="json"),
             "version": version,
@@ -1753,7 +1753,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             cases=case_ids,
             repeat_count=experiment.run_defaults.repeat_count,
         )
-        validators = store.load_validators(experiment_id)
+        validators = store.load_validators(experiment_id, version)
         active_validators = enabled_validators(validators)
         if not active_validators:
             raise HTTPException(
@@ -1883,7 +1883,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 cases=case_ids,
                 repeat_count=experiment.run_defaults.repeat_count,
             )
-            validators = store.load_validators(experiment_id)
+            validators = store.load_validators(experiment_id, version)
             active_validators = enabled_validators(validators)
             if not active_validators:
                 raise HTTPException(

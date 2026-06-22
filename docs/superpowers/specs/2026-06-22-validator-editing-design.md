@@ -5,8 +5,8 @@
 Add comprehensive validator editing to the `Validators` tab. Users can add,
 edit, duplicate, delete, reset, overwrite, and save validator definitions as the
 next version. Validators become version source files, aligned with `prompt.md`
-and `model.py`, while existing experiment-level `validators/` directories remain
-supported as a compatibility fallback.
+and `model.py`. Existing experiment-level `validators/` directories are migrated
+into versions and are not supported by the target runtime contract.
 
 ## Goals
 
@@ -27,7 +27,6 @@ supported as a compatibility fallback.
 
 - Do not implement human validator execution.
 - Do not let the proposal LLM edit validator definitions in this change.
-- Do not migrate every existing runtime experiment eagerly.
 - Do not edit committed `examples/` from the running app.
 - Do not introduce new automatic validator rule kinds.
 
@@ -37,7 +36,6 @@ Validator definitions become part of version source:
 
 ```text
 experiments/<experiment-id>/
-  validators/                  # legacy fallback only
   versions/
     v001/
       prompt.md
@@ -48,24 +46,19 @@ experiments/<experiment-id>/
 
 Read behavior:
 
-- Prefer `versions/<version>/validators/*.json` when the version-level
-  `validators/` directory exists. An existing but empty version-level directory
-  means the version has no validators.
-- Fall back to top-level `validators/*.json` only when the version-level
-  `validators/` directory does not exist.
-- `VersionOverview.validators` returns the validators effective for that version.
+- Read `versions/<version>/validators/*.json`.
+- A missing or empty version-level `validators/` directory means the version has
+  no validators.
+- `VersionOverview.validators` returns the validators for that version.
 
 Write behavior:
 
 - New writes always target `versions/<version>/validators/`.
 - `create_next` copies the source version, removes runtime artifacts, writes the
   submitted validators under the new version, and returns the new version id.
-  If the source version used top-level fallback validators, the submitted
-  effective validators are materialized into the new version-level directory.
 - `overwrite_current` writes validators under the current version and removes
   generated artifacts invalidated by validator changes.
-- Top-level `validators/` remains untouched by the app. It only supports older
-  experiments and example seeding.
+- Top-level `validators/` is not part of the target contract.
 
 This model keeps prompt, Pydantic model, and validators together as one
 versioned source bundle.
@@ -247,24 +240,27 @@ updateVersionValidators(experimentId, version, request)
 The `App` component remains responsible for cross-tab dirty navigation,
 version switching, workflow messages, and refreshing experiment detail state.
 
-## Compatibility And Migration
+## Migration
 
-No eager migration is required.
+The repository is still early enough that backward compatibility is not
+required. The committed examples and current runtime experiments should be
+migrated in place:
 
-When a user edits validators for an experiment that only has top-level
-validators, the first save writes `versions/<version>/validators/`. From that
-point on, that version no longer depends on top-level validators.
+- for each experiment, copy the existing top-level validator JSON files into
+  every existing `versions/<version>/validators/` directory;
+- remove the top-level `validators/` directory;
+- update backend reads to use version-level validators only.
 
-Creating a next version from an older version copies effective validators into
-the new version, even if the source validators came from the top-level fallback.
-This makes the new version self-contained.
+After migration, creating a next version copies validators because they are part
+of the version source directory.
 
 ## Testing
 
 Backend tests:
 
-- version overview prefers version-level validators over top-level validators;
-- version overview falls back to top-level validators for existing experiments;
+- version overview loads version-level validators;
+- version overview returns an empty validator list when the version-level
+  validators directory is missing;
 - validator `create_next` writes validators into the new version and clears all
   runtime artifacts in the new version;
 - validator `overwrite_current` writes validators into the current version,
@@ -296,6 +292,6 @@ E2E tests:
 ## Rollout Notes
 
 This change should be implemented behind normal application behavior, not a
-feature flag. The fallback read path keeps existing runtime workspaces usable.
-Once version-level validators have existed for a while, a later cleanup can
-remove top-level validator fallback after an explicit migration plan.
+feature flag. Because the project is in an early development stage, the runtime
+workspace and committed examples are migrated directly instead of carrying a
+compatibility fallback.

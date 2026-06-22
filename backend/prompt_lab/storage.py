@@ -130,8 +130,10 @@ class PromptLabStore:
             for path in sorted(cases_dir.glob("*.json"))
         ]
 
-    def load_validators(self, experiment_id: str) -> list[ValidatorDefinition]:
-        validators_dir = self.experiment_dir(experiment_id) / "validators"
+    def load_validators(
+        self, experiment_id: str, version: str
+    ) -> list[ValidatorDefinition]:
+        validators_dir = self.version_dir(experiment_id, version) / "validators"
         if not validators_dir.is_dir():
             return []
         return [
