@@ -228,7 +228,12 @@ test("ValidatorEditor renders llm and automatic controls", () => {
   assert.match(automaticHtml, /Comparison/);
 });
 
-const { ValidatorsView } = await import("../src/components/ValidatorsView.tsx");
+const {
+  getValidatorEditorActionState,
+  parseValidatorJsonDraft,
+  shouldEmitValidatorsDraft,
+  ValidatorsView
+} = await import("../src/components/ValidatorsView.tsx");
 
 test("ValidatorsView renders add duplicate delete and save actions", () => {
   const validator = createDefaultValidator("llm_questionnaire", []);
@@ -249,4 +254,60 @@ test("ValidatorsView renders add duplicate delete and save actions", () => {
   assert.match(html, /Delete/);
   assert.match(html, /Overwrite current version/);
   assert.match(html, /Save as next version/);
+});
+
+test("shouldEmitValidatorsDraft ignores semantically identical payloads", () => {
+  const validator = createDefaultValidator("llm_questionnaire", []);
+  const dirtyPayload = { validators: [validator] };
+  const first = shouldEmitValidatorsDraft(undefined, dirtyPayload);
+
+  assert.equal(first.shouldEmit, true);
+
+  const repeatedDirty = shouldEmitValidatorsDraft(first.serialized, {
+    validators: [JSON.parse(JSON.stringify(validator)) as ValidatorDefinition]
+  });
+  assert.equal(repeatedDirty.shouldEmit, false);
+
+  const firstClean = shouldEmitValidatorsDraft(undefined, null);
+  assert.equal(firstClean.shouldEmit, true);
+  assert.equal(shouldEmitValidatorsDraft(firstClean.serialized, null).shouldEmit, false);
+});
+
+test("parseValidatorJsonDraft rejects valid JSON with invalid validator shape", () => {
+  const result = parseValidatorJsonDraft("{}");
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /schema_version/);
+});
+
+test("parseValidatorJsonDraft rejects semantically invalid validator JSON", () => {
+  const validator = createDefaultValidator("automatic", []);
+  validator.title = "";
+
+  const result = parseValidatorJsonDraft(JSON.stringify(validator));
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /title is required/);
+});
+
+test("parseValidatorJsonDraft accepts a complete validator", () => {
+  const validator = createDefaultValidator("llm_questionnaire", []);
+  const result = parseValidatorJsonDraft(JSON.stringify(validator));
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.validator.validator_id, validator.validator_id);
+});
+
+test("validator editor action state blocks unsafe controls while JSON is invalid", () => {
+  const state = getValidatorEditorActionState({
+    isBusy: false,
+    isDirty: false,
+    jsonError: "Expected property name",
+    validationErrorCount: 0
+  });
+
+  assert.equal(state.jsonUnsafeActionsDisabled, true);
+  assert.equal(state.saveDisabled, true);
+  assert.equal(state.resetDisabled, false);
 });

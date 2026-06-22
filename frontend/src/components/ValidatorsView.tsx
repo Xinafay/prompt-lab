@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   ValidatorDefinition,
@@ -38,6 +38,171 @@ function formatValidatorType(type: ValidatorType): string {
   return type === "llm_questionnaire" ? "LLM questionnaire" : "Automatic";
 }
 
+type ValidatorJsonParseResult =
+  | { ok: true; validator: ValidatorDefinition }
+  | { ok: false; error: string };
+
+const validatorTypes: ValidatorType[] = ["llm_questionnaire", "automatic"];
+const inputScopes = [
+  "output_only",
+  "output_and_prompt",
+  "output_and_case",
+  "output_prompt_and_case"
+] as const;
+const ruleKinds = [
+  "word_count",
+  "sentence_count",
+  "character_count",
+  "json_path_count",
+  "json_path_exists"
+] as const;
+const ruleSources = ["output_text", "raw_output", "output_json"] as const;
+const comparisonOps = ["lt", "lte", "gt", "gte", "eq", "between"] as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasStringField(record: Record<string, unknown>, field: string): boolean {
+  return typeof record[field] === "string";
+}
+
+function validateComparisonShape(value: unknown, label: string): string | null {
+  if (value === null || value === undefined) return null;
+  if (!isRecord(value)) return `${label} comparison must be an object.`;
+  if (!comparisonOps.includes(value.op as (typeof comparisonOps)[number])) {
+    return `${label} comparison must include a valid op.`;
+  }
+  for (const field of ["value", "min_value", "max_value"]) {
+    const fieldValue = value[field];
+    if (
+      fieldValue !== null &&
+      fieldValue !== undefined &&
+      typeof fieldValue !== "number"
+    ) {
+      return `${label} comparison ${field} must be a number or null.`;
+    }
+  }
+  return null;
+}
+
+function validateRuleShape(value: unknown, label: string): string | null {
+  if (!isRecord(value)) return `${label} rule must be an object.`;
+  if (!ruleKinds.includes(value.kind as (typeof ruleKinds)[number])) {
+    return `${label} rule must include a valid kind.`;
+  }
+  if (!ruleSources.includes(value.source as (typeof ruleSources)[number])) {
+    return `${label} rule must include a valid source.`;
+  }
+  if (
+    value.path !== null &&
+    value.path !== undefined &&
+    typeof value.path !== "string"
+  ) {
+    return `${label} rule path must be a string or null.`;
+  }
+  return validateComparisonShape(value.comparison, label);
+}
+
+function validateValidatorShape(value: unknown): string | null {
+  if (!isRecord(value)) return "Validator JSON must be an object.";
+  if (value.schema_version !== "prompt_lab.validator/v1") {
+    return 'Validator JSON must include schema_version "prompt_lab.validator/v1".';
+  }
+  for (const field of ["validator_id", "title", "description"]) {
+    if (!hasStringField(value, field)) {
+      return `Validator JSON field ${field} must be a string.`;
+    }
+  }
+  if (typeof value.enabled !== "boolean") {
+    return "Validator JSON field enabled must be a boolean.";
+  }
+  if (!validatorTypes.includes(value.type as ValidatorType)) {
+    return "Validator JSON field type must be a supported validator type.";
+  }
+  if (!inputScopes.includes(value.input_scope as (typeof inputScopes)[number])) {
+    return "Validator JSON field input_scope must be a supported input scope.";
+  }
+  if (!Array.isArray(value.checks)) {
+    return "Validator JSON field checks must be an array.";
+  }
+
+  for (const [index, check] of value.checks.entries()) {
+    const label = `Check ${index + 1}`;
+    if (!isRecord(check)) return `${label} must be an object.`;
+    for (const field of ["check_id", "title", "description"]) {
+      if (!hasStringField(check, field)) {
+        return `${label} field ${field} must be a string.`;
+      }
+    }
+    if (value.type === "llm_questionnaire") {
+      if (!hasStringField(check, "question")) {
+        return `${label} field question must be a string.`;
+      }
+    } else {
+      const ruleError = validateRuleShape(check.rule, label);
+      if (ruleError !== null) return ruleError;
+    }
+  }
+
+  return null;
+}
+
+export function parseValidatorJsonDraft(value: string): ValidatorJsonParseResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value) as unknown;
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Invalid JSON."
+    };
+  }
+
+  const shapeError = validateValidatorShape(parsed);
+  if (shapeError !== null) {
+    return { ok: false, error: shapeError };
+  }
+
+  const validator = parsed as ValidatorDefinition;
+  const validationErrors = validateValidatorDraft([validator]);
+  if (validationErrors.length > 0) {
+    return { ok: false, error: validationErrors.join(" ") };
+  }
+
+  return { ok: true, validator };
+}
+
+export function shouldEmitValidatorsDraft(
+  previousSerialized: string | undefined,
+  draft: VersionValidatorsDraft | null
+): { serialized: string; shouldEmit: boolean } {
+  const serialized = JSON.stringify(draft);
+  return {
+    serialized,
+    shouldEmit: previousSerialized !== serialized
+  };
+}
+
+export function getValidatorEditorActionState({
+  isBusy,
+  isDirty,
+  jsonError,
+  validationErrorCount
+}: {
+  isBusy: boolean;
+  isDirty: boolean;
+  jsonError: string | null;
+  validationErrorCount: number;
+}) {
+  const hasJsonError = jsonError !== null;
+  return {
+    jsonUnsafeActionsDisabled: isBusy || hasJsonError,
+    resetDisabled: isBusy || (!isDirty && !hasJsonError),
+    saveDisabled: isBusy || !isDirty || validationErrorCount > 0 || hasJsonError
+  };
+}
+
 export function ValidatorsView({
   isBusy = false,
   message = null,
@@ -54,6 +219,7 @@ export function ValidatorsView({
   const [viewMode, setViewMode] = useState<"structured" | "json">("structured");
   const [jsonText, setJsonText] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
+  const lastDraftEmissionRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     setDraft(cloneValidators(validators));
@@ -69,11 +235,22 @@ export function ValidatorsView({
     validators
   ]);
   const validationErrors = useMemo(() => validateValidatorDraft(draft), [draft]);
-  const saveDisabled =
-    isBusy || !isDirty || validationErrors.length > 0 || jsonError !== null;
+  const actionState = getValidatorEditorActionState({
+    isBusy,
+    isDirty,
+    jsonError,
+    validationErrorCount: validationErrors.length
+  });
 
   useEffect(() => {
-    onDraftChange(isDirty ? { validators: draft } : null);
+    const nextDraft = isDirty ? { validators: draft } : null;
+    const emission = shouldEmitValidatorsDraft(
+      lastDraftEmissionRef.current,
+      nextDraft
+    );
+    if (!emission.shouldEmit) return;
+    lastDraftEmissionRef.current = emission.serialized;
+    onDraftChange(nextDraft);
   }, [draft, isDirty, onDraftChange]);
 
   useEffect(() => {
@@ -91,6 +268,7 @@ export function ValidatorsView({
   }
 
   function addValidator(type: ValidatorType) {
+    if (actionState.jsonUnsafeActionsDisabled) return;
     const nextValidator = createDefaultValidator(
       type,
       draft.map((validator) => validator.validator_id)
@@ -108,6 +286,7 @@ export function ValidatorsView({
   }
 
   function duplicateSelected() {
+    if (actionState.jsonUnsafeActionsDisabled) return;
     if (selected === null) return;
     const copy = duplicateValidator(
       selected,
@@ -117,6 +296,7 @@ export function ValidatorsView({
   }
 
   function deleteSelected() {
+    if (actionState.jsonUnsafeActionsDisabled) return;
     if (selected === null) return;
     const nextDraft = draft.filter(
       (_validator, validatorIndex) => validatorIndex !== selectedIndex
@@ -136,6 +316,7 @@ export function ValidatorsView({
   }
 
   function toggleViewMode(mode: "structured" | "json") {
+    if (jsonError !== null) return;
     setViewMode(mode);
     setJsonError(null);
     setJsonText(selected === null ? "" : JSON.stringify(selected, null, 2));
@@ -143,13 +324,13 @@ export function ValidatorsView({
 
   function updateJson(value: string) {
     setJsonText(value);
-    try {
-      const parsed = JSON.parse(value) as ValidatorDefinition;
-      updateSelected(parsed);
-      setJsonError(null);
-    } catch (error) {
-      setJsonError(error instanceof Error ? error.message : "Invalid JSON.");
+    const result = parseValidatorJsonDraft(value);
+    if (!result.ok) {
+      setJsonError(result.error);
+      return;
     }
+    updateSelected(result.validator);
+    setJsonError(null);
   }
 
   return (
@@ -162,7 +343,7 @@ export function ValidatorsView({
         <div className="validators-editor-actions">
           <button
             className="secondary-action"
-            disabled={isBusy || !isDirty}
+            disabled={actionState.resetDisabled}
             onClick={resetDraft}
             type="button"
           >
@@ -170,7 +351,7 @@ export function ValidatorsView({
           </button>
           <button
             className="secondary-action danger-action"
-            disabled={saveDisabled}
+            disabled={actionState.saveDisabled}
             onClick={onOverwriteCurrent}
             type="button"
           >
@@ -178,7 +359,7 @@ export function ValidatorsView({
           </button>
           <button
             className="primary-action"
-            disabled={saveDisabled}
+            disabled={actionState.saveDisabled}
             onClick={onSaveAsNext}
             type="button"
           >
@@ -200,7 +381,7 @@ export function ValidatorsView({
           <div className="validators-editor-add-actions">
             <button
               className="secondary-action"
-              disabled={isBusy}
+              disabled={actionState.jsonUnsafeActionsDisabled}
               onClick={() => addValidator("llm_questionnaire")}
               type="button"
             >
@@ -208,7 +389,7 @@ export function ValidatorsView({
             </button>
             <button
               className="secondary-action"
-              disabled={isBusy}
+              disabled={actionState.jsonUnsafeActionsDisabled}
               onClick={() => addValidator("automatic")}
               type="button"
             >
@@ -231,7 +412,9 @@ export function ValidatorsView({
                       : "validator-list-item"
                   }
                   key={`${validator.validator_id}-${validatorIndex}`}
+                  disabled={actionState.jsonUnsafeActionsDisabled}
                   onClick={() => {
+                    if (actionState.jsonUnsafeActionsDisabled) return;
                     setSelectedIndex(validatorIndex);
                     setJsonError(null);
                   }}
@@ -257,7 +440,7 @@ export function ValidatorsView({
               <div className="validators-editor-detail-actions">
                 <button
                   className="secondary-action"
-                  disabled={isBusy}
+                  disabled={actionState.jsonUnsafeActionsDisabled}
                   onClick={duplicateSelected}
                   type="button"
                 >
@@ -265,7 +448,7 @@ export function ValidatorsView({
                 </button>
                 <button
                   className="secondary-action danger-action"
-                  disabled={isBusy}
+                  disabled={actionState.jsonUnsafeActionsDisabled}
                   onClick={deleteSelected}
                   type="button"
                 >
@@ -283,6 +466,7 @@ export function ValidatorsView({
                         ? "proposal-tab is-active"
                         : "proposal-tab"
                     }
+                    disabled={jsonError !== null}
                     onClick={() => toggleViewMode("structured")}
                     role="tab"
                     type="button"
@@ -294,6 +478,7 @@ export function ValidatorsView({
                     className={
                       viewMode === "json" ? "proposal-tab is-active" : "proposal-tab"
                     }
+                    disabled={jsonError !== null}
                     onClick={() => toggleViewMode("json")}
                     role="tab"
                     type="button"
