@@ -1,5 +1,16 @@
 import { expect, test } from "@playwright/test";
 
+test.describe.configure({ mode: "serial" });
+
+async function selectVersion(page: import("@playwright/test").Page, version: string) {
+  const versionSelect = page.getByLabel("Version");
+  await expect(versionSelect).toBeVisible();
+  if ((await versionSelect.inputValue()) !== version) {
+    await versionSelect.selectOption(version);
+  }
+  await expect(versionSelect).toHaveValue(version);
+}
+
 test("demo string prompt and validators tabs show source sections", async ({ page }) => {
   await page.goto("/demo-string/prompt");
 
@@ -13,10 +24,14 @@ test("demo string prompt and validators tabs show source sections", async ({ pag
 
   const validators = page.getByRole("region", { name: "Validators" });
   await expect(validators.getByRole("heading", { name: "Validators" })).toBeVisible();
-  await expect(validators.getByRole("heading", { name: "Reply quality" })).toBeVisible();
-  await expect(validators.getByText("LLM questionnaire")).toBeVisible();
-  await expect(validators.getByRole("heading", { name: "Reply stats" })).toBeVisible();
-  await expect(validators.getByText("Automatic")).toBeVisible();
+  await expect(
+    validators.getByRole("button", { name: /Reply quality\s+reply-quality/i })
+  ).toBeVisible();
+  await expect(
+    validators.getByRole("button", { name: /Reply stats\s+reply-stats/i })
+  ).toBeVisible();
+  await expect(validators.getByRole("region", { name: "Validator editor" })).toBeVisible();
+  await expect(validators.getByLabel("Type")).toHaveValue("llm_questionnaire");
 });
 
 test("demo string compare shows validator matrix and evidence modal", async ({
@@ -58,6 +73,32 @@ test("demo json prompt shows prompt and model source", async ({ page }) => {
   await expect(prompt.getByText("class DemoReport")).toBeVisible();
 });
 
+test("demo json validators can be saved as next version", async ({ page }) => {
+  await page.goto("/demo-json/validators");
+  await selectVersion(page, "v001");
+
+  const validators = page.getByRole("region", { name: "Validators" });
+  await validators
+    .getByRole("button", { name: /Report quality\s+report-quality/i })
+    .click();
+
+  const editedTitle = `Report quality e2e ${Date.now()}`;
+  const editor = validators.getByRole("region", { name: "Validator editor" });
+  await editor.getByLabel("Title").first().fill(editedTitle);
+
+  await validators.getByRole("button", { name: "Save as next version" }).click();
+
+  await expect(
+    validators.getByText(/^Created v\d+ and switched to it\.$/)
+  ).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Validators" })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
+  await expect(validators.getByText(editedTitle)).toBeVisible();
+  await expect(editor.getByLabel("Title").first()).toHaveValue(editedTitle);
+});
+
 test("demo json proposal shows new prompt and model plus diff", async ({
   page
 }) => {
@@ -86,4 +127,48 @@ test("demo json proposal shows new prompt and model plus diff", async ({
       hasText: /set launch_ready.*to false/
     })
   ).toBeVisible();
+});
+
+test("demo json validators can overwrite current version", async ({ page }) => {
+  await page.goto("/demo-json/validators");
+  await selectVersion(page, "v002");
+
+  const validators = page.getByRole("region", { name: "Validators" });
+  await validators
+    .getByRole("button", { name: /Report quality\s+report-quality/i })
+    .click();
+
+  const editedDescription = `Checks whether the structured report is useful and grounded. e2e ${Date.now()}`;
+  const editor = validators.getByRole("region", { name: "Validator editor" });
+  await editor.getByLabel("Description").first().fill(editedDescription);
+
+  await validators.getByRole("button", { name: "Overwrite current version" }).click();
+  const dialog = page.getByRole("dialog", {
+    name: "Overwrite current validators?"
+  });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Overwrite current version" }).click();
+
+  await expect(
+    validators.getByText(
+      "Overwrote validators for v002 and cleared generated validation artifacts."
+    )
+  ).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Validators" })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
+
+  await page.getByRole("tab", { name: "Runs" }).click();
+  const runs = page.getByRole("region", { name: "Run results" });
+  await expect(runs.getByRole("heading", { name: "Active run" })).toBeVisible();
+  await expect(runs.getByRole("cell", { name: /product brief/i }).first()).toBeVisible();
+  await expect(runs.getByText("Output JSON")).toBeVisible();
+
+  await page.getByRole("tab", { name: "Validation" }).click();
+  const validation = page.getByRole("region", { name: "Validation" });
+  await expect(
+    validation.getByText("No validation loaded. Validate the active run to review evidence.")
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Validate active run" })).toBeVisible();
 });

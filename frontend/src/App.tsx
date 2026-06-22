@@ -1297,7 +1297,9 @@ function App() {
   function handleValidatorsDraftChange(draft: VersionValidatorsDraft | null) {
     setValidatorsDraft(draft);
     setValidatorsDirty(draft !== null);
-    setWorkflowMessage(null);
+    if (draft !== null) {
+      setWorkflowMessage(null);
+    }
   }
 
   function handleValidatorsReset() {
