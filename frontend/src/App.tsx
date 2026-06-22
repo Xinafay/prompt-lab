@@ -109,13 +109,23 @@ type HistoryMode = "push" | "replace";
 type AppView = "experiment" | "globalSettings";
 type PromptPreviewAction = () => void | Promise<void>;
 type SourceViewMode = "edit" | "diff";
+type UnsavedNavigationKind =
+  | "settings"
+  | "source"
+  | "validators"
+  | "validation"
+  | "review";
 
-type PendingNavigation =
+type PendingNavigationTarget =
   | { kind: "experiment"; experiment: Experiment | null }
   | { kind: "globalSettings" }
   | { kind: "route"; route: ReturnType<typeof currentExperimentRoute> }
   | { kind: "tab"; tab: WorkbenchTab }
   | { kind: "version"; version: string };
+
+type PendingNavigation = PendingNavigationTarget & {
+  unsavedKind: UnsavedNavigationKind;
+};
 
 type PendingSourceOverwrite = {
   navigation: PendingNavigation | null;
@@ -278,17 +288,25 @@ function App() {
     }
   }
 
-  function clearSourceEditor() {
+  function clearSourceEditor(
+    options: { clearPendingOverwrite?: boolean } = {}
+  ) {
     setSourceEditing(false);
     setSourceDraft(null);
     setSourceViewMode("edit");
-    setPendingSourceOverwrite(null);
+    if (options.clearPendingOverwrite ?? true) {
+      setPendingSourceOverwrite(null);
+    }
   }
 
-  function clearValidatorEditor() {
+  function clearValidatorEditor(
+    options: { clearPendingOverwrite?: boolean } = {}
+  ) {
     setValidatorsDraft(null);
     setValidatorsDirty(false);
-    setPendingValidatorsOverwrite(null);
+    if (options.clearPendingOverwrite ?? true) {
+      setPendingValidatorsOverwrite(null);
+    }
   }
 
   function activateTab(tab: WorkbenchTab, historyMode: HistoryMode = "replace") {
@@ -380,13 +398,7 @@ function App() {
     writeGlobalSettingsRoute(options?.historyMode ?? "replace");
   }
 
-  function unsavedNavigationKind():
-    | "settings"
-    | "source"
-    | "validators"
-    | "validation"
-    | "review"
-    | null {
+  function unsavedNavigationKind(): UnsavedNavigationKind | null {
     if (
       appView === "experiment" &&
       activeTab === "prompt" &&
@@ -437,12 +449,19 @@ function App() {
     return null;
   }
 
-  function shouldBlockUnsavedNavigation(): boolean {
-    return unsavedNavigationKind() !== null;
+  function buildPendingNavigation(
+    navigation: PendingNavigationTarget
+  ): PendingNavigation | null {
+    const unsavedKind = unsavedNavigationKind();
+    if (unsavedKind === null) {
+      return null;
+    }
+    return { ...navigation, unsavedKind };
   }
 
-  function canSavePendingNavigation(): boolean {
-    const kind = unsavedNavigationKind();
+  function canSavePendingNavigation(
+    kind: UnsavedNavigationKind | null
+  ): boolean {
     if (kind === "validation") {
       return validationState !== null;
     }
@@ -461,29 +480,31 @@ function App() {
     return settingsDraft !== null;
   }
 
-  function pendingNavigationCopy(): { title: string; body: string } {
-    if (unsavedNavigationKind() === "validation") {
+  function pendingNavigationCopy(
+    kind: UnsavedNavigationKind | null
+  ): { title: string; body: string } {
+    if (kind === "validation") {
       return {
         title: "Unsaved validation changes",
         body:
           "Save validation inclusion before leaving this view, or discard the unsaved changes."
       };
     }
-    if (unsavedNavigationKind() === "review") {
+    if (kind === "review") {
       return {
         title: "Unsaved review changes",
         body:
           "Save review changes before leaving this view, or discard the unsaved changes."
       };
     }
-    if (unsavedNavigationKind() === "source") {
+    if (kind === "source") {
       return {
         title: "Unsaved source changes",
         body:
           "Save the prompt and model as a new version, overwrite the current version, or discard the draft changes."
       };
     }
-    if (unsavedNavigationKind() === "validators") {
+    if (kind === "validators") {
       return {
         title: "Unsaved validator changes",
         body:
@@ -511,7 +532,7 @@ function App() {
     );
   }
 
-  function performPendingNavigation(navigation: PendingNavigation) {
+  async function performPendingNavigation(navigation: PendingNavigation) {
     if (navigation.kind === "experiment") {
       selectExperiment(navigation.experiment, { historyMode: "push" });
       return;
@@ -531,16 +552,17 @@ function App() {
       activateTab(navigation.tab, "push");
       return;
     }
-    void performActiveVersionChange(navigation.version);
+    await performActiveVersionChange(navigation.version);
   }
 
   function requestExperimentSelection(experiment: Experiment | null) {
     if (appView === "experiment" && experiment?.id === selectedExperiment?.id) {
       return;
     }
-    if (shouldBlockUnsavedNavigation()) {
+    const navigation = buildPendingNavigation({ kind: "experiment", experiment });
+    if (navigation !== null) {
       setNavigationError(null);
-      setPendingNavigation({ kind: "experiment", experiment });
+      setPendingNavigation(navigation);
       return;
     }
     selectExperiment(experiment, { historyMode: "push" });
@@ -550,9 +572,10 @@ function App() {
     if (appView === "globalSettings") {
       return;
     }
-    if (shouldBlockUnsavedNavigation()) {
+    const navigation = buildPendingNavigation({ kind: "globalSettings" });
+    if (navigation !== null) {
       setNavigationError(null);
-      setPendingNavigation({ kind: "globalSettings" });
+      setPendingNavigation(navigation);
       return;
     }
     selectGlobalSettings({ historyMode: "push" });
@@ -562,9 +585,10 @@ function App() {
     if (tab === activeTab) {
       return;
     }
-    if (shouldBlockUnsavedNavigation()) {
+    const navigation = buildPendingNavigation({ kind: "tab", tab });
+    if (navigation !== null) {
       setNavigationError(null);
-      setPendingNavigation({ kind: "tab", tab });
+      setPendingNavigation(navigation);
       return;
     }
     activateTab(tab, "push");
@@ -575,12 +599,12 @@ function App() {
     setNavigationError(null);
   }
 
-  function handleDiscardSettingsAndContinue() {
+  async function handleDiscardSettingsAndContinue() {
     if (pendingNavigation === null) {
       return;
     }
     const navigation = pendingNavigation;
-    const kind = unsavedNavigationKind();
+    const kind = navigation.unsavedKind;
     if (kind === "validation") {
       restoreCommittedValidationState();
     } else if (kind === "review") {
@@ -598,7 +622,7 @@ function App() {
     }
     setPendingNavigation(null);
     setNavigationError(null);
-    performPendingNavigation(navigation);
+    await performPendingNavigation(navigation);
   }
 
   async function handleSaveSettingsAndContinue() {
@@ -606,7 +630,7 @@ function App() {
       return;
     }
     const navigation = pendingNavigation;
-    const kind = unsavedNavigationKind();
+    const kind = navigation.unsavedKind;
     setNavigationSaving(true);
     setNavigationError(null);
     try {
@@ -644,7 +668,7 @@ function App() {
         setSettingsDraft(null);
       }
       setPendingNavigation(null);
-      performPendingNavigation(navigation);
+      await performPendingNavigation(navigation);
     } catch (error) {
       setNavigationError(error instanceof Error ? error.message : "Unknown error");
     } finally {
@@ -870,14 +894,15 @@ function App() {
     function handlePopState() {
       const url = new URL(window.location.href);
       const requestedRoute = currentExperimentRoute();
-      if (shouldBlockUnsavedNavigation()) {
+      const navigation = buildPendingNavigation(
+        isGlobalSettingsRoute(url)
+          ? { kind: "globalSettings" }
+          : { kind: "route", route: requestedRoute }
+      );
+      if (navigation !== null) {
         writeCurrentRoute("replace");
         setNavigationError(null);
-        setPendingNavigation(
-          isGlobalSettingsRoute(url)
-            ? { kind: "globalSettings" }
-            : { kind: "route", route: requestedRoute }
-        );
+        setPendingNavigation(navigation);
         return;
       }
       if (isGlobalSettingsRoute(url)) {
@@ -1155,12 +1180,12 @@ function App() {
     }
     const navigation = pendingSourceOverwrite.navigation;
     setNavigationError(null);
-    setPendingSourceOverwrite(null);
     try {
       await handleSaveVersionSource("overwrite_current", {
         navigation,
         rethrow: true
       });
+      setPendingSourceOverwrite(null);
       if (navigation !== null) {
         setPendingNavigation(null);
       }
@@ -1169,6 +1194,7 @@ function App() {
       if (navigation !== null) {
         setNavigationError(message);
       }
+      setPendingSourceOverwrite(null);
     }
   }
 
@@ -1249,13 +1275,13 @@ function App() {
         activateTab("prompt");
       } else {
         await refreshCurrentVersionAfterSourceOverwrite(experiment, version);
-        clearSourceEditor();
+        clearSourceEditor({ clearPendingOverwrite: false });
         setWorkflowMessage(`Overwrote ${version} and cleared generated artifacts.`);
         activateTab("prompt");
       }
 
       if (navigation !== null) {
-        performPendingNavigation(navigation);
+        await performPendingNavigation(navigation);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
@@ -1298,12 +1324,12 @@ function App() {
     }
     const navigation = pendingValidatorsOverwrite.navigation;
     setNavigationError(null);
-    setPendingValidatorsOverwrite(null);
     try {
       await handleSaveVersionValidators("overwrite_current", {
         navigation,
         rethrow: true
       });
+      setPendingValidatorsOverwrite(null);
       if (navigation !== null) {
         setPendingNavigation(null);
       }
@@ -1312,6 +1338,7 @@ function App() {
       if (navigation !== null) {
         setNavigationError(message);
       }
+      setPendingValidatorsOverwrite(null);
     }
   }
 
@@ -1383,7 +1410,7 @@ function App() {
         activateTab("validators");
       } else {
         await refreshCurrentVersionAfterValidatorsOverwrite(experiment, version);
-        clearValidatorEditor();
+        clearValidatorEditor({ clearPendingOverwrite: false });
         setWorkflowMessage(
           `Overwrote validators for ${version} and cleared generated validation artifacts.`
         );
@@ -1391,7 +1418,7 @@ function App() {
       }
 
       if (navigation !== null) {
-        performPendingNavigation(navigation);
+        await performPendingNavigation(navigation);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
@@ -2145,9 +2172,10 @@ function App() {
   }
 
   async function handleActiveVersionChange(version: string) {
-    if (shouldBlockUnsavedNavigation()) {
+    const navigation = buildPendingNavigation({ kind: "version", version });
+    if (navigation !== null) {
       setNavigationError(null);
-      setPendingNavigation({ kind: "version", version });
+      setPendingNavigation(navigation);
       return;
     }
     await performActiveVersionChange(version);
@@ -2241,10 +2269,10 @@ function App() {
     sameVersion: baselineVersion === candidateVersion,
     versionCount: knownVersions.length
   });
-  const pendingNavigationKind = unsavedNavigationKind();
-  const pendingNavigationDialog = pendingNavigationCopy();
+  const pendingNavigationKind = pendingNavigation?.unsavedKind ?? null;
+  const pendingNavigationDialog = pendingNavigationCopy(pendingNavigationKind);
   const pendingNavigationSaveDisabled =
-    navigationSaving || !canSavePendingNavigation();
+    navigationSaving || !canSavePendingNavigation(pendingNavigationKind);
   const hasUnsavedReviewChanges = decisionsDirty || humanNotesDirty;
   const workflowUnsavedChangesAction =
     activeTab === "validation" && validationDirty ? (
@@ -2676,7 +2704,7 @@ function App() {
               <button
                 className="secondary-action danger-action"
                 disabled={navigationSaving}
-                onClick={handleDiscardSettingsAndContinue}
+                onClick={() => void handleDiscardSettingsAndContinue()}
                 type="button"
               >
                 Discard changes
@@ -2790,7 +2818,7 @@ function App() {
                 onClick={() => void handleConfirmValidatorsOverwrite()}
                 type="button"
               >
-                {workflowBusy ? "Overwriting..." : "Overwrite current validators"}
+                {workflowBusy ? "Overwriting..." : "Overwrite current version"}
               </button>
             </div>
           </section>

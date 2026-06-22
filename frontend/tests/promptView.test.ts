@@ -280,6 +280,21 @@ test("production workbench delegates prompt and validators tabs", () => {
   );
 });
 
+test("production workbench keeps dirty-navigation continuation state stable", () => {
+  const source = readFileSync(
+    new URL("../src/App.tsx", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(source, /type UnsavedNavigationKind =/);
+  assert.match(source, /unsavedKind: UnsavedNavigationKind/);
+  assert.match(source, /function buildPendingNavigation/);
+  assert.match(source, /const pendingNavigationKind = pendingNavigation\?\.unsavedKind \?\? null/);
+  assert.match(source, /async function performPendingNavigation/);
+  assert.match(source, /await performActiveVersionChange\(navigation\.version\)/);
+  assert.doesNotMatch(source, /void performActiveVersionChange\(navigation\.version\)/);
+});
+
 test("validator source API helper posts encoded version update requests", async () => {
   const request: VersionValidatorsUpdateRequest = {
     mode: "create_next",
