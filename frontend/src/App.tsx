@@ -29,7 +29,8 @@ import {
   updateHumanNotes,
   updateReviewDecisions,
   updateValidationInclusion,
-  updateVersionSource
+  updateVersionSource,
+  updateVersionValidators
 } from "./api";
 import { CaseBrowser } from "./components/CaseBrowser";
 import { ComparisonView } from "./components/ComparisonView";
@@ -67,6 +68,8 @@ import type {
   VersionOverview,
   VersionSourceDraft,
   VersionSourceSaveMode,
+  VersionValidatorsDraft,
+  VersionValidatorsSaveMode,
   VersionSummary,
   WorkflowMode
 } from "./types";
@@ -115,6 +118,10 @@ type PendingNavigation =
   | { kind: "version"; version: string };
 
 type PendingSourceOverwrite = {
+  navigation: PendingNavigation | null;
+};
+
+type PendingValidatorsOverwrite = {
   navigation: PendingNavigation | null;
 };
 
@@ -208,6 +215,11 @@ function App() {
   const [sourceViewMode, setSourceViewMode] = useState<SourceViewMode>("edit");
   const [pendingSourceOverwrite, setPendingSourceOverwrite] =
     useState<PendingSourceOverwrite | null>(null);
+  const [validatorsDraft, setValidatorsDraft] =
+    useState<VersionValidatorsDraft | null>(null);
+  const [validatorsDirty, setValidatorsDirty] = useState(false);
+  const [pendingValidatorsOverwrite, setPendingValidatorsOverwrite] =
+    useState<PendingValidatorsOverwrite | null>(null);
   const [globalSettingsBusy, setGlobalSettingsBusy] = useState(false);
   const [globalSettingsMessage, setGlobalSettingsMessage] =
     useState<string | null>(null);
@@ -273,6 +285,12 @@ function App() {
     setPendingSourceOverwrite(null);
   }
 
+  function clearValidatorEditor() {
+    setValidatorsDraft(null);
+    setValidatorsDirty(false);
+    setPendingValidatorsOverwrite(null);
+  }
+
   function activateTab(tab: WorkbenchTab, historyMode: HistoryMode = "replace") {
     setActiveTab(tab);
     if (selectedExperiment !== null) {
@@ -310,6 +328,7 @@ function App() {
     setSettingsDirty(false);
     setSettingsDraft(null);
     clearSourceEditor();
+    clearValidatorEditor();
     setPendingNavigation(null);
     setNavigationError(null);
     setNavigationSaving(false);
@@ -354,6 +373,7 @@ function App() {
     setSettingsDirty(false);
     setSettingsDraft(null);
     clearSourceEditor();
+    clearValidatorEditor();
     setPendingNavigation(null);
     setNavigationError(null);
     setNavigationSaving(false);
@@ -363,6 +383,7 @@ function App() {
   function unsavedNavigationKind():
     | "settings"
     | "source"
+    | "validators"
     | "validation"
     | "review"
     | null {
@@ -373,6 +394,14 @@ function App() {
       !workflowBusy
     ) {
       return "source";
+    }
+    if (
+      appView === "experiment" &&
+      activeTab === "validators" &&
+      validatorsDirty &&
+      !workflowBusy
+    ) {
+      return "validators";
     }
     if (
       appView === "experiment" &&
@@ -423,6 +452,9 @@ function App() {
     if (kind === "source") {
       return sourceDraft !== null;
     }
+    if (kind === "validators") {
+      return validatorsDraft !== null;
+    }
     if (appView === "globalSettings") {
       return globalSettingsDraft !== null;
     }
@@ -449,6 +481,13 @@ function App() {
         title: "Unsaved source changes",
         body:
           "Save the prompt and model as a new version, overwrite the current version, or discard the draft changes."
+      };
+    }
+    if (unsavedNavigationKind() === "validators") {
+      return {
+        title: "Unsaved validator changes",
+        body:
+          "Save validators as a new version, overwrite the current version, or discard the draft changes."
       };
     }
     return {
@@ -548,6 +587,8 @@ function App() {
       restoreCommittedReviewState();
     } else if (kind === "source") {
       clearSourceEditor();
+    } else if (kind === "validators") {
+      clearValidatorEditor();
     } else if (appView === "globalSettings") {
       setGlobalSettingsDirty(false);
       setGlobalSettingsDraft(null);
@@ -575,6 +616,13 @@ function App() {
         await handleSaveReviewChanges({ rethrow: true });
       } else if (kind === "source") {
         await handleSaveVersionSource("create_next", {
+          navigation,
+          rethrow: true
+        });
+        setPendingNavigation(null);
+        return;
+      } else if (kind === "validators") {
+        await handleSaveVersionValidators("create_next", {
           navigation,
           rethrow: true
         });
@@ -864,6 +912,7 @@ function App() {
     settingsBusy,
     settingsDirty,
     sourceDirty,
+    validatorsDirty,
     validationDirty,
     validationState,
     workflowBusy,
@@ -877,7 +926,8 @@ function App() {
       !validationDirty &&
       !decisionsDirty &&
       !humanNotesDirty &&
-      !sourceDirty
+      !sourceDirty &&
+      !validatorsDirty
     ) {
       return;
     }
@@ -897,6 +947,7 @@ function App() {
     humanNotesDirty,
     settingsDirty,
     sourceDirty,
+    validatorsDirty,
     validationDirty
   ]);
 
@@ -1201,6 +1252,142 @@ function App() {
         clearSourceEditor();
         setWorkflowMessage(`Overwrote ${version} and cleared generated artifacts.`);
         activateTab("prompt");
+      }
+
+      if (navigation !== null) {
+        performPendingNavigation(navigation);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setWorkflowMessage(message);
+      if (options?.rethrow) {
+        throw error;
+      }
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
+
+  function handleValidatorsDraftChange(draft: VersionValidatorsDraft | null) {
+    setValidatorsDraft(draft);
+    setValidatorsDirty(draft !== null);
+    setWorkflowMessage(null);
+  }
+
+  function handleValidatorsReset() {
+    clearValidatorEditor();
+    setWorkflowMessage(null);
+  }
+
+  function requestValidatorsOverwrite(
+    navigation: PendingNavigation | null = null
+  ) {
+    if (validatorsDraft === null || !validatorsDirty || workflowBusy) {
+      return;
+    }
+    setPendingValidatorsOverwrite({ navigation });
+  }
+
+  function handleCancelValidatorsOverwrite() {
+    setPendingValidatorsOverwrite(null);
+  }
+
+  async function handleConfirmValidatorsOverwrite() {
+    if (pendingValidatorsOverwrite === null) {
+      return;
+    }
+    const navigation = pendingValidatorsOverwrite.navigation;
+    setNavigationError(null);
+    setPendingValidatorsOverwrite(null);
+    try {
+      await handleSaveVersionValidators("overwrite_current", {
+        navigation,
+        rethrow: true
+      });
+      if (navigation !== null) {
+        setPendingNavigation(null);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      if (navigation !== null) {
+        setNavigationError(message);
+      }
+    }
+  }
+
+  async function refreshCurrentVersionAfterValidatorsOverwrite(
+    experiment: Experiment,
+    version: string
+  ) {
+    const [overview, runs] = await Promise.all([
+      getVersionOverview(experiment.id, version),
+      getVersionRuns(experiment.id, version)
+    ]);
+    setDetailState({ status: "loaded", overview, runs });
+    setCommittedValidationState(null);
+    setCompareValidationByVersion({});
+    setCommittedReviewState(null);
+    setProposalResponse(null);
+    setCreatedVersion(null);
+    setComparison(null);
+  }
+
+  async function handleSaveVersionValidators(
+    mode: VersionValidatorsSaveMode,
+    options?: { navigation?: PendingNavigation | null; rethrow?: boolean }
+  ) {
+    if (
+      selectedExperiment === null ||
+      detailState.status !== "loaded" ||
+      validatorsDraft === null
+    ) {
+      return;
+    }
+    const experiment = selectedExperiment;
+    const version = experiment.active_version;
+    const navigation = options?.navigation ?? null;
+    setWorkflowBusy(true);
+    setWorkflowMessage(
+      mode === "create_next"
+        ? "Saving validators as next version..."
+        : "Overwriting current validators..."
+    );
+    try {
+      const response = await updateVersionValidators(experiment.id, version, {
+        mode,
+        validators: validatorsDraft.validators
+      });
+      setVersionSummaries((current) => {
+        if (current.some((summary) => summary.version === response.version)) {
+          return current;
+        }
+        return [...current, { version: response.version, is_active: false }].sort(
+          (left, right) => left.version.localeCompare(right.version)
+        );
+      });
+
+      if (mode === "create_next") {
+        const savedExperiment = await updateExperiment(experiment.id, {
+          ...experiment,
+          active_version: response.version
+        });
+        setCommittedValidationState(null);
+        setCompareValidationByVersion({});
+        setCommittedReviewState(null);
+        setProposalResponse(null);
+        setCreatedVersion(null);
+        setComparison(null);
+        await refreshExperimentsAfterSettingsSave(savedExperiment);
+        clearValidatorEditor();
+        setWorkflowMessage(`Created ${response.version} and switched to it.`);
+        activateTab("validators");
+      } else {
+        await refreshCurrentVersionAfterValidatorsOverwrite(experiment, version);
+        clearValidatorEditor();
+        setWorkflowMessage(
+          `Overwrote validators for ${version} and cleared generated validation artifacts.`
+        );
+        activateTab("validators");
       }
 
       if (navigation !== null) {
@@ -2364,6 +2551,16 @@ function App() {
 
                     {activeTab === "validators" ? (
                       <ValidatorsView
+                        isBusy={workflowLocked}
+                        message={workflowMessage}
+                        onDraftChange={handleValidatorsDraftChange}
+                        onOverwriteCurrent={() =>
+                          requestValidatorsOverwrite()
+                        }
+                        onReset={handleValidatorsReset}
+                        onSaveAsNext={() =>
+                          void handleSaveVersionValidators("create_next")
+                        }
                         validators={detailState.overview.validators ?? []}
                       />
                     ) : null}
@@ -2450,7 +2647,9 @@ function App() {
         />
       ) : null}
 
-      {pendingNavigation !== null && pendingSourceOverwrite === null ? (
+      {pendingNavigation !== null &&
+      pendingSourceOverwrite === null &&
+      pendingValidatorsOverwrite === null ? (
         <div className="modal-backdrop" role="presentation">
           <section
             aria-labelledby="settings-navigation-title"
@@ -2492,6 +2691,16 @@ function App() {
                   Overwrite and continue
                 </button>
               ) : null}
+              {pendingNavigationKind === "validators" ? (
+                <button
+                  className="secondary-action danger-action"
+                  disabled={pendingNavigationSaveDisabled}
+                  onClick={() => requestValidatorsOverwrite(pendingNavigation)}
+                  type="button"
+                >
+                  Overwrite and continue
+                </button>
+              ) : null}
               <button
                 className="primary-action"
                 disabled={pendingNavigationSaveDisabled}
@@ -2500,7 +2709,8 @@ function App() {
               >
                 {navigationSaving
                   ? "Saving..."
-                  : pendingNavigationKind === "source"
+                  : pendingNavigationKind === "source" ||
+                      pendingNavigationKind === "validators"
                     ? "Save as next and continue"
                     : "Save and continue"}
               </button>
@@ -2541,6 +2751,46 @@ function App() {
                 type="button"
               >
                 {workflowBusy ? "Overwriting..." : "Overwrite current version"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {pendingValidatorsOverwrite !== null ? (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            aria-labelledby="validators-overwrite-title"
+            aria-modal="true"
+            className="settings-navigation-modal"
+            role="dialog"
+          >
+            <div>
+              <h2 id="validators-overwrite-title">
+                Overwrite current validators?
+              </h2>
+              <p>
+                This replaces validators for the current version and clears
+                validation, review, proposal, and comparison artifacts. Existing
+                runs are kept.
+              </p>
+            </div>
+            <div className="modal-actions">
+              <button
+                className="secondary-action"
+                disabled={workflowBusy}
+                onClick={handleCancelValidatorsOverwrite}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="secondary-action danger-action"
+                disabled={workflowBusy}
+                onClick={() => void handleConfirmValidatorsOverwrite()}
+                type="button"
+              >
+                {workflowBusy ? "Overwriting..." : "Overwrite current validators"}
               </button>
             </div>
           </section>

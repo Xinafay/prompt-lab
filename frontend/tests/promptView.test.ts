@@ -237,13 +237,36 @@ test("production workbench delegates prompt and validators tabs", () => {
     source,
     /import \{ PromptView \} from "\.\/components\/PromptView"/
   );
+  assert.match(source, /updateVersionValidators/);
+  assert.match(source, /VersionValidatorsDraft/);
+  assert.match(source, /VersionValidatorsSaveMode/);
+  assert.match(source, /validatorsDirty/);
+  assert.match(source, /requestValidatorsOverwrite/);
+  assert.match(source, /handleSaveVersionValidators/);
   assert.match(
     source,
     /<PromptView\s+overview=\{detailState\.overview\}/
   );
   assert.match(
     source,
-    /<ValidatorsView\s+validators=\{detailState\.overview\.validators \?\? \[\]\}/
+    /activeTab === "validators" \? \(\s*<ValidatorsView/
+  );
+  assert.match(
+    source,
+    /<ValidatorsView\s+isBusy=\{workflowLocked\}\s+message=\{workflowMessage\}\s+onDraftChange=\{handleValidatorsDraftChange\}/
+  );
+  assert.match(
+    source,
+    /onOverwriteCurrent=\{\(\) =>\s+requestValidatorsOverwrite\(\)\s+\}/
+  );
+  assert.match(source, /onReset=\{handleValidatorsReset\}/);
+  assert.match(
+    source,
+    /onSaveAsNext=\{\(\) =>\s+void handleSaveVersionValidators\("create_next"\)\s+\}/
+  );
+  assert.match(
+    source,
+    /validators=\{detailState\.overview\.validators \?\? \[\]\}/
   );
   assert.match(source, /isRunning=\{workflowLocked\}/);
   assert.match(source, /onRunVersion=\{handleRunVersion\}/);
