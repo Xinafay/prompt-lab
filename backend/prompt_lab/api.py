@@ -106,6 +106,13 @@ class VersionSourceUpdateRequest(BaseModel):
     model_py: str | None = Field(default=None, min_length=1)
 
 
+class VersionValidatorsUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["create_next", "overwrite_current"]
+    validators: list[ValidatorDefinition]
+
+
 class PromptPreviewItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1129,6 +1136,37 @@ def _write_version_source_files(
         model_target.write_text(model_py, encoding="utf-8")
 
 
+def _validate_version_validators_update(
+    request: VersionValidatorsUpdateRequest,
+) -> None:
+    seen: set[str] = set()
+    for validator in request.validators:
+        _validate_validator_id_path_segment(validator.validator_id)
+        if validator.validator_id in seen:
+            raise HTTPException(
+                status_code=400,
+                detail=f"duplicate validator_id: {validator.validator_id}",
+            )
+        seen.add(validator.validator_id)
+
+
+def _write_version_validator_files(
+    version_dir: Path,
+    validators: list[ValidatorDefinition],
+) -> None:
+    validators_dir = _resolve_version_local_write_path(
+        version_dir, "validators/.validator-dir"
+    ).parent
+    if validators_dir.is_dir():
+        shutil.rmtree(validators_dir)
+    for validator in validators:
+        target = _resolve_version_local_write_path(
+            version_dir,
+            f"validators/{validator.validator_id}.json",
+        )
+        _write_json(target, validator.model_dump(mode="json"))
+
+
 def _load_validated_proposal_source(
     *,
     proposal_dir: Path,
@@ -1464,6 +1502,54 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             model_py=request.model_py,
         )
         _remove_generated_version_dirs(source_version_dir)
+        return {
+            "version": version,
+            "source_version": version,
+            "mode": request.mode,
+            "version_dir": str(source_version_dir),
+        }
+
+    @app.post("/api/experiments/{experiment_id}/versions/{version}/validators")
+    def update_version_validators(
+        experiment_id: str,
+        version: str,
+        request: VersionValidatorsUpdateRequest,
+    ) -> dict[str, object]:
+        store.load_experiment(experiment_id)
+        source_version_dir = store.version_dir(experiment_id, version)
+        _validate_version_validators_update(request)
+
+        if request.mode == "create_next":
+            versions_root = source_version_dir.parent
+            new_version, new_version_dir = _next_numeric_version_dir(versions_root)
+            staging_dir = versions_root / f".{new_version}.tmp"
+            if staging_dir.exists():
+                shutil.rmtree(staging_dir)
+            try:
+                shutil.copytree(source_version_dir, staging_dir)
+                _remove_generated_version_dirs(staging_dir)
+                legacy_cases_dir = staging_dir / "cases"
+                if legacy_cases_dir.exists():
+                    shutil.rmtree(legacy_cases_dir)
+                _write_version_validator_files(staging_dir, request.validators)
+                staging_dir.rename(new_version_dir)
+            except Exception:
+                if staging_dir.exists():
+                    shutil.rmtree(staging_dir)
+                if new_version_dir.exists():
+                    shutil.rmtree(new_version_dir)
+                raise
+            return {
+                "version": new_version,
+                "source_version": version,
+                "mode": request.mode,
+                "version_dir": str(new_version_dir),
+            }
+
+        _write_version_validator_files(source_version_dir, request.validators)
+        _remove_runtime_children(
+            source_version_dir, ["validations", "reviews", "comparisons"]
+        )
         return {
             "version": version,
             "source_version": version,
