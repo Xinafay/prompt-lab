@@ -227,3 +227,26 @@ test("ValidatorEditor renders llm and automatic controls", () => {
   assert.match(automaticHtml, /Rule kind/);
   assert.match(automaticHtml, /Comparison/);
 });
+
+const { ValidatorsView } = await import("../src/components/ValidatorsView.tsx");
+
+test("ValidatorsView renders add duplicate delete and save actions", () => {
+  const validator = createDefaultValidator("llm_questionnaire", []);
+  const html = renderToStaticMarkup(
+    React.createElement(ValidatorsView, {
+      isBusy: false,
+      message: null,
+      onDraftChange: () => undefined,
+      onOverwriteCurrent: () => undefined,
+      onReset: () => undefined,
+      onSaveAsNext: () => undefined,
+      validators: [validator]
+    })
+  );
+
+  assert.match(html, /Add validator/);
+  assert.match(html, /Duplicate/);
+  assert.match(html, /Delete/);
+  assert.match(html, /Overwrite current version/);
+  assert.match(html, /Save as next version/);
+});

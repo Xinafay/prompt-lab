@@ -807,6 +807,110 @@ select {
   line-height: 1.45;
 }
 
+.validators-editor-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.validators-editor-actions,
+.validators-editor-add-actions,
+.validators-editor-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.validators-editor-actions {
+  justify-content: flex-end;
+}
+
+.validators-editor-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.validators-editor-list,
+.validators-editor-detail,
+.validator-editor,
+.validator-list-items,
+.validator-json-field {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.validator-list-item {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.validator-list-item:hover,
+.validator-list-item.is-active {
+  border-color: #2563eb;
+}
+
+.validator-list-item.is-active {
+  box-shadow: inset 3px 0 0 #2563eb;
+}
+
+.validator-list-item strong,
+.validator-list-item span {
+  overflow-wrap: anywhere;
+}
+
+.validator-list-item strong {
+  color: #111827;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.validator-list-item span,
+.validator-json-field span {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.validator-check-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #eef1f5;
+  border-radius: 8px;
+  background: #fcfcfd;
+}
+
+.validator-json-editor {
+  width: 100%;
+  min-height: 360px;
+  padding: 12px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #111827;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.validator-json-editor:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -1px;
+}
+
 .compact-empty-state {
   padding: 18px;
 }
@@ -2611,6 +2715,8 @@ select {
   .bindings-row,
   .runs-drilldown,
   .run-detail-meta,
+  .validators-editor-layout,
+  .validator-check-editor,
   .validator-check-preview,
   .validation-summary,
   .validation-check,
