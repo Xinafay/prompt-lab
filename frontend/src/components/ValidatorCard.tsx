@@ -1,8 +1,10 @@
 import type { MouseEvent } from "react";
 import type {
+  AutomaticValidatorDefinition,
   AutomaticRule,
   CountComparison,
   InputScope,
+  LlmQuestionnaireValidatorDefinition,
   ValidatorDefinition,
   ValidatorType
 } from "../types";
@@ -123,11 +125,46 @@ function automaticRuleMetadata(rule: AutomaticRule): string {
   return `${rule.kind} - ${comparison}`;
 }
 
-export function ValidatorCard({
-  showActions = false,
-  validator,
-  ...actions
-}: ValidatorCardProps) {
+function renderCheck(
+  check: { check_id: string; title: string; description: string },
+  body: string,
+  metadata: string
+) {
+  return (
+    <section className="validator-card-check" key={check.check_id}>
+      <div>
+        <h4>{check.title || check.check_id}</h4>
+        {check.description.trim().length > 0 ? <p>{check.description}</p> : null}
+      </div>
+      <div>
+        <p>{body}</p>
+        <span>{metadata}</span>
+      </div>
+    </section>
+  );
+}
+
+function renderLlmCheck(check: LlmQuestionnaireValidatorDefinition["checks"][number]) {
+  return renderCheck(
+    check,
+    `Asks: ${check.question}`,
+    `${check.check_id} - llm_questionnaire`
+  );
+}
+
+function renderAutomaticCheck(
+  check: AutomaticValidatorDefinition["checks"][number]
+) {
+  return renderCheck(
+    check,
+    describeAutomaticRule(check.rule),
+    `${check.check_id} - ${automaticRuleMetadata(check.rule)}`
+  );
+}
+
+export function ValidatorCard(props: ValidatorCardProps) {
+  const showActions = props.showActions === true;
+  const { validator } = props;
   const title = validator.title || "(untitled)";
   const checkCount = validator.checks.length;
   const checkLabel = checkCount === 1 ? "1 check" : `${checkCount} checks`;
@@ -151,8 +188,8 @@ export function ValidatorCard({
           <div className="validator-card-actions">
             <button
               className="primary-action"
-              disabled={actions.disabled}
-              onClick={actions.onEdit}
+              disabled={props.disabled}
+              onClick={props.onEdit}
               type="button"
               aria-label={`Edit ${title} validator`}
             >
@@ -160,8 +197,8 @@ export function ValidatorCard({
             </button>
             <button
               className="secondary-action"
-              disabled={actions.disabled}
-              onClick={actions.onDuplicate}
+              disabled={props.disabled}
+              onClick={props.onDuplicate}
               type="button"
               aria-label={`Duplicate ${title} validator`}
             >
@@ -169,8 +206,8 @@ export function ValidatorCard({
             </button>
             <button
               className="secondary-action danger-action"
-              disabled={actions.disabled}
-              onClick={actions.onDelete}
+              disabled={props.disabled}
+              onClick={props.onDelete}
               type="button"
               aria-label={`Delete ${title} validator`}
             >
@@ -185,29 +222,9 @@ export function ValidatorCard({
       ) : null}
 
       <div className="validator-card-checks" aria-label={`${title} checks`}>
-        {validator.checks.map((check) => {
-          const body =
-            validator.type === "llm_questionnaire"
-              ? `Asks: ${check.question}`
-              : describeAutomaticRule(check.rule);
-          const metadata =
-            validator.type === "llm_questionnaire"
-              ? `${check.check_id} - llm_questionnaire`
-              : `${check.check_id} - ${automaticRuleMetadata(check.rule)}`;
-
-          return (
-            <section className="validator-card-check" key={check.check_id}>
-              <div>
-                <h4>{check.title || check.check_id}</h4>
-                {check.description.trim().length > 0 ? <p>{check.description}</p> : null}
-              </div>
-              <div>
-                <p>{body}</p>
-                <span>{metadata}</span>
-              </div>
-            </section>
-          );
-        })}
+        {validator.type === "llm_questionnaire"
+          ? validator.checks.map(renderLlmCheck)
+          : validator.checks.map(renderAutomaticCheck)}
       </div>
     </article>
   );
