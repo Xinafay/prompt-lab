@@ -1,6 +1,25 @@
+import { cpSync, rmSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 
 test.describe.configure({ mode: "serial" });
+
+const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+const demoFixtureNames = ["demo-json", "demo-string"] as const;
+
+function resetDemoFixtures() {
+  for (const fixtureName of demoFixtureNames) {
+    const source = resolve(repoRoot, "examples", fixtureName);
+    const destination = resolve(repoRoot, "experiments", fixtureName);
+    rmSync(destination, { recursive: true, force: true });
+    cpSync(source, destination, { recursive: true });
+  }
+}
+
+test.beforeAll(() => {
+  resetDemoFixtures();
+});
 
 async function selectVersion(page: import("@playwright/test").Page, version: string) {
   const versionSelect = page.getByLabel("Version");
