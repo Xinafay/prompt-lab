@@ -16,12 +16,8 @@ export function ValidatorsPreview({ validators }: ValidatorsPreviewProps) {
       ) : (
         validators.map((validator) => (
           <ValidatorCard
-            disabled={true}
             key={validator.validator_id}
             showActions={false}
-            onDelete={() => undefined}
-            onDuplicate={() => undefined}
-            onEdit={() => undefined}
             validator={validator}
           />
         ))

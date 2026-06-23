@@ -7,14 +7,26 @@ import type {
   ValidatorType
 } from "../types";
 
-interface ValidatorCardProps {
+interface ValidatorCardReadOnlyProps {
+  showActions?: false;
+  validator: ValidatorDefinition;
+}
+
+interface ValidatorCardInteractiveProps {
+  showActions?: true;
   disabled: boolean;
   onDelete: (event: MouseEvent<HTMLButtonElement>) => void;
   onDuplicate: (event: MouseEvent<HTMLButtonElement>) => void;
   onEdit: (event: MouseEvent<HTMLButtonElement>) => void;
-  showActions?: boolean;
   validator: ValidatorDefinition;
 }
+
+type ValidatorCardProps = ValidatorCardReadOnlyProps | ValidatorCardInteractiveProps;
+
+type ComparisonRender =
+  | { kind: "configured" }
+  | { kind: "configuredRange" }
+  | { kind: "value"; text: string };
 
 export function validatorTypeLabel(type: ValidatorType): string {
   if (type === "llm_questionnaire") return "LLM questionnaire";
@@ -34,13 +46,15 @@ function isFiniteComparisonValue(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function comparisonPhrase(comparison: CountComparison | null | undefined): string {
-  if (comparison === null || comparison === undefined) return "using the configured comparison";
+function comparisonText(comparison: CountComparison | null | undefined): ComparisonRender {
+  if (comparison === null || comparison === undefined) {
+    return { kind: "configured" };
+  }
   if (comparison.op === "between") {
     if (!isFiniteComparisonValue(comparison.min_value) || !isFiniteComparisonValue(comparison.max_value)) {
-      return "using the configured comparison range";
+      return { kind: "configuredRange" };
     }
-    return `between ${comparison.min_value} and ${comparison.max_value}`;
+    return { kind: "value", text: `between ${comparison.min_value}..${comparison.max_value}` };
   }
   const operatorLabels: Record<Exclude<CountComparison["op"], "between">, string> = {
     eq: "exactly",
@@ -50,61 +64,59 @@ function comparisonPhrase(comparison: CountComparison | null | undefined): strin
     lte: "at most"
   };
   if (!isFiniteComparisonValue(comparison.value)) {
-    return "using the configured comparison";
+    return { kind: "configured" };
   }
-  return `${operatorLabels[comparison.op]} ${comparison.value}`;
+  return { kind: "value", text: `${operatorLabels[comparison.op]} ${comparison.value}` };
 }
 
 export function describeAutomaticRule(rule: AutomaticRule): string {
   const source = rule.source;
   const path = rule.path ?? "the configured JSON path";
+  const comparison = comparisonText(rule.comparison);
 
   if (rule.kind === "json_path_exists") {
     return `Requires ${path} in ${source} to exist.`;
   }
   if (rule.kind === "json_path_count") {
-    const comparison = comparisonPhrase(rule.comparison);
-    if (comparison.startsWith("using the configured")) {
-      return `Requires ${path} in ${source} to satisfy ${comparison}.`;
+    if (comparison.kind === "configured" || comparison.kind === "configuredRange") {
+      return `Requires ${path} in ${source} to satisfy the configured count comparison.`;
     }
-    return `Requires ${path} in ${source} to contain ${comparisonPhrase(
-      rule.comparison
-    )} items.`;
+    return `Requires ${path} in ${source} to contain ${comparison.text} items.`;
+  }
+  if (comparison.kind === "configured" || comparison.kind === "configuredRange") {
+    return `Requires ${source} ${rule.kind.replace("_", " ")} to satisfy the configured comparison.`;
   }
   if (rule.kind === "word_count") {
-    return `Requires ${source} word count to be ${comparisonPhrase(rule.comparison)}.`;
+    return `Requires ${source} word count to be ${comparison.text}.`;
   }
   if (rule.kind === "sentence_count") {
-    return `Requires ${source} sentence count to be ${comparisonPhrase(
-      rule.comparison
-    )}.`;
+    return `Requires ${source} sentence count to be ${comparison.text}.`;
   }
   if (rule.kind === "character_count") {
-    return `Requires ${source} character count to be ${comparisonPhrase(
-      rule.comparison
-    )}.`;
+    return `Requires ${source} character count to be ${comparison.text}.`;
   }
   return `Applies ${rule.kind} to ${source}.`;
 }
 
 function automaticRuleMetadata(rule: AutomaticRule): string {
-  const comparison = rule.comparison;
-  if (comparison === null || comparison === undefined) {
-    return rule.kind;
+  const comparison = comparisonText(rule.comparison);
+
+  if (comparison.kind === "configured") {
+    return `${rule.kind} - configured comparison`;
   }
-  if (comparison.op === "between") {
-    return `${rule.kind} - between ${comparison.min_value}..${comparison.max_value}`;
+  if (comparison.kind === "configuredRange") {
+    return `${rule.kind} - configured range`;
   }
-  return `${rule.kind} - ${comparison.op} ${comparison.value}`;
+  if (comparison.kind === "value") {
+    return `${rule.kind} - ${comparison.text}`;
+  }
+  return `${rule.kind} - configured comparison`;
 }
 
 export function ValidatorCard({
-  disabled,
-  onDelete,
-  onDuplicate,
-  onEdit,
   showActions = true,
-  validator
+  validator,
+  ...actions
 }: ValidatorCardProps) {
   const title = validator.title || "(untitled)";
   const checkCount = validator.checks.length;
@@ -129,8 +141,8 @@ export function ValidatorCard({
           <div className="validator-card-actions">
             <button
               className="primary-action"
-              disabled={disabled}
-              onClick={onEdit}
+              disabled={actions.disabled}
+              onClick={actions.onEdit}
               type="button"
               aria-label={`Edit ${title} validator`}
             >
@@ -138,8 +150,8 @@ export function ValidatorCard({
             </button>
             <button
               className="secondary-action"
-              disabled={disabled}
-              onClick={onDuplicate}
+              disabled={actions.disabled}
+              onClick={actions.onDuplicate}
               type="button"
               aria-label={`Duplicate ${title} validator`}
             >
@@ -147,8 +159,8 @@ export function ValidatorCard({
             </button>
             <button
               className="secondary-action danger-action"
-              disabled={disabled}
-              onClick={onDelete}
+              disabled={actions.disabled}
+              onClick={actions.onDelete}
               type="button"
               aria-label={`Delete ${title} validator`}
             >

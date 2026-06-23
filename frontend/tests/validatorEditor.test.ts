@@ -338,7 +338,7 @@ test("validator card formatting helpers use human-readable labels", () => {
       source: "output_text",
       comparison: { op: "gte", value: NaN }
     }),
-    "Requires output_text word count to be using the configured comparison."
+    "Requires output_text word count to satisfy the configured comparison."
   );
   assert.equal(
     describeAutomaticRule({
@@ -347,7 +347,16 @@ test("validator card formatting helpers use human-readable labels", () => {
       path: "$.tags",
       comparison: { op: "between", min_value: 2, max_value: null }
     }),
-    "Requires $.tags in output_json to satisfy using the configured comparison range."
+    "Requires $.tags in output_json to satisfy the configured count comparison."
+  );
+  assert.equal(
+    describeAutomaticRule({
+      kind: "json_path_count",
+      source: "output_json",
+      path: "$.items",
+      comparison: { op: "between", min_value: 2, max_value: null }
+    }),
+    "Requires $.items in output_json to satisfy the configured count comparison."
   );
 });
 
@@ -377,6 +386,57 @@ test("ValidatorsPreview renders cards in read-only mode", () => {
   assert.doesNotMatch(html, />\s*Edit\s*</);
   assert.doesNotMatch(html, />\s*Duplicate\s*</);
   assert.doesNotMatch(html, />\s*Delete\s*</);
+
+  const fallbackHtml = renderToStaticMarkup(
+    React.createElement(ValidatorCard, {
+      showActions: false,
+      validator: {
+        ...validator,
+        validator_id: "fallback-shape",
+        title: "Fallback shape",
+        checks: [
+          {
+            check_id: "bad-word-count",
+            title: "Bad word count",
+            description: "",
+            rule: {
+              kind: "word_count",
+              source: "output_text",
+              comparison: { op: "gt", value: Number.NaN }
+            }
+          },
+          {
+            check_id: "bad-json-path-count",
+            title: "Bad json path count",
+            description: "",
+            rule: {
+              kind: "json_path_count",
+              source: "output_json",
+              path: "$.items",
+              comparison: { op: "between", min_value: 1, max_value: null }
+            }
+          }
+        ]
+      }
+    })
+  );
+
+  assert.match(
+    fallbackHtml,
+    /Requires output_text word count to satisfy the configured comparison\./
+  );
+  assert.match(
+    fallbackHtml,
+    /Requires \$\.items in output_json to satisfy the configured count comparison\./
+  );
+  assert.match(
+    fallbackHtml,
+    /bad-word-count - word_count - configured comparison/
+  );
+  assert.match(
+    fallbackHtml,
+    /bad-json-path-count - json_path_count - configured range/
+  );
 });
 
 const {
