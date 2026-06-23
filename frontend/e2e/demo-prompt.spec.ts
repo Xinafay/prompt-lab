@@ -25,13 +25,15 @@ test("demo string prompt and validators tabs show source sections", async ({ pag
   const validators = page.getByRole("region", { name: "Validators" });
   await expect(validators.getByRole("heading", { name: "Validators" })).toBeVisible();
   await expect(
-    validators.getByRole("button", { name: /Reply quality\s+reply-quality/i })
+    validators.getByRole("article", { name: /Reply quality validator/i })
   ).toBeVisible();
   await expect(
-    validators.getByRole("button", { name: /Reply stats\s+reply-stats/i })
+    validators.getByRole("article", { name: /Reply stats validator/i })
   ).toBeVisible();
-  await expect(validators.getByRole("region", { name: "Validator editor" })).toBeVisible();
-  await expect(validators.getByLabel("Type")).toHaveValue("llm_questionnaire");
+  await expect(
+    validators.getByRole("button", { name: /Edit Reply quality validator/i })
+  ).toBeVisible();
+  await expect(validators.getByRole("region", { name: "Validator editor" })).not.toBeVisible();
 });
 
 test("demo string compare shows validator matrix and evidence modal", async ({
@@ -73,18 +75,82 @@ test("demo json prompt shows prompt and model source", async ({ page }) => {
   await expect(prompt.getByText("class DemoReport")).toBeVisible();
 });
 
+test("demo json validators show large read-only cards with all checks", async ({
+  page
+}) => {
+  await page.goto("/demo-json/validators");
+  await selectVersion(page, "v002");
+
+  const validators = page.getByRole("region", { name: "Validators" });
+  const reportShape = validators.getByRole("article", {
+    name: /Report shape validator/i
+  });
+
+  await expect(reportShape).toBeVisible();
+  await expect(reportShape.getByText("Automatic", { exact: true })).toBeVisible();
+  await expect(reportShape.getByText("Enabled", { exact: true })).toBeVisible();
+  await expect(reportShape.getByText("Output only", { exact: true })).toBeVisible();
+  await expect(reportShape.getByText("3 checks", { exact: true })).toBeVisible();
+  await expect(reportShape.getByText("Summary present")).toBeVisible();
+  await expect(
+    reportShape.getByText("Requires $.summary in output_json to exist.")
+  ).toBeVisible();
+  await expect(reportShape.getByText("Three tags")).toBeVisible();
+  await expect(
+    reportShape.getByText("Requires $.tags in output_json to contain exactly 3 items.")
+  ).toBeVisible();
+  await expect(reportShape.getByText("Risk count")).toBeVisible();
+  await expect(
+    reportShape.getByText("Requires $.risks in output_json to contain between 1..3 items.")
+  ).toBeVisible();
+});
+
+test("demo json validator edit modal confirms discarding unsaved edits", async ({
+  page
+}) => {
+  await page.goto("/demo-json/validators");
+  await selectVersion(page, "v002");
+
+  const validators = page.getByRole("region", { name: "Validators" });
+  await validators
+    .getByRole("button", { name: /Edit Report quality validator/i })
+    .click();
+
+  const dialog = page.getByRole("dialog", {
+    name: /Edit validator:/i
+  });
+  const editor = dialog.getByRole("region", { name: "Validator editor" });
+  await editor.getByLabel("Title").first().fill("Discard me");
+  await dialog.getByRole("button", { name: "Cancel" }).first().click();
+
+  await expect(dialog.getByRole("alert")).toContainText(
+    "Discard unsaved validator edits?"
+  );
+  await dialog.getByRole("button", { name: "Keep editing" }).click();
+  await expect(editor.getByLabel("Title").first()).toHaveValue("Discard me");
+
+  await dialog.getByRole("button", { name: "Cancel" }).first().click();
+  await dialog.getByRole("button", { name: "Discard edits" }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await expect(validators.getByText("Discard me")).not.toBeVisible();
+});
+
 test("demo json validators can be saved as next version", async ({ page }) => {
   await page.goto("/demo-json/validators");
   await selectVersion(page, "v001");
 
   const validators = page.getByRole("region", { name: "Validators" });
   await validators
-    .getByRole("button", { name: /Report quality\s+report-quality/i })
+    .getByRole("button", { name: /Edit Report quality validator/i })
     .click();
 
   const editedTitle = `Report quality e2e ${Date.now()}`;
-  const editor = validators.getByRole("region", { name: "Validator editor" });
+  const dialog = page.getByRole("dialog", {
+    name: /Edit validator:/i
+  });
+  const editor = dialog.getByRole("region", { name: "Validator editor" });
   await editor.getByLabel("Title").first().fill(editedTitle);
+  await dialog.getByRole("button", { name: "Save changes" }).click();
 
   await validators.getByRole("button", { name: "Save as next version" }).click();
 
@@ -96,7 +162,7 @@ test("demo json validators can be saved as next version", async ({ page }) => {
     "true"
   );
   await expect(validators.getByText(editedTitle)).toBeVisible();
-  await expect(editor.getByLabel("Title").first()).toHaveValue(editedTitle);
+  await expect(page.getByRole("dialog")).not.toBeVisible();
 });
 
 test("demo json proposal shows new prompt and model plus diff", async ({
@@ -135,12 +201,17 @@ test("demo json validators can overwrite current version", async ({ page }) => {
 
   const validators = page.getByRole("region", { name: "Validators" });
   await validators
-    .getByRole("button", { name: /Report quality\s+report-quality/i })
+    .getByRole("button", { name: /Edit Report quality validator/i })
     .click();
 
   const editedDescription = `Checks whether the structured report is useful and grounded. e2e ${Date.now()}`;
-  const editor = validators.getByRole("region", { name: "Validator editor" });
+  const editDialog = page.getByRole("dialog", {
+    name: /Edit validator:/i
+  });
+  const editor = editDialog.getByRole("region", { name: "Validator editor" });
   await editor.getByLabel("Description").first().fill(editedDescription);
+  await editDialog.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
 
   await validators.getByRole("button", { name: "Overwrite current version" }).click();
   const dialog = page.getByRole("dialog", {
