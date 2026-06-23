@@ -298,6 +298,7 @@ select {
   gap: 4px;
   margin: 12px 0;
   border-bottom: 1px solid #e4e7ec;
+  overflow-x: auto;
 }
 
 .workbench-tab {
