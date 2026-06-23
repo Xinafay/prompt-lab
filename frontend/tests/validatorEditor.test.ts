@@ -481,6 +481,7 @@ test("ValidatorsPreview renders cards in read-only mode", () => {
 
 const validatorsViewModule = await import("../src/components/ValidatorsView.tsx");
 const {
+  ValidatorEditModal,
   getValidatorEditorActionState,
   parseValidatorJsonDraft,
   switchValidatorModalViewModeState,
@@ -622,7 +623,74 @@ test("updateValidatorModalStructuredState clears stale JSON error after structur
   assert.equal(nextState.jsonText, JSON.stringify(changedValidator, null, 2));
 });
 
-test("ValidatorsView module no longer exports selected-index JSON helpers", () => {
-  assert.equal("applyValidatorJsonDraftEdit" in validatorsViewModule, false);
-  assert.equal("createValidatorJsonResetState" in validatorsViewModule, false);
+test("ValidatorEditModal renders only discard confirmation actions when confirming discard", () => {
+  const validator = createDefaultValidator("automatic", []);
+  const html = renderToStaticMarkup(
+    React.createElement(ValidatorEditModal, {
+      closeButtonRef: null,
+      draftValidatorIds: [validator.validator_id],
+      isBusy: false,
+      modalState: {
+        mode: "edit",
+        sourceIndex: 0,
+        initialValidator: JSON.parse(
+          JSON.stringify(validator)
+        ) as ValidatorDefinition,
+        validator,
+        viewMode: "structured",
+        jsonText: JSON.stringify(validator, null, 2),
+        jsonError: null,
+        discardConfirming: true
+      },
+      modalValidationErrors: [],
+      onClose: () => undefined,
+      onDiscardEdits: () => undefined,
+      onKeepEditing: () => undefined,
+      onSave: () => undefined,
+      onSwitchMode: () => undefined,
+      onUpdateJson: () => undefined,
+      onUpdateValidator: () => undefined
+    })
+  );
+
+  assert.match(html, /Discard unsaved validator edits\?/);
+  assert.match(html, /Keep editing/);
+  assert.match(html, /Discard edits/);
+  assert.doesNotMatch(html, /aria-label="Validator editor"/);
+  assert.doesNotMatch(html, /Validator JSON/);
+  assert.doesNotMatch(html, /Save changes/);
+});
+
+test("ValidatorEditModal renders normal editor controls outside discard confirmation", () => {
+  const validator = createDefaultValidator("automatic", []);
+  const html = renderToStaticMarkup(
+    React.createElement(ValidatorEditModal, {
+      closeButtonRef: null,
+      draftValidatorIds: [validator.validator_id],
+      isBusy: false,
+      modalState: {
+        mode: "edit",
+        sourceIndex: 0,
+        initialValidator: JSON.parse(
+          JSON.stringify(validator)
+        ) as ValidatorDefinition,
+        validator,
+        viewMode: "structured",
+        jsonText: JSON.stringify(validator, null, 2),
+        jsonError: null,
+        discardConfirming: false
+      },
+      modalValidationErrors: [],
+      onClose: () => undefined,
+      onDiscardEdits: () => undefined,
+      onKeepEditing: () => undefined,
+      onSave: () => undefined,
+      onSwitchMode: () => undefined,
+      onUpdateJson: () => undefined,
+      onUpdateValidator: () => undefined
+    })
+  );
+
+  assert.match(html, /aria-label="Validator editor"/);
+  assert.match(html, /Save changes/);
 });

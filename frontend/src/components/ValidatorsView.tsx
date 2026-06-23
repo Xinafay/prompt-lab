@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  type Ref,
   useRef,
   useState,
   type KeyboardEvent
@@ -89,6 +90,167 @@ export function switchValidatorModalViewModeState(
     jsonError: null,
     discardConfirming: false
   };
+}
+
+interface ValidatorEditModalProps {
+  closeButtonRef?: Ref<HTMLButtonElement> | null;
+  draftValidatorIds: string[];
+  isBusy: boolean;
+  modalState: ValidatorModalState;
+  modalValidationErrors: string[];
+  onClose: () => void;
+  onDiscardEdits: () => void;
+  onKeepEditing: () => void;
+  onSave: () => void;
+  onSwitchMode: (mode: ValidatorEditMode) => void;
+  onUpdateJson: (value: string) => void;
+  onUpdateValidator: (validator: ValidatorDefinition) => void;
+}
+
+export function ValidatorEditModal({
+  closeButtonRef = null,
+  draftValidatorIds,
+  isBusy,
+  modalState,
+  modalValidationErrors,
+  onClose,
+  onDiscardEdits,
+  onKeepEditing,
+  onSave,
+  onSwitchMode,
+  onUpdateJson,
+  onUpdateValidator
+}: ValidatorEditModalProps) {
+  return (
+    <div
+      aria-labelledby="validators-editor-modal-title"
+      aria-modal="true"
+      className="validation-detail-modal validators-editor-modal"
+      role="dialog"
+    >
+      <div className="validation-detail-header validators-editor-modal-header">
+        <div>
+          <h2 id="validators-editor-modal-title">{validatorModalTitle(modalState)}</h2>
+          <p>
+            {modalState.discardConfirming
+              ? "Discard validator edits or return to the editor."
+              : "Save changes here to update the local validators draft, then use the version actions to persist it."}
+          </p>
+        </div>
+        <button
+          ref={closeButtonRef}
+          className="secondary-action"
+          onClick={onClose}
+          type="button"
+        >
+          Close
+        </button>
+      </div>
+
+      {modalState.discardConfirming ? (
+        <div
+          className="settings-navigation-modal validators-editor-discard-confirm"
+          role="alert"
+        >
+          <div>
+            <h2>Discard unsaved validator edits?</h2>
+            <p>These changes have not been applied to the local draft.</p>
+          </div>
+          <div className="modal-actions">
+            <button className="secondary-action" onClick={onKeepEditing} type="button">
+              Keep editing
+            </button>
+            <button
+              className="secondary-action danger-action"
+              onClick={onDiscardEdits}
+              type="button"
+            >
+              Discard edits
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div aria-label="Validator edit mode" className="proposal-tabs" role="tablist">
+            <button
+              aria-selected={modalState.viewMode === "structured"}
+              className={
+                modalState.viewMode === "structured"
+                  ? "proposal-tab is-active"
+                  : "proposal-tab"
+              }
+              onClick={() => onSwitchMode("structured")}
+              role="tab"
+              type="button"
+            >
+              Structured
+            </button>
+            <button
+              aria-selected={modalState.viewMode === "json"}
+              className={
+                modalState.viewMode === "json"
+                  ? "proposal-tab is-active"
+                  : "proposal-tab"
+              }
+              onClick={() => onSwitchMode("json")}
+              role="tab"
+              type="button"
+            >
+              JSON
+            </button>
+          </div>
+
+          {modalState.jsonError !== null ? (
+            <div className="settings-error">
+              Invalid validator JSON: {modalState.jsonError}
+            </div>
+          ) : null}
+          {modalValidationErrors.length > 0 ? (
+            <div className="settings-error">{modalValidationErrors.join(" ")}</div>
+          ) : null}
+
+          <div className="validators-editor-modal-body">
+            {modalState.viewMode === "json" ? (
+              <label className="validator-json-field">
+                <span>Validator JSON</span>
+                <textarea
+                  aria-label="Validator JSON"
+                  className="validator-json-editor"
+                  rows={18}
+                  value={modalState.jsonText}
+                  onChange={(event) => onUpdateJson(event.target.value)}
+                />
+              </label>
+            ) : (
+              <ValidatorEditor
+                existingValidatorIds={draftValidatorIds}
+                onChange={onUpdateValidator}
+                validator={modalState.validator}
+              />
+            )}
+          </div>
+
+          <div className="modal-actions validators-editor-modal-actions">
+            <button className="secondary-action" onClick={onClose} type="button">
+              Cancel
+            </button>
+            <button
+              className="primary-action"
+              disabled={
+                isBusy ||
+                modalState.jsonError !== null ||
+                modalValidationErrors.length > 0
+              }
+              onClick={onSave}
+              type="button"
+            >
+              Save changes
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 const validatorTypes: ValidatorType[] = ["llm_questionnaire", "automatic"];
@@ -566,158 +728,27 @@ export function ValidatorsView({
           role="presentation"
         >
           <div
-            aria-labelledby="validators-editor-modal-title"
-            aria-modal="true"
-            className="validation-detail-modal validators-editor-modal"
             onKeyDown={handleModalKeyDown}
             onMouseDown={(event) => event.stopPropagation()}
-            role="dialog"
           >
-            <div className="validation-detail-header validators-editor-modal-header">
-              <div>
-                <h2 id="validators-editor-modal-title">
-                  {validatorModalTitle(modalState)}
-                </h2>
-                <p>
-                  Save changes here to update the local validators draft, then use
-                  the version actions to persist it.
-                </p>
-              </div>
-              <button
-                ref={closeButtonRef}
-                className="secondary-action"
-                onClick={requestCloseModal}
-                type="button"
-              >
-                Close
-              </button>
-            </div>
-
-            {modalState.discardConfirming ? (
-              <div
-                className="settings-navigation-modal validators-editor-discard-confirm"
-                role="alert"
-              >
-                <div>
-                  <h2>Discard unsaved validator edits?</h2>
-                  <p>These changes have not been applied to the local draft.</p>
-                </div>
-                <div className="modal-actions">
-                  <button
-                    className="secondary-action"
-                    onClick={() =>
-                      setModalState((current) =>
-                        current === null
-                          ? null
-                          : { ...current, discardConfirming: false }
-                      )
-                    }
-                    type="button"
-                  >
-                    Keep editing
-                  </button>
-                  <button
-                    className="secondary-action danger-action"
-                    onClick={closeModal}
-                    type="button"
-                  >
-                    Discard edits
-                  </button>
-                </div>
-              </div>
-            ) : null}
-            {modalState.discardConfirming ? null : (
-              <>
-                <div
-                  aria-label="Validator edit mode"
-                  className="proposal-tabs"
-                  role="tablist"
-                >
-                  <button
-                    aria-selected={modalState.viewMode === "structured"}
-                    className={
-                      modalState.viewMode === "structured"
-                        ? "proposal-tab is-active"
-                        : "proposal-tab"
-                    }
-                    onClick={() => switchModalViewMode("structured")}
-                    role="tab"
-                    type="button"
-                  >
-                    Structured
-                  </button>
-                  <button
-                    aria-selected={modalState.viewMode === "json"}
-                    className={
-                      modalState.viewMode === "json"
-                        ? "proposal-tab is-active"
-                        : "proposal-tab"
-                    }
-                    onClick={() => switchModalViewMode("json")}
-                    role="tab"
-                    type="button"
-                  >
-                    JSON
-                  </button>
-                </div>
-
-                {modalState.jsonError !== null ? (
-                  <div className="settings-error">
-                    Invalid validator JSON: {modalState.jsonError}
-                  </div>
-                ) : null}
-                {modalValidationErrors.length > 0 ? (
-                  <div className="settings-error">
-                    {modalValidationErrors.join(" ")}
-                  </div>
-                ) : null}
-
-                <div className="validators-editor-modal-body">
-                  {modalState.viewMode === "json" ? (
-                    <label className="validator-json-field">
-                      <span>Validator JSON</span>
-                      <textarea
-                        aria-label="Validator JSON"
-                        className="validator-json-editor"
-                        rows={18}
-                        value={modalState.jsonText}
-                        onChange={(event) => updateModalJson(event.target.value)}
-                      />
-                    </label>
-                  ) : (
-                    <ValidatorEditor
-                      existingValidatorIds={draft.map(
-                        (validator) => validator.validator_id
-                      )}
-                      onChange={updateModalValidator}
-                      validator={modalState.validator}
-                    />
-                  )}
-                </div>
-
-                <div className="modal-actions validators-editor-modal-actions">
-                  <button
-                    className="secondary-action"
-                    onClick={requestCloseModal}
-                    type="button"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    className="primary-action"
-                    disabled={
-                      isBusy ||
-                      modalState.jsonError !== null ||
-                      modalValidationErrors.length > 0
-                    }
-                    onClick={saveModalValidator}
-                    type="button"
-                  >
-                    Save changes
-                  </button>
-                </div>
-              </>
-            )}
+            <ValidatorEditModal
+              closeButtonRef={closeButtonRef}
+              draftValidatorIds={draft.map((validator) => validator.validator_id)}
+              isBusy={isBusy}
+              modalState={modalState}
+              modalValidationErrors={modalValidationErrors}
+              onClose={requestCloseModal}
+              onDiscardEdits={closeModal}
+              onKeepEditing={() =>
+                setModalState((current) =>
+                  current === null ? null : { ...current, discardConfirming: false }
+                )
+              }
+              onSave={saveModalValidator}
+              onSwitchMode={switchModalViewMode}
+              onUpdateJson={updateModalJson}
+              onUpdateValidator={updateModalValidator}
+            />
           </div>
         </div>
       ) : null}
