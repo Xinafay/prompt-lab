@@ -273,6 +273,7 @@ test("validator card renders automatic checks as read-only prose", () => {
 
   const html = renderToStaticMarkup(
     React.createElement(ValidatorCard, {
+      showActions: true,
       disabled: false,
       onDelete: () => undefined,
       onDuplicate: () => undefined,
@@ -289,6 +290,7 @@ test("validator card renders automatic checks as read-only prose", () => {
   assert.match(html, /Requires \$\.summary in output_json to exist\./);
   assert.match(html, /Requires \$\.tags in output_json to contain exactly 3 items\./);
   assert.match(html, /summary-present - json_path_exists/);
+  assert.match(html, /three-tags - json_path_count - eq 3/);
   assert.doesNotMatch(html, /<input|<select|<textarea/);
 });
 
@@ -306,6 +308,7 @@ test("validator card renders llm questionnaire checks read-only", () => {
 
   const html = renderToStaticMarkup(
     React.createElement(ValidatorCard, {
+      showActions: true,
       disabled: false,
       onDelete: () => undefined,
       onDuplicate: () => undefined,
@@ -318,6 +321,43 @@ test("validator card renders llm questionnaire checks read-only", () => {
   assert.match(html, /Asks: Is the summary grounded in the source material\?/);
   assert.match(html, /grounded-summary - llm_questionnaire/);
   assert.doesNotMatch(html, /<input|<select|<textarea/);
+});
+
+test("bare ValidatorCard renders without action buttons", () => {
+  const validator: ValidatorDefinition = {
+    schema_version: "prompt_lab.validator/v1",
+    validator_id: "bare-card",
+    type: "automatic",
+    title: "Bare card",
+    description: "",
+    enabled: true,
+    input_scope: "output_only",
+    checks: [
+      {
+        check_id: "summary-present",
+        title: "Summary present",
+        description: "Summary should exist in output_json.",
+        rule: {
+          kind: "json_path_exists",
+          source: "output_json",
+          path: "$.summary"
+        }
+      }
+    ]
+  };
+
+  const html = renderToStaticMarkup(
+    React.createElement(ValidatorCard, {
+      validator
+    })
+  );
+
+  assert.match(html, /Bare card/);
+  assert.match(html, /summary-present - json_path_exists/);
+  assert.doesNotMatch(html, /<button/);
+  assert.doesNotMatch(html, />\s*Edit\s*</);
+  assert.doesNotMatch(html, />\s*Duplicate\s*</);
+  assert.doesNotMatch(html, />\s*Delete\s*</);
 });
 
 test("validator card formatting helpers use human-readable labels", () => {

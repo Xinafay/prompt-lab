@@ -13,7 +13,7 @@ interface ValidatorCardReadOnlyProps {
 }
 
 interface ValidatorCardInteractiveProps {
-  showActions?: true;
+  showActions: true;
   disabled: boolean;
   onDelete: (event: MouseEvent<HTMLButtonElement>) => void;
   onDuplicate: (event: MouseEvent<HTMLButtonElement>) => void;
@@ -27,6 +27,22 @@ type ComparisonRender =
   | { kind: "configured" }
   | { kind: "configuredRange" }
   | { kind: "value"; text: string };
+
+function comparisonMetadataText(comparison: CountComparison | null | undefined): string {
+  if (comparison === null || comparison === undefined) {
+    return "configured comparison";
+  }
+  if (comparison.op === "between") {
+    if (!isFiniteComparisonValue(comparison.min_value) || !isFiniteComparisonValue(comparison.max_value)) {
+      return "configured range";
+    }
+    return `between ${comparison.min_value}..${comparison.max_value}`;
+  }
+  if (!isFiniteComparisonValue(comparison.value)) {
+    return "configured comparison";
+  }
+  return `${comparison.op} ${comparison.value}`;
+}
 
 export function validatorTypeLabel(type: ValidatorType): string {
   if (type === "llm_questionnaire") return "LLM questionnaire";
@@ -99,22 +115,16 @@ export function describeAutomaticRule(rule: AutomaticRule): string {
 }
 
 function automaticRuleMetadata(rule: AutomaticRule): string {
-  const comparison = comparisonText(rule.comparison);
+  if (rule.kind === "json_path_exists") {
+    return rule.kind;
+  }
+  const comparison = comparisonMetadataText(rule.comparison);
 
-  if (comparison.kind === "configured") {
-    return `${rule.kind} - configured comparison`;
-  }
-  if (comparison.kind === "configuredRange") {
-    return `${rule.kind} - configured range`;
-  }
-  if (comparison.kind === "value") {
-    return `${rule.kind} - ${comparison.text}`;
-  }
-  return `${rule.kind} - configured comparison`;
+  return `${rule.kind} - ${comparison}`;
 }
 
 export function ValidatorCard({
-  showActions = true,
+  showActions = false,
   validator,
   ...actions
 }: ValidatorCardProps) {
