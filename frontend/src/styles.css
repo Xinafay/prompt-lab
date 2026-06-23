@@ -801,6 +801,16 @@ select {
   gap: 16px;
 }
 
+.validators-overview-toolbar {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.validators-card-list {
+  display: grid;
+  gap: 16px;
+}
+
 .validators-editor-actions,
 .validators-editor-add-actions,
 .validators-editor-detail-actions {
@@ -813,57 +823,13 @@ select {
   justify-content: flex-end;
 }
 
-.validators-editor-layout {
-  display: grid;
-  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
-  gap: 16px;
-}
-
-.validators-editor-list,
-.validators-editor-detail,
 .validator-editor,
-.validator-list-items,
 .validator-json-field {
   display: grid;
   gap: 12px;
   min-width: 0;
 }
 
-.validator-list-item {
-  display: grid;
-  gap: 4px;
-  width: 100%;
-  min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid #d0d5dd;
-  border-radius: 8px;
-  background: #ffffff;
-  text-align: left;
-  cursor: pointer;
-}
-
-.validator-list-item:hover,
-.validator-list-item.is-active {
-  border-color: #2563eb;
-}
-
-.validator-list-item.is-active {
-  box-shadow: inset 3px 0 0 #2563eb;
-}
-
-.validator-list-item strong,
-.validator-list-item span {
-  overflow-wrap: anywhere;
-}
-
-.validator-list-item strong {
-  color: #111827;
-  font-size: 13px;
-  font-weight: 750;
-  line-height: 1.35;
-}
-
-.validator-list-item span,
 .validator-json-field span {
   color: #667085;
   font-size: 12px;
@@ -2141,11 +2107,67 @@ select {
   box-shadow: 0 24px 60px rgb(16 24 40 / 0.22);
 }
 
+.validators-editor-modal {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  gap: 14px;
+  width: min(1180px, 100%);
+  max-height: calc(100vh - 48px);
+  padding: 18px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgb(16 24 40 / 0.22);
+}
+
 .validation-detail-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
+}
+
+.validators-editor-modal-header,
+.validators-editor-modal-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.validators-editor-modal-header h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.validators-editor-modal-header p {
+  margin: 4px 0 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.validators-editor-modal-body {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.validators-editor-modal-actions {
+  justify-content: flex-end;
+}
+
+.validators-editor-discard-confirm {
+  width: 100%;
+  max-width: none;
+  box-shadow: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .validation-detail-header h2,
@@ -2704,8 +2726,9 @@ select {
   .bindings-row,
   .runs-drilldown,
   .run-detail-meta,
-  .validators-editor-layout,
+  .validator-card-check,
   .validator-check-editor,
+  .validators-editor-modal,
   .validation-summary,
   .validation-check,
   .comparison-controls {
@@ -2713,8 +2736,18 @@ select {
   }
 
   .validator-card-header,
-  .validator-card-actions {
+  .validators-editor-modal-header,
+  .validators-editor-modal-actions {
     display: grid;
+  }
+
+  .validator-card-actions {
+    justify-content: flex-start;
+  }
+
+  .validators-editor-modal {
+    padding: 12px;
+    max-height: calc(100vh - 32px);
   }
 
   .validation-card-header,
