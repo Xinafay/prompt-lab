@@ -229,6 +229,110 @@ test("ValidatorEditor renders llm and automatic controls", () => {
 });
 
 const {
+  describeAutomaticRule,
+  inputScopeLabel,
+  validatorTypeLabel,
+  ValidatorCard
+} = await import("../src/components/ValidatorCard.tsx");
+
+test("validator card renders automatic checks as read-only prose", () => {
+  const validator: ValidatorDefinition = {
+    schema_version: "prompt_lab.validator/v1",
+    validator_id: "report-shape",
+    type: "automatic",
+    title: "Report shape",
+    description: "Local JSON checks that exercise automatic validators.",
+    enabled: true,
+    input_scope: "output_only",
+    checks: [
+      {
+        check_id: "summary-present",
+        title: "Summary present",
+        description: "The structured output must include a summary field.",
+        rule: {
+          kind: "json_path_exists",
+          source: "output_json",
+          path: "$.summary"
+        }
+      },
+      {
+        check_id: "three-tags",
+        title: "Three tags",
+        description: "The tags list should contain exactly three items.",
+        rule: {
+          kind: "json_path_count",
+          source: "output_json",
+          path: "$.tags",
+          comparison: { op: "eq", value: 3 }
+        }
+      }
+    ]
+  };
+
+  const html = renderToStaticMarkup(
+    React.createElement(ValidatorCard, {
+      disabled: false,
+      onDelete: () => undefined,
+      onDuplicate: () => undefined,
+      onEdit: () => undefined,
+      validator
+    })
+  );
+
+  assert.match(html, /Report shape/);
+  assert.match(html, /Automatic/);
+  assert.match(html, /Enabled/);
+  assert.match(html, /Output only/);
+  assert.match(html, /2 checks/);
+  assert.match(html, /Requires \$\.summary in output_json to exist\./);
+  assert.match(html, /Requires \$\.tags in output_json to contain exactly 3 items\./);
+  assert.match(html, /summary-present - json_path_exists/);
+  assert.doesNotMatch(html, /<input|<select|<textarea/);
+});
+
+test("validator card renders llm questionnaire checks read-only", () => {
+  const validator = createDefaultValidator("llm_questionnaire", []);
+  if (validator.type !== "llm_questionnaire") throw new Error("Expected llm validator");
+  validator.validator_id = "report-quality";
+  validator.title = "Report quality";
+  validator.checks[0] = {
+    check_id: "grounded-summary",
+    title: "Grounded summary",
+    description: "Checks whether the summary is grounded.",
+    question: "Is the summary grounded in the source material?"
+  };
+
+  const html = renderToStaticMarkup(
+    React.createElement(ValidatorCard, {
+      disabled: false,
+      onDelete: () => undefined,
+      onDuplicate: () => undefined,
+      onEdit: () => undefined,
+      validator
+    })
+  );
+
+  assert.match(html, /LLM questionnaire/);
+  assert.match(html, /Asks: Is the summary grounded in the source material\?/);
+  assert.match(html, /grounded-summary - llm_questionnaire/);
+  assert.doesNotMatch(html, /<input|<select|<textarea/);
+});
+
+test("validator card formatting helpers use human-readable labels", () => {
+  assert.equal(validatorTypeLabel("automatic"), "Automatic");
+  assert.equal(validatorTypeLabel("llm_questionnaire"), "LLM questionnaire");
+  assert.equal(inputScopeLabel("output_prompt_and_case"), "Output + prompt + case");
+  assert.equal(
+    describeAutomaticRule({
+      kind: "word_count",
+      source: "output_text",
+      comparison: { op: "gte", value: 10 }
+    }),
+    "Requires output_text word count to be at least 10."
+  );
+});
+
+const {
   applyValidatorJsonDraftEdit,
   createValidatorJsonResetState,
   getValidatorEditorActionState,

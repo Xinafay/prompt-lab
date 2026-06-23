@@ -686,125 +686,114 @@ select {
 
 .validators-preview {
   display: grid;
-  gap: 12px;
-  padding: 14px;
+  gap: 16px;
 }
 
-.validator-preview-card {
+.validator-card {
   display: grid;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid #e4e7ec;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid #d8dee8;
   border-radius: 8px;
   background: #ffffff;
 }
 
-.validator-preview-card.is-disabled {
+.validator-card.is-disabled {
   background: #f8fafc;
 }
 
-.validator-preview-header {
+.validator-card-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 18px;
 }
 
-.validator-preview-header h4 {
+.validator-card-header h3 {
   margin: 0;
   color: #111827;
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 760;
-  line-height: 1.3;
+  line-height: 1.25;
 }
 
-.validator-preview-header p {
-  margin: 4px 0 0;
-  color: #667085;
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-.validator-preview-pills {
+.validator-card-meta, .validator-card-actions {
   display: flex;
-  flex: 0 0 auto;
   flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 6px;
-  max-width: 360px;
+  gap: 8px;
 }
 
-.neutral-pill,
-.status-pill-pass,
-.status-pill-empty {
+.validator-card-meta {
+  margin-top: 8px;
+}
+
+.validator-card-meta span {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
   padding: 0 8px;
   border-radius: 999px;
+  background: #eef2f6;
+  color: #344054;
   font-size: 12px;
   font-weight: 750;
   line-height: 1;
-  white-space: nowrap;
 }
 
-.neutral-pill {
-  background: #eef2f6;
-  color: #344054;
+.validator-card-description {
+  margin: 0;
+  max-width: 900px;
+  color: #475467;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
-.status-pill-pass {
-  background: #ecfdf3;
-  color: #027a48;
-}
-
-.status-pill-empty {
-  background: #f2f4f7;
-  color: #667085;
-}
-
-.validator-check-preview-list {
+.validator-card-checks {
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
-.validator-check-preview {
+.validator-card-check {
   display: grid;
-  grid-template-columns: minmax(160px, 240px) minmax(0, 1fr);
-  gap: 12px;
-  padding: 10px 12px;
+  grid-template-columns: minmax(180px, 280px) minmax(0, 1fr);
+  gap: 16px;
+  padding: 12px;
   border: 1px solid #eef1f5;
-  border-radius: 6px;
+  border-radius: 8px;
   background: #fcfcfd;
 }
 
-.validator-check-preview strong,
-.validator-check-preview span,
-.validator-check-preview p {
-  overflow-wrap: anywhere;
+.validator-card-check h4, .validator-card-check p {
+  margin: 0;
 }
 
-.validator-check-preview strong {
-  display: block;
+.validator-card-check h4 {
   color: #111827;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 750;
   line-height: 1.35;
 }
 
-.validator-check-preview span {
-  display: block;
-  margin-top: 3px;
-  color: #667085;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.validator-check-preview p {
-  margin: 0;
+.validator-card-check p {
   color: #344054;
   font-size: 13px;
   line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.validator-card-check h4 + p {
+  margin-top: 4px;
+  color: #667085;
+}
+
+.validator-card-check span {
+  display: block;
+  margin-top: 6px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .validators-editor-panel {
@@ -2717,20 +2706,15 @@ select {
   .run-detail-meta,
   .validators-editor-layout,
   .validator-check-editor,
-  .validator-check-preview,
   .validation-summary,
   .validation-check,
   .comparison-controls {
     grid-template-columns: 1fr;
   }
 
-  .validator-preview-header {
+  .validator-card-header,
+  .validator-card-actions {
     display: grid;
-  }
-
-  .validator-preview-pills {
-    justify-content: flex-start;
-    max-width: none;
   }
 
   .validation-card-header,
