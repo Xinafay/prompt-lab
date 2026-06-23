@@ -12,6 +12,7 @@ interface ValidatorCardProps {
   onDelete: (event: MouseEvent<HTMLButtonElement>) => void;
   onDuplicate: (event: MouseEvent<HTMLButtonElement>) => void;
   onEdit: (event: MouseEvent<HTMLButtonElement>) => void;
+  showActions?: boolean;
   validator: ValidatorDefinition;
 }
 
@@ -29,9 +30,16 @@ export function inputScopeLabel(scope: InputScope): string {
   return scope;
 }
 
+function isFiniteComparisonValue(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
 function comparisonPhrase(comparison: CountComparison | null | undefined): string {
-  if (comparison === null || comparison === undefined) return "without a comparison";
+  if (comparison === null || comparison === undefined) return "using the configured comparison";
   if (comparison.op === "between") {
+    if (!isFiniteComparisonValue(comparison.min_value) || !isFiniteComparisonValue(comparison.max_value)) {
+      return "using the configured comparison range";
+    }
     return `between ${comparison.min_value} and ${comparison.max_value}`;
   }
   const operatorLabels: Record<Exclude<CountComparison["op"], "between">, string> = {
@@ -41,6 +49,9 @@ function comparisonPhrase(comparison: CountComparison | null | undefined): strin
     lt: "less than",
     lte: "at most"
   };
+  if (!isFiniteComparisonValue(comparison.value)) {
+    return "using the configured comparison";
+  }
   return `${operatorLabels[comparison.op]} ${comparison.value}`;
 }
 
@@ -52,6 +63,10 @@ export function describeAutomaticRule(rule: AutomaticRule): string {
     return `Requires ${path} in ${source} to exist.`;
   }
   if (rule.kind === "json_path_count") {
+    const comparison = comparisonPhrase(rule.comparison);
+    if (comparison.startsWith("using the configured")) {
+      return `Requires ${path} in ${source} to satisfy ${comparison}.`;
+    }
     return `Requires ${path} in ${source} to contain ${comparisonPhrase(
       rule.comparison
     )} items.`;
@@ -88,6 +103,7 @@ export function ValidatorCard({
   onDelete,
   onDuplicate,
   onEdit,
+  showActions = true,
   validator
 }: ValidatorCardProps) {
   const title = validator.title || "(untitled)";
@@ -109,35 +125,37 @@ export function ValidatorCard({
             <span>{checkLabel}</span>
           </div>
         </div>
-        <div className="validator-card-actions">
-          <button
-            className="primary-action"
-            disabled={disabled}
-            onClick={onEdit}
-            type="button"
-            aria-label={`Edit ${title} validator`}
-          >
-            Edit
-          </button>
-          <button
-            className="secondary-action"
-            disabled={disabled}
-            onClick={onDuplicate}
-            type="button"
-            aria-label={`Duplicate ${title} validator`}
-          >
-            Duplicate
-          </button>
-          <button
-            className="secondary-action danger-action"
-            disabled={disabled}
-            onClick={onDelete}
-            type="button"
-            aria-label={`Delete ${title} validator`}
-          >
-            Delete
-          </button>
-        </div>
+        {showActions ? (
+          <div className="validator-card-actions">
+            <button
+              className="primary-action"
+              disabled={disabled}
+              onClick={onEdit}
+              type="button"
+              aria-label={`Edit ${title} validator`}
+            >
+              Edit
+            </button>
+            <button
+              className="secondary-action"
+              disabled={disabled}
+              onClick={onDuplicate}
+              type="button"
+              aria-label={`Duplicate ${title} validator`}
+            >
+              Duplicate
+            </button>
+            <button
+              className="secondary-action danger-action"
+              disabled={disabled}
+              onClick={onDelete}
+              type="button"
+              aria-label={`Delete ${title} validator`}
+            >
+              Delete
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {validator.description.trim().length > 0 ? (

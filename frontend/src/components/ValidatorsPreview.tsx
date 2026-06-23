@@ -18,6 +18,7 @@ export function ValidatorsPreview({ validators }: ValidatorsPreviewProps) {
           <ValidatorCard
             disabled={true}
             key={validator.validator_id}
+            showActions={false}
             onDelete={() => undefined}
             onDuplicate={() => undefined}
             onEdit={() => undefined}

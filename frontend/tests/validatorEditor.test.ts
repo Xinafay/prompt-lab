@@ -230,10 +230,12 @@ test("ValidatorEditor renders llm and automatic controls", () => {
 
 const {
   describeAutomaticRule,
+  ValidatorCard,
   inputScopeLabel,
-  validatorTypeLabel,
-  ValidatorCard
+  validatorTypeLabel
 } = await import("../src/components/ValidatorCard.tsx");
+
+const { ValidatorsPreview } = await import("../src/components/ValidatorsPreview.tsx");
 
 test("validator card renders automatic checks as read-only prose", () => {
   const validator: ValidatorDefinition = {
@@ -330,6 +332,51 @@ test("validator card formatting helpers use human-readable labels", () => {
     }),
     "Requires output_text word count to be at least 10."
   );
+  assert.equal(
+    describeAutomaticRule({
+      kind: "word_count",
+      source: "output_text",
+      comparison: { op: "gte", value: NaN }
+    }),
+    "Requires output_text word count to be using the configured comparison."
+  );
+  assert.equal(
+    describeAutomaticRule({
+      kind: "json_path_count",
+      source: "output_json",
+      path: "$.tags",
+      comparison: { op: "between", min_value: 2, max_value: null }
+    }),
+    "Requires $.tags in output_json to satisfy using the configured comparison range."
+  );
+});
+
+test("ValidatorsPreview renders cards in read-only mode", () => {
+  const validator = createDefaultValidator("automatic", []);
+  if (validator.type !== "automatic") throw new Error("Expected automatic validator");
+  validator.validator_id = "preview-shape";
+  validator.title = "Preview shape";
+  validator.input_scope = "output_prompt_and_case";
+  validator.checks[0].rule = {
+    kind: "word_count",
+    source: "output_text",
+    comparison: { op: "eq", value: 1 }
+  };
+
+  const html = renderToStaticMarkup(
+    React.createElement(ValidatorsPreview, {
+      validators: [validator]
+    })
+  );
+
+  assert.match(html, /Preview shape/);
+  assert.match(html, /Output \+ prompt \+ case/);
+  assert.match(html, /Automatic/);
+  assert.match(html, /Requires output_text word count to be exactly 1\./);
+  assert.doesNotMatch(html, /<button/);
+  assert.doesNotMatch(html, />\s*Edit\s*</);
+  assert.doesNotMatch(html, />\s*Duplicate\s*</);
+  assert.doesNotMatch(html, />\s*Delete\s*</);
 });
 
 const {
