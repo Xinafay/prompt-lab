@@ -488,8 +488,11 @@ const {
   ValidatorsView
 } = await import("../src/components/ValidatorsView.tsx");
 
-test("ValidatorsView renders add duplicate delete and save actions", () => {
-  const validator = createDefaultValidator("llm_questionnaire", []);
+test("ValidatorsView renders validator cards instead of the editor by default", () => {
+  const validator = createDefaultValidator("automatic", []);
+  validator.validator_id = "report-shape";
+  validator.title = "Report shape";
+
   const html = renderToStaticMarkup(
     React.createElement(ValidatorsView, {
       isBusy: false,
@@ -503,10 +506,14 @@ test("ValidatorsView renders add duplicate delete and save actions", () => {
   );
 
   assert.match(html, /Add validator/);
+  assert.match(html, /Report shape/);
+  assert.match(html, /Edit/);
   assert.match(html, /Duplicate/);
   assert.match(html, /Delete/);
   assert.match(html, /Overwrite current version/);
   assert.match(html, /Save as next version/);
+  assert.doesNotMatch(html, /aria-label="Validator editor"/);
+  assert.doesNotMatch(html, /Validator JSON/);
 });
 
 test("shouldEmitValidatorsDraft ignores semantically identical payloads", () => {
