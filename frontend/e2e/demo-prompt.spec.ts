@@ -120,7 +120,7 @@ test("demo json validators show large read-only cards with all checks", async ({
   ).toBeVisible();
   await expect(reportShape.getByText("Risk count")).toBeVisible();
   await expect(
-    reportShape.getByText("Requires $.risks in output_json to contain between 1..3 items.")
+    reportShape.getByText("Requires $.risks in output_json to contain between 1 and 3 items.")
   ).toBeVisible();
 });
 

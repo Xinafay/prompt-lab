@@ -72,7 +72,7 @@ function comparisonText(comparison: CountComparison | null | undefined): Compari
     if (!isFiniteComparisonValue(comparison.min_value) || !isFiniteComparisonValue(comparison.max_value)) {
       return { kind: "configuredRange" };
     }
-    return { kind: "value", text: `between ${comparison.min_value}..${comparison.max_value}` };
+    return { kind: "value", text: `between ${comparison.min_value} and ${comparison.max_value}` };
   }
   const operatorLabels: Record<Exclude<CountComparison["op"], "between">, string> = {
     eq: "exactly",

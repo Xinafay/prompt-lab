@@ -83,6 +83,7 @@ export function switchValidatorModalViewModeState(
   state: ValidatorModalState,
   mode: ValidatorEditMode
 ): ValidatorModalState {
+  if (state.jsonError !== null) return state;
   return {
     ...state,
     viewMode: mode,
@@ -121,6 +122,8 @@ export function ValidatorEditModal({
   onUpdateJson,
   onUpdateValidator
 }: ValidatorEditModalProps) {
+  const modeSwitchDisabled = isBusy || modalState.jsonError !== null;
+
   return (
     <div
       aria-labelledby="validators-editor-modal-title"
@@ -137,14 +140,16 @@ export function ValidatorEditModal({
               : "Save changes here to update the local validators draft, then use the version actions to persist it."}
           </p>
         </div>
-        <button
-          ref={closeButtonRef}
-          className="secondary-action"
-          onClick={onClose}
-          type="button"
-        >
-          Close
-        </button>
+        {modalState.discardConfirming ? null : (
+          <button
+            ref={closeButtonRef}
+            className="secondary-action"
+            onClick={onClose}
+            type="button"
+          >
+            Close
+          </button>
+        )}
       </div>
 
       {modalState.discardConfirming ? (
@@ -179,6 +184,7 @@ export function ValidatorEditModal({
                   ? "proposal-tab is-active"
                   : "proposal-tab"
               }
+              disabled={modeSwitchDisabled}
               onClick={() => onSwitchMode("structured")}
               role="tab"
               type="button"
@@ -192,6 +198,7 @@ export function ValidatorEditModal({
                   ? "proposal-tab is-active"
                   : "proposal-tab"
               }
+              disabled={modeSwitchDisabled}
               onClick={() => onSwitchMode("json")}
               role="tab"
               type="button"

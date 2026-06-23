@@ -574,8 +574,9 @@ test("validator editor action state blocks unsafe controls while JSON is invalid
   assert.equal(state.resetDisabled, false);
 });
 
-test("switchValidatorModalViewModeState clears stale JSON error in structured mode", () => {
+test("switchValidatorModalViewModeState keeps invalid JSON edits in place", () => {
   const validator = createDefaultValidator("llm_questionnaire", []);
+  const invalidJsonText = '{ "validator_id": ';
   const nextState = switchValidatorModalViewModeState(
     {
       mode: "edit",
@@ -585,17 +586,17 @@ test("switchValidatorModalViewModeState clears stale JSON error in structured mo
       ) as ValidatorDefinition,
       validator,
       viewMode: "json",
-      jsonText: '{ "validator_id": ',
+      jsonText: invalidJsonText,
       jsonError: "Unexpected end of JSON input",
       discardConfirming: true
     },
     "structured"
   );
 
-  assert.equal(nextState.viewMode, "structured");
-  assert.equal(nextState.jsonError, null);
-  assert.equal(nextState.discardConfirming, false);
-  assert.equal(nextState.jsonText, JSON.stringify(validator, null, 2));
+  assert.equal(nextState.viewMode, "json");
+  assert.equal(nextState.jsonError, "Unexpected end of JSON input");
+  assert.equal(nextState.discardConfirming, true);
+  assert.equal(nextState.jsonText, invalidJsonText);
 });
 
 test("updateValidatorModalStructuredState clears stale JSON error after structured edits", () => {
@@ -659,6 +660,7 @@ test("ValidatorEditModal renders only discard confirmation actions when confirmi
   assert.doesNotMatch(html, /aria-label="Validator editor"/);
   assert.doesNotMatch(html, /Validator JSON/);
   assert.doesNotMatch(html, /Save changes/);
+  assert.doesNotMatch(html, />Close</);
 });
 
 test("ValidatorEditModal renders normal editor controls outside discard confirmation", () => {
@@ -693,4 +695,45 @@ test("ValidatorEditModal renders normal editor controls outside discard confirma
 
   assert.match(html, /aria-label="Validator editor"/);
   assert.match(html, /Save changes/);
+});
+
+test("ValidatorEditModal disables mode tabs while JSON is invalid", () => {
+  const validator = createDefaultValidator("automatic", []);
+  const html = renderToStaticMarkup(
+    React.createElement(ValidatorEditModal, {
+      closeButtonRef: null,
+      draftValidatorIds: [validator.validator_id],
+      isBusy: false,
+      modalState: {
+        mode: "edit",
+        sourceIndex: 0,
+        initialValidator: JSON.parse(
+          JSON.stringify(validator)
+        ) as ValidatorDefinition,
+        validator,
+        viewMode: "json",
+        jsonText: "{",
+        jsonError: "Unexpected end of JSON input",
+        discardConfirming: false
+      },
+      modalValidationErrors: [],
+      onClose: () => undefined,
+      onDiscardEdits: () => undefined,
+      onKeepEditing: () => undefined,
+      onSave: () => undefined,
+      onSwitchMode: () => undefined,
+      onUpdateJson: () => undefined,
+      onUpdateValidator: () => undefined
+    })
+  );
+
+  assert.match(html, /Invalid validator JSON/);
+  assert.match(
+    html,
+    /<button(?=[^>]*disabled="")(?=[^>]*role="tab")[^>]*>Structured<\/button>/
+  );
+  assert.match(
+    html,
+    /<button(?=[^>]*disabled="")(?=[^>]*role="tab")[^>]*>JSON<\/button>/
+  );
 });
