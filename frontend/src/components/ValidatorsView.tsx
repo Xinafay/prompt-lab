@@ -64,6 +64,33 @@ interface ValidatorModalState {
   discardConfirming: boolean;
 }
 
+export function updateValidatorModalStructuredState(
+  state: ValidatorModalState,
+  validator: ValidatorDefinition
+): ValidatorModalState {
+  return {
+    ...state,
+    validator,
+    viewMode: "structured",
+    jsonText: JSON.stringify(validator, null, 2),
+    jsonError: null,
+    discardConfirming: false
+  };
+}
+
+export function switchValidatorModalViewModeState(
+  state: ValidatorModalState,
+  mode: ValidatorEditMode
+): ValidatorModalState {
+  return {
+    ...state,
+    viewMode: mode,
+    jsonText: JSON.stringify(state.validator, null, 2),
+    jsonError: null,
+    discardConfirming: false
+  };
+}
+
 const validatorTypes: ValidatorType[] = ["llm_questionnaire", "automatic"];
 const inputScopes = [
   "output_only",
@@ -289,7 +316,9 @@ export function ValidatorsView({
 
   useEffect(() => {
     if (!isModalOpen) {
-      modalReturnFocusRef.current?.focus();
+      if (modalReturnFocusRef.current?.isConnected) {
+        modalReturnFocusRef.current.focus();
+      }
       modalReturnFocusRef.current = null;
       return;
     }
@@ -367,15 +396,7 @@ export function ValidatorsView({
     setModalState((current) =>
       current === null
         ? null
-        : {
-            ...current,
-            validator,
-            discardConfirming: false,
-            jsonText:
-              current.viewMode === "json"
-                ? current.jsonText
-                : JSON.stringify(validator, null, 2)
-          }
+        : updateValidatorModalStructuredState(current, validator)
     );
   }
 
@@ -404,20 +425,7 @@ export function ValidatorsView({
   function switchModalViewMode(mode: ValidatorEditMode) {
     setModalState((current) => {
       if (current === null || current.viewMode === mode) return current;
-      if (mode === "json") {
-        return {
-          ...current,
-          viewMode: mode,
-          jsonText: JSON.stringify(current.validator, null, 2),
-          jsonError: null,
-          discardConfirming: false
-        };
-      }
-      return {
-        ...current,
-        viewMode: mode,
-        discardConfirming: false
-      };
+      return switchValidatorModalViewModeState(current, mode);
     });
   }
 
@@ -537,7 +545,7 @@ export function ValidatorsView({
             <ValidatorCard
               showActions={true}
               disabled={actionState.jsonUnsafeActionsDisabled}
-              key={`${validator.validator_id}-${validatorIndex}`}
+              key={validatorIndex}
               onDelete={() => deleteValidatorFromCard(validatorIndex)}
               onDuplicate={(event) =>
                 duplicateValidatorFromCard(validatorIndex, event.currentTarget)
@@ -585,47 +593,6 @@ export function ValidatorsView({
               </button>
             </div>
 
-            <div
-              aria-label="Validator edit mode"
-              className="proposal-tabs"
-              role="tablist"
-            >
-              <button
-                aria-selected={modalState.viewMode === "structured"}
-                className={
-                  modalState.viewMode === "structured"
-                    ? "proposal-tab is-active"
-                    : "proposal-tab"
-                }
-                onClick={() => switchModalViewMode("structured")}
-                role="tab"
-                type="button"
-              >
-                Structured
-              </button>
-              <button
-                aria-selected={modalState.viewMode === "json"}
-                className={
-                  modalState.viewMode === "json"
-                    ? "proposal-tab is-active"
-                    : "proposal-tab"
-                }
-                onClick={() => switchModalViewMode("json")}
-                role="tab"
-                type="button"
-              >
-                JSON
-              </button>
-            </div>
-
-            {modalState.jsonError !== null ? (
-              <div className="settings-error">
-                Invalid validator JSON: {modalState.jsonError}
-              </div>
-            ) : null}
-            {modalValidationErrors.length > 0 ? (
-              <div className="settings-error">{modalValidationErrors.join(" ")}</div>
-            ) : null}
             {modalState.discardConfirming ? (
               <div
                 className="settings-navigation-modal validators-editor-discard-confirm"
@@ -659,51 +626,98 @@ export function ValidatorsView({
                 </div>
               </div>
             ) : null}
+            {modalState.discardConfirming ? null : (
+              <>
+                <div
+                  aria-label="Validator edit mode"
+                  className="proposal-tabs"
+                  role="tablist"
+                >
+                  <button
+                    aria-selected={modalState.viewMode === "structured"}
+                    className={
+                      modalState.viewMode === "structured"
+                        ? "proposal-tab is-active"
+                        : "proposal-tab"
+                    }
+                    onClick={() => switchModalViewMode("structured")}
+                    role="tab"
+                    type="button"
+                  >
+                    Structured
+                  </button>
+                  <button
+                    aria-selected={modalState.viewMode === "json"}
+                    className={
+                      modalState.viewMode === "json"
+                        ? "proposal-tab is-active"
+                        : "proposal-tab"
+                    }
+                    onClick={() => switchModalViewMode("json")}
+                    role="tab"
+                    type="button"
+                  >
+                    JSON
+                  </button>
+                </div>
 
-            <div className="validators-editor-modal-body">
-              {modalState.viewMode === "json" ? (
-                <label className="validator-json-field">
-                  <span>Validator JSON</span>
-                  <textarea
-                    aria-label="Validator JSON"
-                    className="validator-json-editor"
-                    rows={18}
-                    value={modalState.jsonText}
-                    onChange={(event) => updateModalJson(event.target.value)}
-                  />
-                </label>
-              ) : (
-                <ValidatorEditor
-                  existingValidatorIds={draft.map(
-                    (validator) => validator.validator_id
+                {modalState.jsonError !== null ? (
+                  <div className="settings-error">
+                    Invalid validator JSON: {modalState.jsonError}
+                  </div>
+                ) : null}
+                {modalValidationErrors.length > 0 ? (
+                  <div className="settings-error">
+                    {modalValidationErrors.join(" ")}
+                  </div>
+                ) : null}
+
+                <div className="validators-editor-modal-body">
+                  {modalState.viewMode === "json" ? (
+                    <label className="validator-json-field">
+                      <span>Validator JSON</span>
+                      <textarea
+                        aria-label="Validator JSON"
+                        className="validator-json-editor"
+                        rows={18}
+                        value={modalState.jsonText}
+                        onChange={(event) => updateModalJson(event.target.value)}
+                      />
+                    </label>
+                  ) : (
+                    <ValidatorEditor
+                      existingValidatorIds={draft.map(
+                        (validator) => validator.validator_id
+                      )}
+                      onChange={updateModalValidator}
+                      validator={modalState.validator}
+                    />
                   )}
-                  onChange={updateModalValidator}
-                  validator={modalState.validator}
-                />
-              )}
-            </div>
+                </div>
 
-            <div className="modal-actions validators-editor-modal-actions">
-              <button
-                className="secondary-action"
-                onClick={requestCloseModal}
-                type="button"
-              >
-                Cancel
-              </button>
-              <button
-                className="primary-action"
-                disabled={
-                  isBusy ||
-                  modalState.jsonError !== null ||
-                  modalValidationErrors.length > 0
-                }
-                onClick={saveModalValidator}
-                type="button"
-              >
-                Save changes
-              </button>
-            </div>
+                <div className="modal-actions validators-editor-modal-actions">
+                  <button
+                    className="secondary-action"
+                    onClick={requestCloseModal}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="primary-action"
+                    disabled={
+                      isBusy ||
+                      modalState.jsonError !== null ||
+                      modalValidationErrors.length > 0
+                    }
+                    onClick={saveModalValidator}
+                    type="button"
+                  >
+                    Save changes
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       ) : null}

@@ -483,7 +483,9 @@ const validatorsViewModule = await import("../src/components/ValidatorsView.tsx"
 const {
   getValidatorEditorActionState,
   parseValidatorJsonDraft,
+  switchValidatorModalViewModeState,
   shouldEmitValidatorsDraft,
+  updateValidatorModalStructuredState,
   ValidatorsView
 } = validatorsViewModule;
 
@@ -569,6 +571,55 @@ test("validator editor action state blocks unsafe controls while JSON is invalid
   assert.equal(state.jsonUnsafeActionsDisabled, true);
   assert.equal(state.saveDisabled, true);
   assert.equal(state.resetDisabled, false);
+});
+
+test("switchValidatorModalViewModeState clears stale JSON error in structured mode", () => {
+  const validator = createDefaultValidator("llm_questionnaire", []);
+  const nextState = switchValidatorModalViewModeState(
+    {
+      mode: "edit",
+      sourceIndex: 0,
+      initialValidator: JSON.parse(
+        JSON.stringify(validator)
+      ) as ValidatorDefinition,
+      validator,
+      viewMode: "json",
+      jsonText: '{ "validator_id": ',
+      jsonError: "Unexpected end of JSON input",
+      discardConfirming: true
+    },
+    "structured"
+  );
+
+  assert.equal(nextState.viewMode, "structured");
+  assert.equal(nextState.jsonError, null);
+  assert.equal(nextState.discardConfirming, false);
+  assert.equal(nextState.jsonText, JSON.stringify(validator, null, 2));
+});
+
+test("updateValidatorModalStructuredState clears stale JSON error after structured edits", () => {
+  const validator = createDefaultValidator("llm_questionnaire", []);
+  const changedValidator = { ...validator, title: "Changed title" };
+  const nextState = updateValidatorModalStructuredState(
+    {
+      mode: "edit",
+      sourceIndex: 0,
+      initialValidator: JSON.parse(
+        JSON.stringify(validator)
+      ) as ValidatorDefinition,
+      validator,
+      viewMode: "structured",
+      jsonText: '{ "validator_id": ',
+      jsonError: "Unexpected end of JSON input",
+      discardConfirming: true
+    },
+    changedValidator
+  );
+
+  assert.equal(nextState.validator.title, "Changed title");
+  assert.equal(nextState.jsonError, null);
+  assert.equal(nextState.discardConfirming, false);
+  assert.equal(nextState.jsonText, JSON.stringify(changedValidator, null, 2));
 });
 
 test("ValidatorsView module no longer exports selected-index JSON helpers", () => {
