@@ -75,7 +75,7 @@ def test_store_loads_cases_for_experiment() -> None:
             encoding="utf-8",
         )
         (cases / "case-a.json").write_text(
-            '{"schema_version":"prompt_lab.case/v2","id":"case-a","title":"Case A","stores":{"case":{"kind":"flat_file_tree","values":{"text":{"__carmilla_flat_file_node__":"file","value":"hello"}}}},"bindings":{"text":{"kind":"store_scope","store":"case","path":"text"}}}',
+            '{"text":"hello"}',
             encoding="utf-8",
         )
 
@@ -84,6 +84,7 @@ def test_store_loads_cases_for_experiment() -> None:
         loaded = store.load_cases("demo")
         assert len(loaded) == 1
         assert loaded[0].id == "case-a"
+        assert loaded[0].payload == {"text": "hello"}
 
 
 def test_store_rejects_read_path_escape() -> None:

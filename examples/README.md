@@ -3,10 +3,9 @@
 These examples are generated from Carmilla Story Parser eval fixtures and
 exported as complete neutral Prompt Lab experiments.
 
-Case files use `prompt_lab.case/v2`: serialized `stores` plus top-level
-`bindings` that become the prompt/validation context. The committed prompts use
-the `jinjax` template engine copied from Carmilla's portable `shared.jinjax`
-package.
+Case files are plain JSON context objects passed directly to prompt rendering
+and validation. The committed prompts use the `jinjax` template engine copied
+from Carmilla's portable `shared.jinjax` package.
 
 Each example keeps workflow state cases in the experiment-level `cases/`
 directory. Version directories contain only version-specific prompt/model files

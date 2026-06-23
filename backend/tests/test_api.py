@@ -41,10 +41,6 @@ def demo_experiment_payload(
     }
 
 
-def file_node(value: object) -> dict[str, object]:
-    return {"__carmilla_flat_file_node__": "file", "value": value}
-
-
 def demo_case_payload(
     *,
     case_id: str = "a",
@@ -52,24 +48,8 @@ def demo_case_payload(
     binding_name: str = "value",
     value: object = "hello",
 ) -> dict[str, object]:
-    return {
-        "schema_version": "prompt_lab.case/v2",
-        "id": case_id,
-        "title": title,
-        "stores": {
-            "case": {
-                "kind": "flat_file_tree",
-                "values": {binding_name: file_node(value)},
-            }
-        },
-        "bindings": {
-            binding_name: {
-                "kind": "store_scope",
-                "store": "case",
-                "path": binding_name,
-            }
-        },
-    }
+    del case_id, title
+    return {binding_name: value}
 
 
 def write_demo_experiment_manifest(root: Path) -> None:
@@ -169,21 +149,7 @@ def write_runtime_preview_experiment(root: Path, *, repeat_count: int = 2) -> Pa
     for case_id, value in [("case-a", "alpha"), ("case-b", "bravo")]:
         write_json(
             cases_dir / f"{case_id}.json",
-            valid_case_payload(
-                id=case_id,
-                title=f"Case {case_id}",
-                stores={
-                    "case": {
-                        "kind": "flat_file_tree",
-                        "values": {
-                            "value": {
-                                "__carmilla_flat_file_node__": "file",
-                                "value": value,
-                            }
-                        },
-                    }
-                },
-            ),
+            {"value": value},
         )
     return version_dir
 
@@ -1435,7 +1401,7 @@ def test_api_rejects_empty_cases_without_calling_llm() -> None:
         llm_client.generate_text = original_generate_text  # type: ignore[assignment]
 
 
-def test_api_rejects_unsafe_case_id_without_calling_llm() -> None:
+def test_api_uses_case_filename_stem_instead_of_payload_id() -> None:
     calls: list[tuple[str, str]] = []
 
     class FakeGeneratedText:
@@ -1460,22 +1426,37 @@ def test_api_rejects_unsafe_case_id_without_calling_llm() -> None:
                 encoding="utf-8",
             )
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
-            (example / "cases" / "a.json").write_text(
+            (example / "cases" / "safe-case.json").write_text(
                 json.dumps(
-                    demo_case_payload(case_id="../escape"),
+                    {"id": "../escape", "value": "hello"},
                     ensure_ascii=False,
                 ),
                 encoding="utf-8",
             )
             app = create_app(PromptLabConfig.from_env(project_root=root))
+            client = TestClient(app, raise_server_exceptions=False)
 
-            response = TestClient(app, raise_server_exceptions=False).post(
-                "/api/experiments/demo/versions/v001/runs"
+            response = client.post("/api/experiments/demo/versions/v001/runs")
+
+            assert response.status_code == 200
+            body = response.json()
+            job_response = client.get(f"/api/jobs/{body['job_id']}")
+            assert job_response.status_code == 200
+            assert job_response.json()["status"] == "completed"
+            run_path = (
+                root
+                / "experiments"
+                / "demo"
+                / "versions"
+                / "v001"
+                / "runs"
+                / body["job_id"]
+                / "safe-case"
+                / "repeat-001.json"
             )
-
-            assert response.status_code == 400
-            assert response.json()["detail"] == "Unsafe case id"
-            assert calls == []
+            artifact = json.loads(run_path.read_text(encoding="utf-8"))
+            assert artifact["case_id"] == "safe-case"
+            assert artifact["rendered_prompt"] == "Say hello"
     finally:
         llm_client.generate_text = original_generate_text  # type: ignore[assignment]
 
@@ -1512,7 +1493,7 @@ def main() -> int:
         test_api_latest_validation_ignores_non_completed_batches,
         test_api_failed_validation_batch_is_terminal_and_not_latest,
         test_api_rejects_empty_cases_without_calling_llm,
-        test_api_rejects_unsafe_case_id_without_calling_llm,
+        test_api_uses_case_filename_stem_instead_of_payload_id,
     ]
     for test in tests:
         test()

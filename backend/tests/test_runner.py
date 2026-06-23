@@ -12,24 +12,12 @@ class DemoOutput(BaseModel):
     name: str
 
 
-def file_node(value: object) -> dict[str, object]:
-    return {"__carmilla_flat_file_node__": "file", "value": value}
-
-
 def demo_case_payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
-        "schema_version": "prompt_lab.case/v2",
         "id": "a",
-        "title": "A",
-        "stores": {
-            "case": {
-                "kind": "flat_file_tree",
-                "values": {"chapter": {"name": file_node("Ada")}},
-            }
-        },
-        "bindings": {
-            "chapter": {"kind": "store_scope", "store": "case", "path": "chapter"},
-            "allowed": {"kind": "value", "value": ["Ada"]},
+        "payload": {
+            "chapter": {"name": "Ada"},
+            "allowed": ["Ada"],
         },
     }
     payload.update(overrides)
@@ -38,12 +26,8 @@ def demo_case_payload(**overrides: object) -> dict[str, object]:
 
 def test_iter_case_major_groups_repeats_per_case() -> None:
     cases = [
-        CaseArtifact.model_validate(
-            demo_case_payload(id="a", title="A", stores={}, bindings={})
-        ),
-        CaseArtifact.model_validate(
-            demo_case_payload(id="b", title="B", stores={}, bindings={})
-        ),
+        CaseArtifact.model_validate(demo_case_payload(id="a", payload={})),
+        CaseArtifact.model_validate(demo_case_payload(id="b", payload={})),
     ]
 
     pairs = [(case.id, repeat) for case, repeat in iter_case_major(cases, repeat_count=3)]

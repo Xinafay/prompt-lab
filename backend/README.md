@@ -41,9 +41,8 @@ comparison model call is made.
 ## Prompt Templates
 
 Experiment prompts are rendered with the copied `shared.jinjax` package. Each
-case uses `prompt_lab.case/v2`; the backend materializes its `stores + bindings`
-into the plain context dictionary passed to prompt rendering and Pydantic
-validation.
+case is a plain JSON object, and the backend passes it directly as the context
+dictionary for prompt rendering and Pydantic validation.
 
 Cases live once per experiment under `cases/` and are shared by all versions.
 Version directories hold the active prompt/model files plus generated run,

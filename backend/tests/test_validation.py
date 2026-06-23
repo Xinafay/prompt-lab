@@ -60,11 +60,8 @@ def _run_artifact(**overrides: object) -> RunArtifact:
 def _case_artifact() -> CaseArtifact:
     return CaseArtifact.model_validate(
         {
-            "schema_version": "prompt_lab.case/v2",
             "id": "case-a",
-            "title": "Case A",
-            "stores": {},
-            "bindings": {},
+            "payload": {},
         }
     )
 
@@ -216,26 +213,11 @@ def test_build_llm_validator_prompt_renders_validation_error_with_raw_output() -
 def test_build_llm_validator_prompt_includes_only_materialized_case_context() -> None:
     case = CaseArtifact.model_validate(
         {
-            "schema_version": "prompt_lab.case/v2",
             "id": "case-a",
-            "title": "Case A",
-            "stores": {
-                "workflow": {
-                    "kind": "flat_file_tree",
-                    "values": {
-                        "full_store_secret": {
-                            "__carmilla_flat_file_node__": "file",
-                            "value": "Full store should stay hidden",
-                        }
-                    },
-                }
-            },
-            "bindings": {
+            "payload": {
                 "state": {
-                    "kind": "store_scope",
-                    "store": "workflow",
-                    "path": "",
-                }
+                    "visible": "Visible case context",
+                },
             },
         }
     )

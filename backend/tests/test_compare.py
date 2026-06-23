@@ -23,10 +23,6 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     )
 
 
-def file_node(value: Any) -> dict[str, Any]:
-    return {"__carmilla_flat_file_node__": "file", "value": value}
-
-
 def valid_case_payload(
     *,
     case_id: str = "case-a",
@@ -34,18 +30,8 @@ def valid_case_payload(
     value: Any = "hello",
 ) -> dict[str, Any]:
     return {
-        "schema_version": "prompt_lab.case/v2",
         "id": case_id,
-        "title": title,
-        "stores": {
-            "case": {
-                "kind": "flat_file_tree",
-                "values": {"value": file_node(value)},
-            }
-        },
-        "bindings": {
-            "value": {"kind": "store_scope", "store": "case", "path": "value"}
-        },
+        "payload": {"value": value},
     }
 
 

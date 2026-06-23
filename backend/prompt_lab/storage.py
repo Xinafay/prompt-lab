@@ -125,10 +125,17 @@ class PromptLabStore:
         cases_dir = self.experiment_dir(experiment_id) / "cases"
         if not cases_dir.is_dir():
             return []
-        return [
-            CaseArtifact.model_validate(_read_json(path))
-            for path in sorted(cases_dir.glob("*.json"))
-        ]
+        cases: list[CaseArtifact] = []
+        for path in sorted(cases_dir.glob("*.json")):
+            cases.append(
+                CaseArtifact.model_validate(
+                    {
+                        "id": path.stem,
+                        "payload": _read_json(path),
+                    }
+                )
+            )
+        return cases
 
     def load_validators(
         self, experiment_id: str, version: str
