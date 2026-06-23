@@ -2113,6 +2113,7 @@ select {
   gap: 14px;
   width: min(1180px, 100%);
   max-height: calc(100vh - 48px);
+  overflow: hidden;
   padding: 18px;
   border: 1px solid #d0d5dd;
   border-radius: 8px;
