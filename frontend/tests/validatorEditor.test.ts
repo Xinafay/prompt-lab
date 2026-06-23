@@ -6,10 +6,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ValidatorDefinition } from "../src/types.ts";
 
 const {
+  addValidatorCheck,
   convertValidatorType,
   createDefaultValidator,
   duplicateValidator,
   normalizeAutomaticRule,
+  removeValidatorCheck,
   validateValidatorDraft,
   ValidatorEditor
 } = await import("../src/components/ValidatorEditor.tsx");
@@ -49,6 +51,51 @@ test("duplicateValidator creates unique validator and check ids", () => {
 
   assert.equal(duplicate.validator_id, "quality-copy");
   assert.equal(duplicate.checks[0].check_id, "length-copy");
+});
+
+test("addValidatorCheck appends default llm checks with unique ids", () => {
+  const validator = createDefaultValidator("llm_questionnaire", []);
+  validator.checks[0].check_id = "check-1";
+
+  const next = addValidatorCheck(validator);
+
+  assert.equal(next.type, "llm_questionnaire");
+  assert.equal(next.checks.length, 2);
+  assert.equal(next.checks[1].check_id, "check-2");
+  assert.equal(next.checks[1].title, "New check");
+  assert.equal(next.checks[1].question, "Does the output satisfy this check?");
+});
+
+test("addValidatorCheck appends default automatic checks with unique ids", () => {
+  const validator = createDefaultValidator("automatic", []);
+  validator.checks[0].check_id = "check-1";
+
+  const next = addValidatorCheck(validator);
+
+  assert.equal(next.type, "automatic");
+  assert.equal(next.checks.length, 2);
+  assert.equal(next.checks[1].check_id, "check-2");
+  assert.equal(next.checks[1].title, "New check");
+  assert.deepEqual(next.checks[1].rule, {
+    kind: "word_count",
+    source: "output_text",
+    comparison: { op: "gte", value: 1 }
+  });
+});
+
+test("removeValidatorCheck removes selected check but keeps the last one", () => {
+  const validator = addValidatorCheck(createDefaultValidator("llm_questionnaire", []));
+  validator.checks[0].check_id = "first";
+  validator.checks[1].check_id = "second";
+
+  const removed = removeValidatorCheck(validator, 0);
+  const unchanged = removeValidatorCheck(removed, 0);
+
+  assert.deepEqual(
+    removed.checks.map((check) => check.check_id),
+    ["second"]
+  );
+  assert.deepEqual(unchanged.checks, removed.checks);
 });
 
 test("convertValidatorType preserves base fields and check labels", () => {
@@ -226,6 +273,72 @@ test("ValidatorEditor renders llm and automatic controls", () => {
   assert.match(llmHtml, /Input scope/);
   assert.match(automaticHtml, /Rule kind/);
   assert.match(automaticHtml, /Comparison/);
+});
+
+test("ValidatorEditor renders friendly labels and select hints", () => {
+  const llm = createDefaultValidator("llm_questionnaire", []);
+  llm.input_scope = "output_prompt_and_case";
+  const automatic = createDefaultValidator("automatic", []);
+
+  const llmHtml = renderToStaticMarkup(
+    React.createElement(ValidatorEditor, {
+      existingValidatorIds: [llm.validator_id],
+      onChange: () => undefined,
+      validator: llm
+    })
+  );
+  const automaticHtml = renderToStaticMarkup(
+    React.createElement(ValidatorEditor, {
+      existingValidatorIds: [automatic.validator_id],
+      onChange: () => undefined,
+      validator: automatic
+    })
+  );
+
+  assert.match(llmHtml, />LLM questionnaire</);
+  assert.match(llmHtml, />Output \+ prompt \+ case</);
+  assert.match(llmHtml, /Uses the validator model to answer check questions/);
+  assert.match(llmHtml, /Generator output, rendered prompt, and case data/);
+  assert.doesNotMatch(llmHtml, />llm_questionnaire</);
+  assert.doesNotMatch(llmHtml, />output_prompt_and_case</);
+  assert.match(automaticHtml, />Automatic</);
+  assert.match(automaticHtml, />Word count</);
+  assert.match(automaticHtml, />Output text</);
+  assert.match(automaticHtml, />At least</);
+});
+
+test("ValidatorEditor renders add and delete check controls", () => {
+  const validator = addValidatorCheck(createDefaultValidator("llm_questionnaire", []));
+
+  const html = renderToStaticMarkup(
+    React.createElement(ValidatorEditor, {
+      existingValidatorIds: [validator.validator_id],
+      onChange: () => undefined,
+      validator
+    })
+  );
+
+  assert.match(html, /Add check/);
+  assert.match(html, /Delete check 1/);
+  assert.match(html, /Delete check 2/);
+  assert.doesNotMatch(html, /Delete check 1" disabled=""/);
+});
+
+test("ValidatorEditor disables delete for the last remaining check", () => {
+  const validator = createDefaultValidator("automatic", []);
+
+  const html = renderToStaticMarkup(
+    React.createElement(ValidatorEditor, {
+      existingValidatorIds: [validator.validator_id],
+      onChange: () => undefined,
+      validator
+    })
+  );
+
+  assert.match(
+    html,
+    /<button(?=[^>]*aria-label="Delete check 1")(?=[^>]*disabled="")[^>]*>Delete<\/button>/
+  );
 });
 
 const {

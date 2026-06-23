@@ -40,6 +40,67 @@ const comparisonOps: CountComparison["op"][] = [
   "between"
 ];
 
+const validatorTypeLabels: Record<ValidatorType, string> = {
+  llm_questionnaire: "LLM questionnaire",
+  automatic: "Automatic"
+};
+
+const validatorTypeHints: Record<ValidatorType, string> = {
+  llm_questionnaire: "Uses the validator model to answer check questions.",
+  automatic: "Runs deterministic local checks on text or JSON output."
+};
+
+const inputScopeLabels: Record<InputScope, string> = {
+  output_only: "Output only",
+  output_and_prompt: "Output + prompt",
+  output_and_case: "Output + case",
+  output_prompt_and_case: "Output + prompt + case"
+};
+
+const inputScopeHints: Record<InputScope, string> = {
+  output_only: "Generator output only.",
+  output_and_prompt: "Generator output and rendered prompt.",
+  output_and_case: "Generator output and case data.",
+  output_prompt_and_case: "Generator output, rendered prompt, and case data."
+};
+
+const ruleKindLabels: Record<AutomaticRule["kind"], string> = {
+  word_count: "Word count",
+  sentence_count: "Sentence count",
+  character_count: "Character count",
+  json_path_count: "JSON path count",
+  json_path_exists: "JSON path exists"
+};
+
+const ruleKindHints: Record<AutomaticRule["kind"], string> = {
+  word_count: "Counts words in the selected text source.",
+  sentence_count: "Counts sentences in the selected text source.",
+  character_count: "Counts characters in the selected text source.",
+  json_path_count: "Counts items at a JSON path in structured output.",
+  json_path_exists: "Checks that a JSON path exists in structured output."
+};
+
+const ruleSourceLabels: Record<AutomaticRule["source"], string> = {
+  output_text: "Output text",
+  raw_output: "Raw output",
+  output_json: "Output JSON"
+};
+
+const ruleSourceHints: Record<AutomaticRule["source"], string> = {
+  output_text: "Normalized text output.",
+  raw_output: "The raw model response before parsing.",
+  output_json: "The parsed structured output JSON."
+};
+
+const comparisonLabels: Record<CountComparison["op"], string> = {
+  lt: "Less than",
+  lte: "At most",
+  gt: "More than",
+  gte: "At least",
+  eq: "Exactly",
+  between: "Between"
+};
+
 type ValidatorBasePatch = Partial<
   Pick<
     ValidatorDefinition,
@@ -80,6 +141,36 @@ function defaultComparison(op: CountComparison["op"] = "gte"): CountComparison {
     return { op, min_value: 1, max_value: 3 };
   }
   return { op, value: 1 };
+}
+
+function nextCheckId(existingIds: string[]): string {
+  let index = 1;
+  while (existingIds.includes(`check-${index}`)) {
+    index += 1;
+  }
+  return `check-${index}`;
+}
+
+function createDefaultLlmCheck(
+  existingCheckIds: string[]
+): LlmQuestionnaireValidatorDefinition["checks"][number] {
+  return {
+    check_id: nextCheckId(existingCheckIds),
+    title: "New check",
+    question: "Does the output satisfy this check?",
+    description: ""
+  };
+}
+
+function createDefaultAutomaticCheck(
+  existingCheckIds: string[]
+): AutomaticValidatorDefinition["checks"][number] {
+  return {
+    check_id: nextCheckId(existingCheckIds),
+    title: "New check",
+    description: "",
+    rule: defaultRule()
+  };
 }
 
 function isFiniteNumber(value: number | null | undefined): value is number {
@@ -182,14 +273,7 @@ export function createDefaultValidator(
       description: "",
       enabled: true,
       input_scope: "output_only",
-      checks: [
-        {
-          check_id: "check-1",
-          title: "New check",
-          description: "",
-          rule: defaultRule()
-        }
-      ]
+      checks: [createDefaultAutomaticCheck([])]
     };
   }
 
@@ -201,15 +285,35 @@ export function createDefaultValidator(
     description: "",
     enabled: true,
     input_scope: "output_only",
-    checks: [
-      {
-        check_id: "check-1",
-        title: "New check",
-        question: "Does the output satisfy this check?",
-        description: ""
-      }
-    ]
+    checks: [createDefaultLlmCheck([])]
   };
+}
+
+export function addValidatorCheck(
+  validator: ValidatorDefinition
+): ValidatorDefinition {
+  const existingCheckIds = validator.checks.map((check) => check.check_id);
+  if (validator.type === "automatic") {
+    return {
+      ...validator,
+      checks: [...validator.checks, createDefaultAutomaticCheck(existingCheckIds)]
+    };
+  }
+  return {
+    ...validator,
+    checks: [...validator.checks, createDefaultLlmCheck(existingCheckIds)]
+  };
+}
+
+export function removeValidatorCheck(
+  validator: ValidatorDefinition,
+  indexToRemove: number
+): ValidatorDefinition {
+  if (validator.checks.length <= 1) return validator;
+  return {
+    ...validator,
+    checks: validator.checks.filter((_, index) => index !== indexToRemove)
+  } as ValidatorDefinition;
 }
 
 export function duplicateValidator(
@@ -416,10 +520,11 @@ export function ValidatorEditor({ onChange, validator }: ValidatorEditorProps) {
           >
             {validatorTypes.map((type) => (
               <option key={type} value={type}>
-                {type}
+                {validatorTypeLabels[type]}
               </option>
             ))}
           </select>
+          <span className="field-hint">{validatorTypeHints[validator.type]}</span>
         </label>
         <label className="settings-field">
           <span>Title</span>
@@ -439,10 +544,13 @@ export function ValidatorEditor({ onChange, validator }: ValidatorEditorProps) {
           >
             {inputScopes.map((scope) => (
               <option key={scope} value={scope}>
-                {scope}
+                {inputScopeLabels[scope]}
               </option>
             ))}
           </select>
+          <span className="field-hint">
+            {inputScopeHints[validator.input_scope]}
+          </span>
         </label>
         <label className="settings-field settings-field-wide">
           <span>Description</span>
@@ -488,11 +596,39 @@ function LlmChecksEditor({
     onChange({ ...validator, checks });
   }
 
+  function appendCheck() {
+    onChange(addValidatorCheck(validator));
+  }
+
+  function deleteCheck(index: number) {
+    onChange(removeValidatorCheck(validator, index));
+  }
+
   return (
-    <section className="settings-section">
-      <h3>Checks</h3>
+    <section className="settings-section validator-checks-editor-section">
+      <div className="validator-checks-editor-header">
+        <h3>Checks</h3>
+        <button className="secondary-action" onClick={appendCheck} type="button">
+          Add check
+        </button>
+      </div>
       {validator.checks.map((check, index) => (
         <div className="validator-check-editor" key={`${check.check_id}-${index}`}>
+          <div className="validator-check-editor-header">
+            <div>
+              <h4>{check.title || `Check ${index + 1}`}</h4>
+              <p>Check {index + 1}</p>
+            </div>
+            <button
+              aria-label={`Delete check ${index + 1}`}
+              className="secondary-action danger-action"
+              disabled={validator.checks.length <= 1}
+              onClick={() => deleteCheck(index)}
+              type="button"
+            >
+              Delete
+            </button>
+          </div>
           <label className="settings-field">
             <span>Check ID</span>
             <input
@@ -556,11 +692,39 @@ function AutomaticChecksEditor({
     updateCheck(index, { rule });
   }
 
+  function appendCheck() {
+    onChange(addValidatorCheck(validator));
+  }
+
+  function deleteCheck(index: number) {
+    onChange(removeValidatorCheck(validator, index));
+  }
+
   return (
-    <section className="settings-section">
-      <h3>Checks</h3>
+    <section className="settings-section validator-checks-editor-section">
+      <div className="validator-checks-editor-header">
+        <h3>Checks</h3>
+        <button className="secondary-action" onClick={appendCheck} type="button">
+          Add check
+        </button>
+      </div>
       {validator.checks.map((check, index) => (
         <div className="validator-check-editor" key={`${check.check_id}-${index}`}>
+          <div className="validator-check-editor-header">
+            <div>
+              <h4>{check.title || `Check ${index + 1}`}</h4>
+              <p>{ruleKindLabels[check.rule.kind]} · Check {index + 1}</p>
+            </div>
+            <button
+              aria-label={`Delete check ${index + 1}`}
+              className="secondary-action danger-action"
+              disabled={validator.checks.length <= 1}
+              onClick={() => deleteCheck(index)}
+              type="button"
+            >
+              Delete
+            </button>
+          </div>
           <label className="settings-field">
             <span>Check ID</span>
             <input
@@ -593,10 +757,11 @@ function AutomaticChecksEditor({
             >
               {ruleKinds.map((kind) => (
                 <option key={kind} value={kind}>
-                  {kind}
+                  {ruleKindLabels[kind]}
                 </option>
               ))}
             </select>
+            <span className="field-hint">{ruleKindHints[check.rule.kind]}</span>
           </label>
           <label className="settings-field">
             <span>Rule source</span>
@@ -614,10 +779,13 @@ function AutomaticChecksEditor({
             >
               {ruleSources.map((source) => (
                 <option key={source} value={source}>
-                  {source}
+                  {ruleSourceLabels[source]}
                 </option>
               ))}
             </select>
+            <span className="field-hint">
+              {ruleSourceHints[check.rule.source]}
+            </span>
           </label>
           {check.rule.kind === "json_path_count" ||
           check.rule.kind === "json_path_exists" ? (
@@ -680,7 +848,7 @@ function ComparisonEditor({
         >
           {comparisonOps.map((op) => (
             <option key={op} value={op}>
-              {op}
+              {comparisonLabels[op]}
             </option>
           ))}
         </select>
