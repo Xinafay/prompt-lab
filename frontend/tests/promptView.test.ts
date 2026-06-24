@@ -157,11 +157,10 @@ test("prompt view does not include validators or cases", () => {
       overview: buildOverview("text", {
         cases: [
           {
-            schema_version: "prompt_lab.case/v2",
             id: "case-a",
-            title: "Case A",
-            stores: {},
-            bindings: {}
+            payload: {
+              value: "hello"
+            }
           }
         ],
         validators: [

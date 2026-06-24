@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import type { Case, PromptBinding, StoreScopeBinding, VersionOverview } from "../types";
+import type { Case, VersionOverview } from "../types";
 import { describeValue, ValuePreview } from "./ValuePreview";
 
 interface CaseBrowserProps {
@@ -15,89 +15,31 @@ function formatJson(value: unknown): string {
   return JSON.stringify(value, null, 2) ?? "undefined";
 }
 
+function formatCaseTitle(caseId: string): string {
+  return caseId
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toLocaleUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function caseMatchesQuery(artifactCase: Case, caseQuery: string): boolean {
   if (caseQuery === "") {
     return true;
   }
-  return (
-    artifactCase.title.toLocaleLowerCase().includes(caseQuery) ||
-    artifactCase.id.toLocaleLowerCase().includes(caseQuery)
-  );
+  return artifactCase.id.toLocaleLowerCase().includes(caseQuery);
 }
 
-function caseMatchesBindingQuery(
+function caseMatchesPayloadQuery(
   artifactCase: Case,
-  bindingQuery: string
+  payloadQuery: string
 ): boolean {
-  if (bindingQuery === "") {
+  if (payloadQuery === "") {
     return true;
   }
-  return Object.keys(artifactCase.bindings).some((key) =>
-    key.toLocaleLowerCase().includes(bindingQuery)
+  return Object.keys(artifactCase.payload).some((key) =>
+    key.toLocaleLowerCase().includes(payloadQuery)
   );
-}
-
-function displayPath(path: string): string {
-  const normalized = path.trim().replace(/^\/+|\/+$/g, "");
-  return normalized === "" ? "." : normalized;
-}
-
-function resolveStoreScopePreview(
-  artifactCase: Case,
-  binding: StoreScopeBinding
-): unknown {
-  const store = artifactCase.stores[binding.store];
-  if (store === undefined) {
-    return `Missing store: ${binding.store}`;
-  }
-
-  const normalizedPath = binding.path.trim().replace(/^\/+|\/+$/g, "");
-  if (normalizedPath === "") {
-    return store.values;
-  }
-
-  let current: unknown = store.values;
-  for (const segment of normalizedPath.split("/")) {
-    if (
-      current === null ||
-      typeof current !== "object" ||
-      !(segment in current)
-    ) {
-      return `Missing store path: ${binding.path}`;
-    }
-    current = (current as Record<string, unknown>)[segment];
-  }
-  return unwrapFlatFileNodePreview(current);
-}
-
-function unwrapFlatFileNodePreview(value: unknown): unknown {
-  if (
-    value !== null &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    Object.keys(value).length === 2 &&
-    (value as Record<string, unknown>).__carmilla_flat_file_node__ === "file" &&
-    "value" in value
-  ) {
-    return (value as Record<string, unknown>).value;
-  }
-  return value;
-}
-
-function describeBinding(binding: PromptBinding): string {
-  if (binding.kind === "value") {
-    return `value | ${describeValue(binding.value)}`;
-  }
-  return `store_scope | store: ${binding.store} | path: ${displayPath(
-    binding.path
-  )}`;
-}
-
-function bindingPreview(artifactCase: Case, binding: PromptBinding): unknown {
-  if (binding.kind === "value") {
-    return binding.value;
-  }
-  return resolveStoreScopePreview(artifactCase, binding);
 }
 
 export function CaseBrowser({ cases }: CaseBrowserProps) {
@@ -113,7 +55,7 @@ export function CaseBrowser({ cases }: CaseBrowserProps) {
     return cases.filter(
       (artifactCase) =>
         caseMatchesQuery(artifactCase, normalizedCaseQuery) &&
-        caseMatchesBindingQuery(artifactCase, normalizedBindingQuery)
+        caseMatchesPayloadQuery(artifactCase, normalizedBindingQuery)
     );
   }, [bindingQuery, caseQuery, cases]);
 
@@ -133,16 +75,16 @@ export function CaseBrowser({ cases }: CaseBrowserProps) {
     filteredCases.find((artifactCase) => artifactCase.id === selectedCaseId) ??
     null;
   const normalizedBindingQuery = normalizeQuery(bindingQuery);
-  const selectedBindingEntries =
+  const selectedPayloadEntries =
     selectedCase === null
       ? []
-      : Object.entries(selectedCase.bindings).filter(
+      : Object.entries(selectedCase.payload).filter(
           ([key]) =>
             normalizedBindingQuery === "" ||
             key.toLocaleLowerCase().includes(normalizedBindingQuery)
         );
-  const selectedBindingCount =
-    selectedCase === null ? 0 : Object.keys(selectedCase.bindings).length;
+  const selectedPayloadCount =
+    selectedCase === null ? 0 : Object.keys(selectedCase.payload).length;
 
   return (
     <section className="case-browser" aria-label="Cases">
@@ -164,10 +106,10 @@ export function CaseBrowser({ cases }: CaseBrowserProps) {
             />
           </label>
           <label>
-            <span>Find binding key</span>
+            <span>Find payload key</span>
             <input
               onChange={(event) => setBindingQuery(event.target.value)}
-              placeholder="Binding key"
+              placeholder="Payload key"
               type="search"
               value={bindingQuery}
             />
@@ -193,7 +135,7 @@ export function CaseBrowser({ cases }: CaseBrowserProps) {
                 role="option"
                 type="button"
               >
-                <strong>{artifactCase.title || "(untitled case)"}</strong>
+                <strong>{formatCaseTitle(artifactCase.id)}</strong>
                 <span>{artifactCase.id}</span>
               </button>
             ))}
@@ -210,39 +152,39 @@ export function CaseBrowser({ cases }: CaseBrowserProps) {
           <>
             <div className="case-detail-heading">
               <div>
-                <h3>{selectedCase.title || "(untitled case)"}</h3>
+                <h3>{formatCaseTitle(selectedCase.id)}</h3>
                 <p>{selectedCase.id}</p>
               </div>
               <span>
-                {selectedBindingEntries.length} of {selectedBindingCount} binding
-                {selectedBindingCount === 1 ? "" : "s"}
+                {selectedPayloadEntries.length} of {selectedPayloadCount} payload
+                key{selectedPayloadCount === 1 ? "" : "s"}
               </span>
             </div>
 
-            <div className="bindings-table" role="table" aria-label="Bindings">
+            <div className="bindings-table" role="table" aria-label="Payload">
               <div className="bindings-row bindings-row-head" role="row">
                 <span role="columnheader">Key</span>
-                <span role="columnheader">Type/metadata</span>
+                <span role="columnheader">Type</span>
                 <span role="columnheader">Preview</span>
               </div>
-              {selectedBindingEntries.length === 0 ? (
+              {selectedPayloadEntries.length === 0 ? (
                 <div className="bindings-empty">
-                  {selectedBindingCount === 0
-                    ? "No bindings in this case."
-                    : "No bindings match the current key filter."}
+                  {selectedPayloadCount === 0
+                    ? "No payload keys in this case."
+                    : "No payload keys match the current key filter."}
                 </div>
               ) : (
-                selectedBindingEntries.map(([key, binding]) => (
+                selectedPayloadEntries.map(([key, value]) => (
                   <div className="bindings-row" key={key} role="row">
                     <strong role="cell">{key}</strong>
                     <span className="binding-meta" role="cell">
-                      {describeBinding(binding)}
+                      {describeValue(value)}
                     </span>
                     <div role="cell">
-                      <ValuePreview value={bindingPreview(selectedCase, binding)} />
+                      <ValuePreview value={value} />
                       <details className="binding-json">
-                        <summary>Binding JSON</summary>
-                        <pre>{formatJson(binding)}</pre>
+                        <summary>Value JSON</summary>
+                        <pre>{formatJson(value)}</pre>
                       </details>
                     </div>
                   </div>
@@ -251,13 +193,8 @@ export function CaseBrowser({ cases }: CaseBrowserProps) {
             </div>
 
             <details className="case-bindings-json">
-              <summary>Full bindings JSON</summary>
-              <pre>{formatJson(selectedCase.bindings)}</pre>
-            </details>
-
-            <details className="case-bindings-json">
-              <summary>Full stores JSON</summary>
-              <pre>{formatJson(selectedCase.stores)}</pre>
+              <summary>Full payload JSON</summary>
+              <pre>{formatJson(selectedCase.payload)}</pre>
             </details>
           </>
         )}

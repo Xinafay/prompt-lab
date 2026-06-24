@@ -1130,7 +1130,7 @@ select {
 
 .bindings-row {
   display: grid;
-  grid-template-columns: minmax(140px, 220px) minmax(140px, 190px) minmax(0, 1fr);
+  grid-template-columns: minmax(120px, 180px) minmax(110px, 150px) minmax(280px, 1fr);
   border-bottom: 1px solid #eef1f5;
 }
 

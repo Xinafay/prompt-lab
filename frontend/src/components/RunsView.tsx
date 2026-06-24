@@ -78,10 +78,16 @@ function filterLabel(filter: RunStatusFilter): string {
 
 function caseLabel(
   run: RunArtifact,
-  caseTitles: Map<string, string>
+  caseIds: Set<string>
 ): { title: string; id: string } {
+  const title = run.case_id
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toLocaleUpperCase() + part.slice(1))
+    .join(" ");
+
   return {
-    title: caseTitles.get(run.case_id) ?? run.case_id,
+    title: caseIds.has(run.case_id) && title ? title : run.case_id,
     id: run.case_id,
   };
 }
@@ -110,8 +116,8 @@ export function RunsView({ cases, runBatchId, runs }: RunsViewProps) {
   const [statusFilter, setStatusFilter] = useState<RunStatusFilter>("all");
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
-  const caseTitles = useMemo(
-    () => new Map(cases.map((artifactCase) => [artifactCase.id, artifactCase.title])),
+  const caseIds = useMemo(
+    () => new Set(cases.map((artifactCase) => artifactCase.id)),
     [cases]
   );
 
@@ -197,7 +203,7 @@ export function RunsView({ cases, runBatchId, runs }: RunsViewProps) {
                 </thead>
                 <tbody>
                   {filteredRuns.map((run) => {
-                    const label = caseLabel(run, caseTitles);
+                    const label = caseLabel(run, caseIds);
                     const isSelected = selectedRun?.run_id === run.run_id;
 
                     return (
@@ -243,8 +249,8 @@ export function RunsView({ cases, runBatchId, runs }: RunsViewProps) {
               <aside className="run-detail-panel" aria-label="Selected run detail">
                 <div className="run-detail-heading">
                   <div>
-                    <h4>{caseLabel(selectedRun, caseTitles).title}</h4>
-                    <span>{caseLabel(selectedRun, caseTitles).id}</span>
+                    <h4>{caseLabel(selectedRun, caseIds).title}</h4>
+                    <span>{caseLabel(selectedRun, caseIds).id}</span>
                   </div>
                   <span className={`status-pill status-${selectedRun.status}`}>
                     {selectedRun.status}

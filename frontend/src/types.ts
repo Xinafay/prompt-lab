@@ -13,24 +13,6 @@ export interface PydanticOutputConfig {
 
 export type OutputConfig = TextOutputConfig | PydanticOutputConfig;
 
-export interface FlatFileTreeStore {
-  kind: "flat_file_tree";
-  values: Record<string, unknown>;
-}
-
-export interface StoreScopeBinding {
-  kind: "store_scope";
-  store: string;
-  path: string;
-}
-
-export interface ValueBinding {
-  kind: "value";
-  value: unknown;
-}
-
-export type PromptBinding = StoreScopeBinding | ValueBinding;
-
 export interface Experiment {
   schema_version: "prompt_lab.experiment/v1";
   id: string;
@@ -55,12 +37,8 @@ export interface Experiment {
 }
 
 export interface Case {
-  schema_version: "prompt_lab.case/v2";
   id: string;
-  title: string;
-  source?: Record<string, unknown> | null;
-  stores: Record<string, FlatFileTreeStore>;
-  bindings: Record<string, PromptBinding>;
+  payload: Record<string, unknown>;
 }
 
 export interface RunArtifact {
