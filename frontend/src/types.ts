@@ -52,6 +52,16 @@ export interface CaseRunInclusionRequest {
   enabled: boolean;
 }
 
+export interface CaseSetUpdateRequest {
+  cases: CaseUploadRequest[];
+  excluded_case_ids: string[];
+}
+
+export interface CaseSetUpdateResponse {
+  experiment: Experiment;
+  cases: Case[];
+}
+
 export interface RunArtifact {
   schema_version: "prompt_lab.run/v1";
   run_id: string;

@@ -73,9 +73,7 @@ test("case browser renders case management controls and excluded state", () => {
           payload: { value: "bravo" }
         }
       ],
-      onDeleteCase: async () => undefined,
-      onRunInclusionChange: async () => undefined,
-      onUploadCase: async () => undefined
+      onCasesChange: () => undefined
     })
   );
 
@@ -83,6 +81,20 @@ test("case browser renders case management controls and excluded state", () => {
   assert.match(html, /Include in runs/);
   assert.match(html, /Delete case/);
   assert.match(html, /Excluded/);
+  assert.match(html, /case-browser-item-actions/);
+  assert.doesNotMatch(html, /case-detail-actions/);
+});
+
+test("production workbench treats case edits as unsaved navigation state", () => {
+  const source = readFileSync(
+    new URL("../src/App.tsx", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(source, /const \[casesDirty, setCasesDirty\]/);
+  assert.match(source, /activeTab === "cases"[\s\S]*casesDirty/);
+  assert.match(source, /Unsaved case changes/);
+  assert.match(source, /handleSaveCases/);
 });
 
 test("case browser stacks before the full mobile app breakpoint", () => {

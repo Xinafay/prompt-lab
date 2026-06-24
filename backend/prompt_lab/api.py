@@ -111,6 +111,13 @@ class CaseRunInclusionRequest(BaseModel):
     enabled: bool
 
 
+class CaseSetUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cases: list[CaseUploadRequest]
+    excluded_case_ids: list[str] = Field(default_factory=list)
+
+
 class DryRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1103,13 +1110,6 @@ def _remove_generated_version_dirs(version_dir: Path) -> None:
             shutil.rmtree(path)
 
 
-def _remove_experiment_generated_version_dirs(
-    store: PromptLabStore, experiment_id: str
-) -> None:
-    for version in store.list_versions(experiment_id):
-        _remove_generated_version_dirs(store.version_dir(experiment_id, version))
-
-
 def _case_response(
     artifact_case: CaseArtifact, experiment: ExperimentArtifact
 ) -> dict[str, object]:
@@ -1134,6 +1134,25 @@ def _enabled_cases(
         for artifact_case in cases
         if artifact_case.id not in excluded_case_ids
     ]
+
+
+def _validate_case_set_update(request: CaseSetUpdateRequest) -> set[str]:
+    case_ids: set[str] = set()
+    for artifact_case in request.cases:
+        _validate_case_id_path_segment(artifact_case.case_id)
+        if artifact_case.case_id in case_ids:
+            raise HTTPException(status_code=400, detail="Duplicate case id")
+        case_ids.add(artifact_case.case_id)
+    excluded_case_ids = set(request.excluded_case_ids)
+    for case_id in excluded_case_ids:
+        _validate_case_id_path_segment(case_id)
+    unknown_excluded_ids = sorted(excluded_case_ids - case_ids)
+    if unknown_excluded_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Excluded case not found: {unknown_excluded_ids[0]}",
+        )
+    return case_ids
 
 
 def _validate_version_source_update(
@@ -1572,8 +1591,34 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             )
         except FileExistsError as exc:
             raise HTTPException(status_code=409, detail="Case already exists") from exc
-        _remove_experiment_generated_version_dirs(store, experiment_id)
         return _case_response(artifact_case, experiment)
+
+    @app.put("/api/experiments/{experiment_id}/cases")
+    def update_cases(
+        experiment_id: str, request: CaseSetUpdateRequest
+    ) -> dict[str, object]:
+        _validate_case_set_update(request)
+        experiment = store.load_experiment(experiment_id)
+        experiment.run_defaults.excluded_case_ids = sorted(
+            set(request.excluded_case_ids)
+        )
+        store.save_experiment(experiment_id, experiment)
+        cases = store.replace_cases(
+            experiment_id,
+            [
+                CaseArtifact.model_validate(
+                    {
+                        "id": item.case_id,
+                        "payload": item.payload,
+                    }
+                )
+                for item in request.cases
+            ],
+        )
+        return {
+            "experiment": experiment.model_dump(mode="json"),
+            "cases": _case_responses(cases, experiment),
+        }
 
     @app.delete("/api/experiments/{experiment_id}/cases/{case_id}")
     def delete_case(experiment_id: str, case_id: str) -> dict[str, object]:
@@ -1586,7 +1631,6 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         if excluded_case_ids != experiment.run_defaults.excluded_case_ids:
             experiment.run_defaults.excluded_case_ids = excluded_case_ids
             store.save_experiment(experiment_id, experiment)
-        _remove_experiment_generated_version_dirs(store, experiment_id)
         return {"case_id": case_id}
 
     @app.patch("/api/experiments/{experiment_id}/cases/{case_id}/run-inclusion")
@@ -1613,7 +1657,6 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             excluded_case_ids.add(case_id)
         experiment.run_defaults.excluded_case_ids = sorted(excluded_case_ids)
         store.save_experiment(experiment_id, experiment)
-        _remove_experiment_generated_version_dirs(store, experiment_id)
         return _case_response(matching_case, experiment)
 
     @app.post("/api/experiments/{experiment_id}/versions/{version}/source")

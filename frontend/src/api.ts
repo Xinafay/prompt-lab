@@ -1,6 +1,8 @@
 import type {
   Case,
   CaseRunInclusionRequest,
+  CaseSetUpdateRequest,
+  CaseSetUpdateResponse,
   CaseUploadRequest,
   CompareMatrixResponse,
   CreatedVersionResponse,
@@ -130,6 +132,16 @@ export function updateCaseRunInclusion(
     `/api/experiments/${encodeURIComponent(experimentId)}/cases/${encodeURIComponent(
       caseId
     )}/run-inclusion`,
+    request
+  );
+}
+
+export function saveCases(
+  experimentId: string,
+  request: CaseSetUpdateRequest
+): Promise<CaseSetUpdateResponse> {
+  return apiPut<CaseSetUpdateResponse>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/cases`,
     request
   );
 }

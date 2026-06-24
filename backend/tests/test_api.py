@@ -555,7 +555,7 @@ def test_api_manages_case_files_and_run_inclusion() -> None:
             (runtime_experiment / "experiment.json").read_text(encoding="utf-8")
         )
         assert manifest["run_defaults"]["excluded_case_ids"] == ["b"]
-        assert not (runtime_experiment / "versions" / "v001" / "runs").exists()
+        assert (runtime_experiment / "versions" / "v001" / "runs").exists()
 
         refreshed_response = client.get("/api/experiments/demo/versions/v001")
 
@@ -570,6 +570,59 @@ def test_api_manages_case_files_and_run_inclusion() -> None:
         assert delete_response.status_code == 200
         assert delete_response.json() == {"case_id": "a"}
         assert not (runtime_experiment / "cases" / "a.json").exists()
+
+
+def test_api_saves_case_set_without_clearing_runs() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        example = root / "examples" / "demo"
+        version_dir = example / "versions" / "v001"
+        cases_dir = example / "cases"
+        cases_dir.mkdir(parents=True)
+        version_dir.mkdir(parents=True)
+        write_json(example / "experiment.json", demo_experiment_payload())
+        (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
+        write_json(cases_dir / "a.json", demo_case_payload(value="alpha"))
+        write_json(cases_dir / "b.json", demo_case_payload(value="bravo"))
+
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        client = TestClient(app)
+        runtime_experiment = root / "experiments" / "demo"
+        stale_run = (
+            runtime_experiment
+            / "versions"
+            / "v001"
+            / "runs"
+            / "stale"
+            / "a"
+            / "repeat-001.json"
+        )
+        write_json(stale_run, {"stale": True})
+
+        response = client.put(
+            "/api/experiments/demo/cases",
+            json={
+                "cases": [
+                    {"case_id": "b", "payload": {"value": "bravo updated"}},
+                    {"case_id": "c", "payload": {"value": "charlie"}},
+                ],
+                "excluded_case_ids": ["c"],
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert {item["id"]: item["enabled"] for item in body["cases"]} == {
+            "b": True,
+            "c": False,
+        }
+        assert body["experiment"]["run_defaults"]["excluded_case_ids"] == ["c"]
+        assert not (runtime_experiment / "cases" / "a.json").exists()
+        assert json.loads(
+            (runtime_experiment / "cases" / "b.json").read_text(encoding="utf-8")
+        ) == {"value": "bravo updated"}
+        assert (runtime_experiment / "cases" / "c.json").is_file()
+        assert stale_run.is_file()
 
 
 def test_api_gets_pydantic_version_overview_model_source() -> None:
@@ -1614,6 +1667,7 @@ def main() -> int:
         test_api_ignores_old_example_directories_when_seeding,
         test_api_gets_version_overview,
         test_api_manages_case_files_and_run_inclusion,
+        test_api_saves_case_set_without_clearing_runs,
         test_api_gets_pydantic_version_overview_model_source,
         test_api_lists_experiment_versions,
         test_api_lists_latest_run_artifacts,

@@ -168,6 +168,22 @@ class PromptLabStore:
             raise NotFoundError("Case not found")
         path.unlink()
 
+    def replace_cases(
+        self, experiment_id: str, cases: list[CaseArtifact]
+    ) -> list[CaseArtifact]:
+        cases_dir = self.experiment_dir(experiment_id) / "cases"
+        cases_dir.mkdir(parents=True, exist_ok=True)
+        case_ids = {artifact_case.id for artifact_case in cases}
+        for path in cases_dir.glob("*.json"):
+            if path.stem not in case_ids:
+                path.unlink()
+        for artifact_case in cases:
+            _write_json(
+                self.case_path(experiment_id, artifact_case.id),
+                artifact_case.payload,
+            )
+        return self.load_cases(experiment_id)
+
     def load_validators(
         self, experiment_id: str, version: str
     ) -> list[ValidatorDefinition]:

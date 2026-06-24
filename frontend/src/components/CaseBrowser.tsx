@@ -6,12 +6,7 @@ import { describeValue, ValuePreview } from "./ValuePreview";
 interface CaseBrowserProps {
   cases: VersionOverview["cases"];
   isBusy?: boolean;
-  onDeleteCase?: (caseId: string) => Promise<void>;
-  onRunInclusionChange?: (caseId: string, enabled: boolean) => Promise<void>;
-  onUploadCase?: (
-    caseId: string,
-    payload: Record<string, unknown>
-  ) => Promise<void>;
+  onCasesChange?: (cases: Case[]) => void;
 }
 
 function normalizeQuery(value: string): string {
@@ -60,16 +55,13 @@ function caseMatchesPayloadQuery(
 export function CaseBrowser({
   cases,
   isBusy = false,
-  onDeleteCase,
-  onRunInclusionChange,
-  onUploadCase
+  onCasesChange
 }: CaseBrowserProps) {
   const [caseQuery, setCaseQuery] = useState("");
   const [bindingQuery, setBindingQuery] = useState("");
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(
     cases[0]?.id ?? null
   );
-  const [busyAction, setBusyAction] = useState<string | null>(null);
   const [caseMessage, setCaseMessage] = useState<string | null>(null);
   const [caseError, setCaseError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -110,32 +102,14 @@ export function CaseBrowser({
         );
   const selectedPayloadCount =
     selectedCase === null ? 0 : Object.keys(selectedCase.payload).length;
-  const isActionBusy = isBusy || busyAction !== null;
-
-  async function runCaseAction(
-    action: string,
-    callback: () => Promise<void>,
-    successMessage: string
-  ): Promise<void> {
-    setBusyAction(action);
-    setCaseMessage(null);
-    setCaseError(null);
-    try {
-      await callback();
-      setCaseMessage(successMessage);
-    } catch (error) {
-      setCaseError(error instanceof Error ? error.message : "Unknown error");
-    } finally {
-      setBusyAction(null);
-    }
-  }
+  const canEdit = onCasesChange !== undefined;
 
   async function handleFileInputChange(
     event: ChangeEvent<HTMLInputElement>
   ): Promise<void> {
     const file = event.currentTarget.files?.[0] ?? null;
     event.currentTarget.value = "";
-    if (file === null || onUploadCase === undefined) {
+    if (file === null || onCasesChange === undefined) {
       return;
     }
     const caseId = deriveCaseId(file.name);
@@ -144,50 +118,52 @@ export function CaseBrowser({
       setCaseError("Case file name must include a case id.");
       return;
     }
-    await runCaseAction(
-      "upload",
-      async () => {
-        const parsed = JSON.parse(await file.text()) as unknown;
-        if (!isJsonObject(parsed)) {
-          throw new Error("Case file must contain a JSON object.");
-        }
-        await onUploadCase(caseId, parsed);
-      },
-      `Uploaded ${caseId}.`
-    );
+    if (cases.some((artifactCase) => artifactCase.id === caseId)) {
+      setCaseMessage(null);
+      setCaseError("Case already exists.");
+      return;
+    }
+    try {
+      const parsed = JSON.parse(await file.text()) as unknown;
+      if (!isJsonObject(parsed)) {
+        throw new Error("Case file must contain a JSON object.");
+      }
+      setCaseError(null);
+      setCaseMessage(`Added ${caseId}. Save cases to apply changes.`);
+      setSelectedCaseId(caseId);
+      onCasesChange([
+        ...cases,
+        { id: caseId, payload: parsed, enabled: true }
+      ].sort((left, right) => left.id.localeCompare(right.id)));
+    } catch (error) {
+      setCaseMessage(null);
+      setCaseError(error instanceof Error ? error.message : "Unknown error");
+    }
   }
 
-  async function handleDeleteSelectedCase(): Promise<void> {
-    if (selectedCase === null || onDeleteCase === undefined) {
+  function handleDeleteCase(caseId: string): void {
+    if (onCasesChange === undefined) {
       return;
     }
-    if (
-      !window.confirm(
-        `Delete case "${selectedCase.id}"? Generated artifacts will be cleared.`
-      )
-    ) {
-      return;
-    }
-    await runCaseAction(
-      "delete",
-      () => onDeleteCase(selectedCase.id),
-      `Deleted ${selectedCase.id}.`
-    );
+    setCaseError(null);
+    setCaseMessage(`Removed ${caseId}. Save cases to apply changes.`);
+    onCasesChange(cases.filter((artifactCase) => artifactCase.id !== caseId));
   }
 
-  async function handleRunInclusionChange(
-    event: ChangeEvent<HTMLInputElement>
-  ): Promise<void> {
-    if (selectedCase === null || onRunInclusionChange === undefined) {
+  function handleRunInclusionChange(caseId: string, enabled: boolean): void {
+    if (onCasesChange === undefined) {
       return;
     }
-    const enabled = event.currentTarget.checked;
-    await runCaseAction(
-      "inclusion",
-      () => onRunInclusionChange(selectedCase.id, enabled),
+    setCaseError(null);
+    setCaseMessage(
       enabled
-        ? `Included ${selectedCase.id} in runs.`
-        : `Excluded ${selectedCase.id} from runs.`
+        ? `Included ${caseId} in runs. Save cases to apply changes.`
+        : `Excluded ${caseId} from runs. Save cases to apply changes.`
+    );
+    onCasesChange(
+      cases.map((artifactCase) =>
+        artifactCase.id === caseId ? { ...artifactCase, enabled } : artifactCase
+      )
     );
   }
 
@@ -201,11 +177,11 @@ export function CaseBrowser({
               {filteredCases.length} of {cases.length}
             </span>
           </div>
-          {onUploadCase === undefined ? null : (
+          {!canEdit ? null : (
             <div className="case-browser-actions">
               <button
                 className="secondary-action"
-                disabled={isActionBusy}
+                disabled={isBusy}
                 onClick={() => fileInputRef.current?.click()}
                 type="button"
               >
@@ -247,7 +223,7 @@ export function CaseBrowser({
         ) : (
           <div className="case-browser-list" role="listbox" aria-label="Case list">
             {filteredCases.map((artifactCase) => (
-              <button
+              <div
                 aria-selected={artifactCase.id === selectedCase?.id}
                 className={[
                   "case-browser-item",
@@ -257,16 +233,49 @@ export function CaseBrowser({
                   .filter(Boolean)
                   .join(" ")}
                 key={artifactCase.id}
-                onClick={() => setSelectedCaseId(artifactCase.id)}
                 role="option"
-                type="button"
               >
-                <strong>{formatCaseTitle(artifactCase.id)}</strong>
-                <span>{artifactCase.id}</span>
-                {artifactCase.enabled ? null : (
-                  <span className="case-state-badge">Excluded</span>
+                <button
+                  className="case-browser-item-main"
+                  onClick={() => setSelectedCaseId(artifactCase.id)}
+                  type="button"
+                >
+                  <strong>{formatCaseTitle(artifactCase.id)}</strong>
+                  <span>{artifactCase.id}</span>
+                  {artifactCase.enabled ? null : (
+                    <span className="case-state-badge">Excluded</span>
+                  )}
+                </button>
+                {!canEdit ? null : (
+                  <div className="case-browser-item-actions">
+                    <label
+                      className="case-run-toggle"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <input
+                        checked={artifactCase.enabled}
+                        disabled={isBusy}
+                        onChange={(event) =>
+                          handleRunInclusionChange(
+                            artifactCase.id,
+                            event.currentTarget.checked
+                          )
+                        }
+                        type="checkbox"
+                      />
+                      <span>Include in runs</span>
+                    </label>
+                    <button
+                      className="secondary-action danger-action"
+                      disabled={isBusy}
+                      onClick={() => handleDeleteCase(artifactCase.id)}
+                      type="button"
+                    >
+                      Delete case
+                    </button>
+                  </div>
                 )}
-              </button>
+              </div>
             ))}
           </div>
         )}
@@ -293,29 +302,6 @@ export function CaseBrowser({
                   <span className="case-state-badge">Excluded</span>
                 )}
               </div>
-            </div>
-            <div className="case-detail-actions">
-              {onRunInclusionChange === undefined ? null : (
-                <label className="case-run-toggle">
-                  <input
-                    checked={selectedCase.enabled}
-                    disabled={isActionBusy}
-                    onChange={(event) => void handleRunInclusionChange(event)}
-                    type="checkbox"
-                  />
-                  <span>Include in runs</span>
-                </label>
-              )}
-              {onDeleteCase === undefined ? null : (
-                <button
-                  className="secondary-action danger-action"
-                  disabled={isActionBusy}
-                  onClick={() => void handleDeleteSelectedCase()}
-                  type="button"
-                >
-                  Delete case
-                </button>
-              )}
             </div>
             {caseError === null ? null : (
               <p className="case-management-message is-error">{caseError}</p>

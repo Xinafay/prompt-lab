@@ -5,7 +5,6 @@ import {
   cancelJob,
   compareVersions,
   createProposalVersion,
-  deleteCase,
   generateProposal,
   getActiveJob,
   getExperimentVersions,
@@ -24,9 +23,8 @@ import {
   previewRunPrompts,
   previewValidationPrompts,
   runVersion,
-  uploadCase,
+  saveCases,
   validateVersion,
-  updateCaseRunInclusion,
   updateExperiment,
   updateGlobalSettings,
   updateHumanNotes,
@@ -56,6 +54,7 @@ import { snapshotValidationState } from "./components/validationStateSnapshot";
 import { WorkbenchTabs } from "./components/WorkbenchTabs";
 import { WorkflowToolbar } from "./components/WorkflowToolbar";
 import type {
+  Case,
   CompareMatrixResponse,
   CreatedVersionResponse,
   Experiment,
@@ -116,6 +115,7 @@ type UnsavedNavigationKind =
   | "settings"
   | "source"
   | "validators"
+  | "cases"
   | "validation"
   | "review";
 
@@ -233,6 +233,8 @@ function App() {
   const [validatorsDirty, setValidatorsDirty] = useState(false);
   const [pendingValidatorsOverwrite, setPendingValidatorsOverwrite] =
     useState<PendingValidatorsOverwrite | null>(null);
+  const [casesDraft, setCasesDraft] = useState<Case[] | null>(null);
+  const [casesDirty, setCasesDirty] = useState(false);
   const [globalSettingsBusy, setGlobalSettingsBusy] = useState(false);
   const [globalSettingsMessage, setGlobalSettingsMessage] =
     useState<string | null>(null);
@@ -314,6 +316,11 @@ function App() {
     }
   }
 
+  function clearCaseEditor() {
+    setCasesDraft(null);
+    setCasesDirty(false);
+  }
+
   function activateTab(tab: WorkbenchTab, historyMode: HistoryMode = "replace") {
     setActiveTab(tab);
     if (selectedExperiment !== null) {
@@ -352,6 +359,7 @@ function App() {
     setSettingsDraft(null);
     clearSourceEditor();
     clearValidatorEditor();
+    clearCaseEditor();
     setPendingNavigation(null);
     setNavigationError(null);
     setNavigationSaving(false);
@@ -397,6 +405,7 @@ function App() {
     setSettingsDraft(null);
     clearSourceEditor();
     clearValidatorEditor();
+    clearCaseEditor();
     setPendingNavigation(null);
     setNavigationError(null);
     setNavigationSaving(false);
@@ -427,6 +436,14 @@ function App() {
       !workflowBusy
     ) {
       return "validation";
+    }
+    if (
+      appView === "experiment" &&
+      activeTab === "cases" &&
+      casesDirty &&
+      !workflowBusy
+    ) {
+      return "cases";
     }
     if (
       appView === "experiment" &&
@@ -479,6 +496,9 @@ function App() {
     if (kind === "validators") {
       return validatorsDraft !== null;
     }
+    if (kind === "cases") {
+      return casesDraft !== null;
+    }
     if (appView === "globalSettings") {
       return globalSettingsDraft !== null;
     }
@@ -514,6 +534,13 @@ function App() {
         title: "Unsaved validator changes",
         body:
           "Save validators as a new version, overwrite the current version, or discard the draft changes."
+      };
+    }
+    if (kind === "cases") {
+      return {
+        title: "Unsaved case changes",
+        body:
+          "Save case changes before leaving this view, or discard the unsaved changes."
       };
     }
     return {
@@ -618,6 +645,8 @@ function App() {
       clearSourceEditor();
     } else if (kind === "validators") {
       clearValidatorEditor();
+    } else if (kind === "cases") {
+      clearCaseEditor();
     } else if (appView === "globalSettings") {
       setGlobalSettingsDirty(false);
       setGlobalSettingsDraft(null);
@@ -657,6 +686,8 @@ function App() {
         });
         setPendingNavigation(null);
         return;
+      } else if (kind === "cases") {
+        await handleSaveCases({ rethrow: true });
       } else if (appView === "globalSettings") {
         if (globalSettingsDraft === null) {
           return;
@@ -933,6 +964,7 @@ function App() {
   }, [
     activeTab,
     appView,
+    casesDirty,
     decisionsDirty,
     globalSettingsBusy,
     globalSettingsDirty,
@@ -954,6 +986,7 @@ function App() {
       !settingsDirty &&
       !globalSettingsDirty &&
       !validationDirty &&
+      !casesDirty &&
       !decisionsDirty &&
       !humanNotesDirty &&
       !sourceDirty &&
@@ -972,6 +1005,7 @@ function App() {
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, [
+    casesDirty,
     decisionsDirty,
     globalSettingsDirty,
     humanNotesDirty,
@@ -1374,114 +1408,62 @@ function App() {
     setComparison(null);
   }
 
-  async function refreshCurrentVersionAfterCasesChanged(
-    experiment: Experiment,
-    version: string
-  ) {
-    const [overview, runs] = await Promise.all([
-      getVersionOverview(experiment.id, version),
-      getVersionRuns(experiment.id, version)
-    ]);
-    setSelectedExperiment(overview.experiment);
-    setState((current) => {
-      if (current.status !== "loaded") {
-        return current;
-      }
-      return {
-        status: "loaded",
-        experiments: current.experiments.map((item) =>
-          item.id === overview.experiment.id ? overview.experiment : item
-        )
+  function handleCasesDraftChange(nextCases: Case[]) {
+    setCasesDraft(nextCases);
+    setCasesDirty(true);
+    setWorkflowMessage(null);
+  }
+
+  async function handleSaveCases(options?: { rethrow?: boolean }) {
+    if (
+      selectedExperiment === null ||
+      detailState.status !== "loaded" ||
+      casesDraft === null
+    ) {
+      return;
+    }
+    const experiment = selectedExperiment;
+    const version = detailState.overview.version;
+    setWorkflowBusy(true);
+    setWorkflowMessage("Saving cases...");
+    try {
+      const response = await saveCases(experiment.id, {
+        cases: casesDraft.map((artifactCase) => ({
+          case_id: artifactCase.id,
+          payload: artifactCase.payload
+        })),
+        excluded_case_ids: casesDraft
+          .filter((artifactCase) => !artifactCase.enabled)
+          .map((artifactCase) => artifactCase.id)
+      });
+      const runs = await getVersionRuns(experiment.id, version);
+      const overview = {
+        ...detailState.overview,
+        experiment: response.experiment,
+        cases: response.cases
       };
-    });
-    setDetailState({ status: "loaded", overview, runs });
-    setCommittedValidationState(null);
-    setCompareValidationByVersion({});
-    setCommittedReviewState(null);
-    setProposalResponse(null);
-    setCreatedVersion(null);
-    setComparison(null);
-  }
-
-  async function handleUploadCase(
-    caseId: string,
-    payload: Record<string, unknown>
-  ) {
-    if (selectedExperiment === null || detailState.status !== "loaded") {
-      return;
-    }
-    if (workflowLocked) {
-      setWorkflowMessage("Wait for the current workflow action to finish.");
-      throw new Error("Wait for the current workflow action to finish.");
-    }
-    const experiment = selectedExperiment;
-    const version = detailState.overview.version;
-    setWorkflowBusy(true);
-    setWorkflowMessage(`Uploading ${caseId}...`);
-    try {
-      await uploadCase(experiment.id, { case_id: caseId, payload });
-      await refreshCurrentVersionAfterCasesChanged(experiment, version);
-      setWorkflowMessage(`Uploaded ${caseId} and cleared generated artifacts.`);
+      setSelectedExperiment(response.experiment);
+      setState((current) => {
+        if (current.status !== "loaded") {
+          return current;
+        }
+        return {
+          status: "loaded",
+          experiments: current.experiments.map((item) =>
+            item.id === response.experiment.id ? response.experiment : item
+          )
+        };
+      });
+      setDetailState({ status: "loaded", overview, runs });
+      setCasesDraft(null);
+      setCasesDirty(false);
+      setWorkflowMessage("Cases saved.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       setWorkflowMessage(message);
-      throw error;
-    } finally {
-      setWorkflowBusy(false);
-    }
-  }
-
-  async function handleDeleteCase(caseId: string) {
-    if (selectedExperiment === null || detailState.status !== "loaded") {
-      return;
-    }
-    if (workflowLocked) {
-      setWorkflowMessage("Wait for the current workflow action to finish.");
-      throw new Error("Wait for the current workflow action to finish.");
-    }
-    const experiment = selectedExperiment;
-    const version = detailState.overview.version;
-    setWorkflowBusy(true);
-    setWorkflowMessage(`Deleting ${caseId}...`);
-    try {
-      await deleteCase(experiment.id, caseId);
-      await refreshCurrentVersionAfterCasesChanged(experiment, version);
-      setWorkflowMessage(`Deleted ${caseId} and cleared generated artifacts.`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      setWorkflowMessage(message);
-      throw error;
-    } finally {
-      setWorkflowBusy(false);
-    }
-  }
-
-  async function handleCaseRunInclusionChange(caseId: string, enabled: boolean) {
-    if (selectedExperiment === null || detailState.status !== "loaded") {
-      return;
-    }
-    if (workflowLocked) {
-      setWorkflowMessage("Wait for the current workflow action to finish.");
-      throw new Error("Wait for the current workflow action to finish.");
-    }
-    const experiment = selectedExperiment;
-    const version = detailState.overview.version;
-    setWorkflowBusy(true);
-    setWorkflowMessage(
-      enabled ? `Including ${caseId} in runs...` : `Excluding ${caseId} from runs...`
-    );
-    try {
-      await updateCaseRunInclusion(experiment.id, caseId, { enabled });
-      await refreshCurrentVersionAfterCasesChanged(experiment, version);
-      setWorkflowMessage(
-        enabled
-          ? `Included ${caseId} in runs and cleared generated artifacts.`
-          : `Excluded ${caseId} from runs and cleared generated artifacts.`
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      setWorkflowMessage(message);
-      throw error;
+      if (options?.rethrow) {
+        throw error;
+      }
     } finally {
       setWorkflowBusy(false);
     }
@@ -1567,6 +1549,10 @@ function App() {
     }
     if (workflowLocked) {
       setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
+    if (casesDirty) {
+      setWorkflowMessage("Save case changes before running.");
       return;
     }
 
@@ -1662,6 +1648,10 @@ function App() {
     }
     if (workflowLocked) {
       setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
+    if (casesDirty) {
+      setWorkflowMessage("Save case changes before previewing run prompts.");
       return;
     }
     const experimentId = selectedExperiment.id;
@@ -2325,6 +2315,7 @@ function App() {
     setProposalResponse(null);
     setCreatedVersion(null);
     setComparison(null);
+    clearCaseEditor();
     try {
       const savedExperiment = await updateExperiment(selectedExperiment.id, {
         ...selectedExperiment,
@@ -2434,6 +2425,23 @@ function App() {
               : "Change review decisions or human notes before saving."
           }
           onClick={() => void handleSaveReviewChanges()}
+          type="button"
+        >
+          Save
+        </TooltipButton>
+      </div>
+    ) : activeTab === "cases" && casesDirty ? (
+      <div className="workflow-unsaved-action">
+        <span>Unsaved case changes.</span>
+        <TooltipButton
+          className="secondary-action"
+          disabled={workflowLocked || casesDraft === null}
+          disabledReason={
+            workflowLocked
+              ? "Wait for the current workflow action to finish."
+              : "Change cases before saving."
+          }
+          onClick={() => void handleSaveCases()}
           type="button"
         >
           Save
@@ -2725,11 +2733,9 @@ function App() {
 
                     {activeTab === "cases" ? (
                       <CaseBrowser
-                        cases={detailState.overview.cases}
+                        cases={casesDraft ?? detailState.overview.cases}
                         isBusy={workflowLocked}
-                        onDeleteCase={handleDeleteCase}
-                        onRunInclusionChange={handleCaseRunInclusionChange}
-                        onUploadCase={handleUploadCase}
+                        onCasesChange={handleCasesDraftChange}
                       />
                     ) : null}
 
