@@ -2705,6 +2705,18 @@ select {
   overflow-wrap: anywhere;
 }
 
+@media (max-width: 980px) {
+  .case-browser {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .case-browser-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid #e4e7ec;
+  }
+}
+
 @media (max-width: 760px) {
   .app-shell {
     width: min(100vw - 24px, 1120px);

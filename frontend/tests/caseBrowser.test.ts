@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -53,4 +54,16 @@ test("case browser keeps object payload previews compact", () => {
   assert.doesNotMatch(html, /Raw JSON/);
   assert.doesNotMatch(html, /Value JSON/);
   assert.doesNotMatch(html, /\{&quot;product&quot;:&quot;Atlas Desk Lamp&quot;/);
+});
+
+test("case browser stacks before the full mobile app breakpoint", () => {
+  const css = readFileSync(
+    new URL("../src/styles.css", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(
+    css,
+    /@media \(max-width: 980px\)[\s\S]*?\.case-browser\s*\{[\s\S]*?grid-template-columns:\s*1fr;/
+  );
 });
