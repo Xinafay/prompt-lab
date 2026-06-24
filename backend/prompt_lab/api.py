@@ -30,7 +30,12 @@ from prompt_lab.dry_run import (
 from prompt_lab.experiment_seed import seed_experiments_from_examples
 from prompt_lab.judge import build_judge_prompt
 from prompt_lab.jobs import JobAlreadyRunningError, JobManager
-from prompt_lab.models.artifacts import ExperimentArtifact, RunArtifact
+from prompt_lab.models.artifacts import (
+    CaseArtifact,
+    ExperimentArtifact,
+    JsonObject,
+    RunArtifact,
+)
 from prompt_lab.models.judgments import (
     FindingDecisionSet,
     JudgmentArtifact,
@@ -91,6 +96,19 @@ class RunVersionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dry_run: bool = False
+
+
+class CaseUploadRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    case_id: str = Field(min_length=1)
+    payload: JsonObject
+
+
+class CaseRunInclusionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
 
 
 class DryRunRequest(BaseModel):
@@ -1085,6 +1103,39 @@ def _remove_generated_version_dirs(version_dir: Path) -> None:
             shutil.rmtree(path)
 
 
+def _remove_experiment_generated_version_dirs(
+    store: PromptLabStore, experiment_id: str
+) -> None:
+    for version in store.list_versions(experiment_id):
+        _remove_generated_version_dirs(store.version_dir(experiment_id, version))
+
+
+def _case_response(
+    artifact_case: CaseArtifact, experiment: ExperimentArtifact
+) -> dict[str, object]:
+    excluded_case_ids = set(experiment.run_defaults.excluded_case_ids)
+    return artifact_case.model_copy(
+        update={"enabled": artifact_case.id not in excluded_case_ids}
+    ).model_dump(mode="json")
+
+
+def _case_responses(
+    cases: list[CaseArtifact], experiment: ExperimentArtifact
+) -> list[dict[str, object]]:
+    return [_case_response(artifact_case, experiment) for artifact_case in cases]
+
+
+def _enabled_cases(
+    cases: list[CaseArtifact], experiment: ExperimentArtifact
+) -> list[CaseArtifact]:
+    excluded_case_ids = set(experiment.run_defaults.excluded_case_ids)
+    return [
+        artifact_case
+        for artifact_case in cases
+        if artifact_case.id not in excluded_case_ids
+    ]
+
+
 def _validate_version_source_update(
     *, experiment: ExperimentArtifact, request: VersionSourceUpdateRequest
 ) -> None:
@@ -1505,9 +1556,65 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             "model_py": model_source,
             "model_file": model_file,
             "rubric": _read_optional_text(experiment_dir / "rubric.md"),
-            "cases": [case.model_dump(mode="json") for case in cases],
+            "cases": _case_responses(cases, experiment),
             "validators": [validator.model_dump(mode="json") for validator in validators],
         }
+
+    @app.post("/api/experiments/{experiment_id}/cases")
+    def upload_case(
+        experiment_id: str, request: CaseUploadRequest
+    ) -> dict[str, object]:
+        _validate_case_id_path_segment(request.case_id)
+        experiment = store.load_experiment(experiment_id)
+        try:
+            artifact_case = store.write_case(
+                experiment_id, request.case_id, request.payload
+            )
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail="Case already exists") from exc
+        _remove_experiment_generated_version_dirs(store, experiment_id)
+        return _case_response(artifact_case, experiment)
+
+    @app.delete("/api/experiments/{experiment_id}/cases/{case_id}")
+    def delete_case(experiment_id: str, case_id: str) -> dict[str, object]:
+        _validate_case_id_path_segment(case_id)
+        experiment = store.load_experiment(experiment_id)
+        store.delete_case(experiment_id, case_id)
+        excluded_case_ids = [
+            item for item in experiment.run_defaults.excluded_case_ids if item != case_id
+        ]
+        if excluded_case_ids != experiment.run_defaults.excluded_case_ids:
+            experiment.run_defaults.excluded_case_ids = excluded_case_ids
+            store.save_experiment(experiment_id, experiment)
+        _remove_experiment_generated_version_dirs(store, experiment_id)
+        return {"case_id": case_id}
+
+    @app.patch("/api/experiments/{experiment_id}/cases/{case_id}/run-inclusion")
+    def update_case_run_inclusion(
+        experiment_id: str, case_id: str, request: CaseRunInclusionRequest
+    ) -> dict[str, object]:
+        _validate_case_id_path_segment(case_id)
+        experiment = store.load_experiment(experiment_id)
+        matching_case = next(
+            (
+                artifact_case
+                for artifact_case in store.load_cases(experiment_id)
+                if artifact_case.id == case_id
+            ),
+            None,
+        )
+        if matching_case is None:
+            raise HTTPException(status_code=404, detail="Case not found")
+
+        excluded_case_ids = set(experiment.run_defaults.excluded_case_ids)
+        if request.enabled:
+            excluded_case_ids.discard(case_id)
+        else:
+            excluded_case_ids.add(case_id)
+        experiment.run_defaults.excluded_case_ids = sorted(excluded_case_ids)
+        store.save_experiment(experiment_id, experiment)
+        _remove_experiment_generated_version_dirs(store, experiment_id)
+        return _case_response(matching_case, experiment)
 
     @app.post("/api/experiments/{experiment_id}/versions/{version}/source")
     def update_version_source(
@@ -1639,6 +1746,9 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         cases = store.load_cases(experiment_id)
         if not cases:
             raise HTTPException(status_code=400, detail="Version has no cases")
+        cases = _enabled_cases(cases, experiment)
+        if not cases:
+            raise HTTPException(status_code=400, detail="Version has no enabled cases")
         for case in cases:
             _validate_case_id_path_segment(case.id)
         repeat_count = experiment.run_defaults.repeat_count
@@ -1747,6 +1857,9 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         cases = store.load_cases(experiment_id)
         if not cases:
             raise HTTPException(status_code=400, detail="Version has no cases")
+        cases = _enabled_cases(cases, experiment)
+        if not cases:
+            raise HTTPException(status_code=400, detail="Version has no enabled cases")
         for case in cases:
             _validate_case_id_path_segment(case.id)
         repeat_count = experiment.run_defaults.repeat_count

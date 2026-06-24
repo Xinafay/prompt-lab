@@ -57,7 +57,8 @@ function buildOverview(
       run_defaults: {
         repeat_count: 1,
         llm_cache: "disabled",
-        case_order: "case-major"
+        case_order: "case-major",
+        excluded_case_ids: []
       }
     },
     version: "v1",
@@ -158,6 +159,7 @@ test("prompt view does not include validators or cases", () => {
         cases: [
           {
             id: "case-a",
+            enabled: true,
             payload: {
               value: "hello"
             }

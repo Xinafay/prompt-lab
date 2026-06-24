@@ -137,6 +137,37 @@ class PromptLabStore:
             )
         return cases
 
+    def case_path(self, experiment_id: str, case_id: str) -> Path:
+        _validate_storage_id(case_id, "Case")
+        cases_dir = self.experiment_dir(experiment_id) / "cases"
+        resolved_cases_dir = cases_dir.resolve()
+        candidate = (resolved_cases_dir / f"{case_id}.json").resolve()
+        if candidate != resolved_cases_dir and not candidate.is_relative_to(
+            resolved_cases_dir
+        ):
+            raise NotFoundError("Case not found")
+        return candidate
+
+    def write_case(
+        self,
+        experiment_id: str,
+        case_id: str,
+        payload: dict[str, Any],
+        *,
+        overwrite: bool = False,
+    ) -> CaseArtifact:
+        path = self.case_path(experiment_id, case_id)
+        if path.exists() and not overwrite:
+            raise FileExistsError("Case already exists")
+        _write_json(path, payload)
+        return CaseArtifact.model_validate({"id": case_id, "payload": payload})
+
+    def delete_case(self, experiment_id: str, case_id: str) -> None:
+        path = self.case_path(experiment_id, case_id)
+        if not path.is_file():
+            raise NotFoundError("Case not found")
+        path.unlink()
+
     def load_validators(
         self, experiment_id: str, version: str
     ) -> list[ValidatorDefinition]:

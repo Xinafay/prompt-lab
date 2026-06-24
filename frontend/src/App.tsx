@@ -5,6 +5,7 @@ import {
   cancelJob,
   compareVersions,
   createProposalVersion,
+  deleteCase,
   generateProposal,
   getActiveJob,
   getExperimentVersions,
@@ -23,7 +24,9 @@ import {
   previewRunPrompts,
   previewValidationPrompts,
   runVersion,
+  uploadCase,
   validateVersion,
+  updateCaseRunInclusion,
   updateExperiment,
   updateGlobalSettings,
   updateHumanNotes,
@@ -1371,6 +1374,119 @@ function App() {
     setComparison(null);
   }
 
+  async function refreshCurrentVersionAfterCasesChanged(
+    experiment: Experiment,
+    version: string
+  ) {
+    const [overview, runs] = await Promise.all([
+      getVersionOverview(experiment.id, version),
+      getVersionRuns(experiment.id, version)
+    ]);
+    setSelectedExperiment(overview.experiment);
+    setState((current) => {
+      if (current.status !== "loaded") {
+        return current;
+      }
+      return {
+        status: "loaded",
+        experiments: current.experiments.map((item) =>
+          item.id === overview.experiment.id ? overview.experiment : item
+        )
+      };
+    });
+    setDetailState({ status: "loaded", overview, runs });
+    setCommittedValidationState(null);
+    setCompareValidationByVersion({});
+    setCommittedReviewState(null);
+    setProposalResponse(null);
+    setCreatedVersion(null);
+    setComparison(null);
+  }
+
+  async function handleUploadCase(
+    caseId: string,
+    payload: Record<string, unknown>
+  ) {
+    if (selectedExperiment === null || detailState.status !== "loaded") {
+      return;
+    }
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
+      throw new Error("Wait for the current workflow action to finish.");
+    }
+    const experiment = selectedExperiment;
+    const version = detailState.overview.version;
+    setWorkflowBusy(true);
+    setWorkflowMessage(`Uploading ${caseId}...`);
+    try {
+      await uploadCase(experiment.id, { case_id: caseId, payload });
+      await refreshCurrentVersionAfterCasesChanged(experiment, version);
+      setWorkflowMessage(`Uploaded ${caseId} and cleared generated artifacts.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setWorkflowMessage(message);
+      throw error;
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
+
+  async function handleDeleteCase(caseId: string) {
+    if (selectedExperiment === null || detailState.status !== "loaded") {
+      return;
+    }
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
+      throw new Error("Wait for the current workflow action to finish.");
+    }
+    const experiment = selectedExperiment;
+    const version = detailState.overview.version;
+    setWorkflowBusy(true);
+    setWorkflowMessage(`Deleting ${caseId}...`);
+    try {
+      await deleteCase(experiment.id, caseId);
+      await refreshCurrentVersionAfterCasesChanged(experiment, version);
+      setWorkflowMessage(`Deleted ${caseId} and cleared generated artifacts.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setWorkflowMessage(message);
+      throw error;
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
+
+  async function handleCaseRunInclusionChange(caseId: string, enabled: boolean) {
+    if (selectedExperiment === null || detailState.status !== "loaded") {
+      return;
+    }
+    if (workflowLocked) {
+      setWorkflowMessage("Wait for the current workflow action to finish.");
+      throw new Error("Wait for the current workflow action to finish.");
+    }
+    const experiment = selectedExperiment;
+    const version = detailState.overview.version;
+    setWorkflowBusy(true);
+    setWorkflowMessage(
+      enabled ? `Including ${caseId} in runs...` : `Excluding ${caseId} from runs...`
+    );
+    try {
+      await updateCaseRunInclusion(experiment.id, caseId, { enabled });
+      await refreshCurrentVersionAfterCasesChanged(experiment, version);
+      setWorkflowMessage(
+        enabled
+          ? `Included ${caseId} in runs and cleared generated artifacts.`
+          : `Excluded ${caseId} from runs and cleared generated artifacts.`
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setWorkflowMessage(message);
+      throw error;
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
+
   async function handleSaveVersionValidators(
     mode: VersionValidatorsSaveMode,
     options?: { navigation?: PendingNavigation | null; rethrow?: boolean }
@@ -2608,7 +2724,13 @@ function App() {
                     ) : null}
 
                     {activeTab === "cases" ? (
-                      <CaseBrowser cases={detailState.overview.cases} />
+                      <CaseBrowser
+                        cases={detailState.overview.cases}
+                        isBusy={workflowLocked}
+                        onDeleteCase={handleDeleteCase}
+                        onRunInclusionChange={handleCaseRunInclusionChange}
+                        onUploadCase={handleUploadCase}
+                      />
                     ) : null}
 
                     {activeTab === "runs" ? (

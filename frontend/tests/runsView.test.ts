@@ -36,6 +36,7 @@ test("runs view renders output JSON and rendered prompt with code viewers", () =
       cases: [
         {
           id: "case-a",
+          enabled: true,
           payload: {
             value: "hello"
           }

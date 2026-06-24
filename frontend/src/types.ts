@@ -33,12 +33,23 @@ export interface Experiment {
     repeat_count: number;
     llm_cache: "disabled";
     case_order: "case-major";
+    excluded_case_ids: string[];
   };
 }
 
 export interface Case {
   id: string;
   payload: Record<string, unknown>;
+  enabled: boolean;
+}
+
+export interface CaseUploadRequest {
+  case_id: string;
+  payload: Record<string, unknown>;
+}
+
+export interface CaseRunInclusionRequest {
+  enabled: boolean;
 }
 
 export interface RunArtifact {

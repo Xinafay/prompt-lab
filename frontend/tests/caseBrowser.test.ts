@@ -12,6 +12,7 @@ test("case browser renders plain JSON case payloads", () => {
       cases: [
         {
           id: "product-brief",
+          enabled: true,
           payload: {
             brief: {
               product: "Atlas Desk Lamp",
@@ -36,6 +37,7 @@ test("case browser keeps object payload previews compact", () => {
       cases: [
         {
           id: "product-brief",
+          enabled: true,
           payload: {
             brief: {
               product: "Atlas Desk Lamp",
@@ -54,6 +56,33 @@ test("case browser keeps object payload previews compact", () => {
   assert.doesNotMatch(html, /Raw JSON/);
   assert.doesNotMatch(html, /Value JSON/);
   assert.doesNotMatch(html, /\{&quot;product&quot;:&quot;Atlas Desk Lamp&quot;/);
+});
+
+test("case browser renders case management controls and excluded state", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(CaseBrowser, {
+      cases: [
+        {
+          id: "active-case",
+          enabled: true,
+          payload: { value: "alpha" }
+        },
+        {
+          id: "disabled-case",
+          enabled: false,
+          payload: { value: "bravo" }
+        }
+      ],
+      onDeleteCase: async () => undefined,
+      onRunInclusionChange: async () => undefined,
+      onUploadCase: async () => undefined
+    })
+  );
+
+  assert.match(html, /Upload case JSON/);
+  assert.match(html, /Include in runs/);
+  assert.match(html, /Delete case/);
+  assert.match(html, /Excluded/);
 });
 
 test("case browser stacks before the full mobile app breakpoint", () => {

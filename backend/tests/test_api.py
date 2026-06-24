@@ -488,6 +488,90 @@ def test_api_gets_version_overview() -> None:
         assert body["validators"][0]["checks"][0]["check_id"] == "has-answer"
 
 
+def test_api_manages_case_files_and_run_inclusion() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        example = root / "examples" / "demo"
+        version_dir = example / "versions" / "v001"
+        cases_dir = example / "cases"
+        cases_dir.mkdir(parents=True)
+        version_dir.mkdir(parents=True)
+        write_json(example / "experiment.json", demo_experiment_payload())
+        (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
+        write_json(cases_dir / "a.json", demo_case_payload(value="alpha"))
+        write_json(cases_dir / "b.json", demo_case_payload(value="bravo"))
+
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        client = TestClient(app)
+        runtime_experiment = root / "experiments" / "demo"
+        write_json(
+            runtime_experiment
+            / "versions"
+            / "v001"
+            / "runs"
+            / "stale"
+            / "a"
+            / "repeat-001.json",
+            {"stale": True},
+        )
+
+        overview_response = client.get("/api/experiments/demo/versions/v001")
+
+        assert overview_response.status_code == 200
+        assert [item["enabled"] for item in overview_response.json()["cases"]] == [
+            True,
+            True,
+        ]
+
+        upload_response = client.post(
+            "/api/experiments/demo/cases",
+            json={"case_id": "c", "payload": {"value": "charlie"}},
+        )
+
+        assert upload_response.status_code == 200
+        assert upload_response.json() == {
+            "id": "c",
+            "payload": {"value": "charlie"},
+            "enabled": True,
+        }
+        assert (runtime_experiment / "cases" / "c.json").is_file()
+
+        duplicate_response = client.post(
+            "/api/experiments/demo/cases",
+            json={"case_id": "c", "payload": {"value": "duplicate"}},
+        )
+
+        assert duplicate_response.status_code == 409
+        assert duplicate_response.json()["detail"] == "Case already exists"
+
+        inclusion_response = client.patch(
+            "/api/experiments/demo/cases/b/run-inclusion",
+            json={"enabled": False},
+        )
+
+        assert inclusion_response.status_code == 200
+        assert inclusion_response.json()["enabled"] is False
+        manifest = json.loads(
+            (runtime_experiment / "experiment.json").read_text(encoding="utf-8")
+        )
+        assert manifest["run_defaults"]["excluded_case_ids"] == ["b"]
+        assert not (runtime_experiment / "versions" / "v001" / "runs").exists()
+
+        refreshed_response = client.get("/api/experiments/demo/versions/v001")
+
+        assert refreshed_response.status_code == 200
+        refreshed_cases = {
+            item["id"]: item["enabled"] for item in refreshed_response.json()["cases"]
+        }
+        assert refreshed_cases == {"a": True, "b": False, "c": True}
+
+        delete_response = client.delete("/api/experiments/demo/cases/a")
+
+        assert delete_response.status_code == 200
+        assert delete_response.json() == {"case_id": "a"}
+        assert not (runtime_experiment / "cases" / "a.json").exists()
+
+
 def test_api_gets_pydantic_version_overview_model_source() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -669,6 +753,63 @@ def test_api_starts_run_job() -> None:
             assert artifact["rendered_prompt"] == "Say hello"
             assert artifact["case_id"] == "a"
             assert artifact["repeat_index"] == 1
+    finally:
+        llm_client.generate_text = original_generate_text  # type: ignore[assignment]
+
+
+def test_api_runs_only_enabled_cases() -> None:
+    class FakeGeneratedText:
+        output = "ok"
+        usage: dict[str, Any] = {}
+
+    original_generate_text = llm_client.generate_text
+    llm_client.generate_text = lambda model, prompt: FakeGeneratedText()  # type: ignore[assignment]
+    try:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            experiment = root / "experiments" / "demo"
+            version_dir = experiment / "versions" / "v001"
+            cases_dir = experiment / "cases"
+            cases_dir.mkdir(parents=True)
+            version_dir.mkdir(parents=True)
+            payload = demo_experiment_payload()
+            payload["run_defaults"] = {
+                "repeat_count": 1,
+                "llm_cache": "disabled",
+                "case_order": "case-major",
+                "excluded_case_ids": ["b"],
+            }
+            write_json(experiment / "experiment.json", payload)
+            (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
+            write_json(cases_dir / "a.json", demo_case_payload(value="alpha"))
+            write_json(cases_dir / "b.json", demo_case_payload(value="bravo"))
+            app = create_app(PromptLabConfig.from_env(project_root=root))
+            client = TestClient(app)
+
+            response = client.post("/api/experiments/demo/versions/v001/runs")
+
+            assert response.status_code == 200
+            body = response.json()
+            assert body["total_units"] == 1
+            job_response = client.get(f"/api/jobs/{body['job_id']}")
+            assert job_response.status_code == 200
+            assert job_response.json()["status"] == "completed"
+            events_response = client.get(f"/api/jobs/{body['job_id']}/events")
+            messages = [event["message"] for event in events_response.json()]
+            assert "Running a repeat 1" in messages
+            assert "Completed a repeat 1" in messages
+            assert not any(" b repeat " in message for message in messages)
+            artifact_root = (
+                root
+                / "experiments"
+                / "demo"
+                / "versions"
+                / "v001"
+                / "runs"
+                / body["job_id"]
+            )
+            assert (artifact_root / "a" / "repeat-001.json").is_file()
+            assert not (artifact_root / "b").exists()
     finally:
         llm_client.generate_text = original_generate_text  # type: ignore[assignment]
 
@@ -1472,12 +1613,14 @@ def main() -> int:
         test_api_seeds_examples_into_experiments_on_startup,
         test_api_ignores_old_example_directories_when_seeding,
         test_api_gets_version_overview,
+        test_api_manages_case_files_and_run_inclusion,
         test_api_gets_pydantic_version_overview_model_source,
         test_api_lists_experiment_versions,
         test_api_lists_latest_run_artifacts,
         test_api_lists_empty_runs_when_version_has_no_batches,
         test_api_missing_experiment_returns_404,
         test_api_starts_run_job,
+        test_api_runs_only_enabled_cases,
         test_api_reports_active_job_and_rejects_second_run,
         test_api_starting_run_clears_existing_runtime_chain,
         test_api_dry_run_text_version_avoids_live_llm,

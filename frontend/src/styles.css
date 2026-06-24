@@ -1057,6 +1057,17 @@ select {
   text-transform: none;
 }
 
+.case-browser-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.case-file-input {
+  display: none;
+}
+
 .case-browser-list {
   max-height: 430px;
   overflow: auto;
@@ -1083,6 +1094,11 @@ select {
   box-shadow: inset 4px 0 0 #2563eb;
 }
 
+.case-browser-item.is-disabled strong,
+.case-browser-item.is-disabled > span:not(.case-state-badge) {
+  color: #98a2b3;
+}
+
 .case-browser-item strong {
   overflow-wrap: anywhere;
   color: #111827;
@@ -1096,6 +1112,19 @@ select {
   color: #667085;
   font-size: 12px;
   line-height: 1.35;
+}
+
+.case-state-badge {
+  justify-self: start;
+  min-height: 20px;
+  padding: 3px 7px;
+  border: 1px solid #fed7aa;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.1;
 }
 
 .case-browser-detail {
@@ -1119,6 +1148,64 @@ select {
 .case-detail-heading span {
   flex: 0 0 auto;
   font-weight: 750;
+}
+
+.case-detail-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.case-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: -4px 0 12px;
+}
+
+.case-run-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.case-run-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #2563eb;
+}
+
+.case-run-toggle input:disabled,
+.case-run-toggle input:disabled + span {
+  color: #98a2b3;
+  cursor: not-allowed;
+}
+
+.case-management-message {
+  margin: 0 0 12px;
+  padding: 9px 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.case-management-message.is-error {
+  border-color: #fecaca;
+  background: #fff1f0;
+  color: #b42318;
 }
 
 .bindings-table {

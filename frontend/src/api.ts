@@ -1,4 +1,7 @@
 import type {
+  Case,
+  CaseRunInclusionRequest,
+  CaseUploadRequest,
   CompareMatrixResponse,
   CreatedVersionResponse,
   Experiment,
@@ -94,6 +97,40 @@ export function updateExperiment(
   return apiPut<Experiment>(
     `/api/experiments/${encodeURIComponent(experimentId)}`,
     experiment
+  );
+}
+
+export function uploadCase(
+  experimentId: string,
+  request: CaseUploadRequest
+): Promise<Case> {
+  return apiPost<Case>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/cases`,
+    request
+  );
+}
+
+export function deleteCase(
+  experimentId: string,
+  caseId: string
+): Promise<{ case_id: string }> {
+  return apiDelete<{ case_id: string }>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/cases/${encodeURIComponent(
+      caseId
+    )}`
+  );
+}
+
+export function updateCaseRunInclusion(
+  experimentId: string,
+  caseId: string,
+  request: CaseRunInclusionRequest
+): Promise<Case> {
+  return apiPatch<Case>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/cases/${encodeURIComponent(
+      caseId
+    )}/run-inclusion`,
+    request
   );
 }
 
@@ -402,6 +439,22 @@ async function apiPut<T>(path: string, body: unknown): Promise<T> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body)
   });
+  if (!response.ok) throw new Error(await readErrorMessage(response));
+  return response.json() as Promise<T>;
+}
+
+async function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(path, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) throw new Error(await readErrorMessage(response));
+  return response.json() as Promise<T>;
+}
+
+async function apiDelete<T>(path: string): Promise<T> {
+  const response = await fetch(path, { method: "DELETE" });
   if (!response.ok) throw new Error(await readErrorMessage(response));
   return response.json() as Promise<T>;
 }

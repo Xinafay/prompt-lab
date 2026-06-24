@@ -56,6 +56,7 @@ class RunDefaults(BaseModel):
     repeat_count: int = Field(default=3, ge=1)
     llm_cache: Literal["disabled"] = "disabled"
     case_order: Literal["case-major"] = "case-major"
+    excluded_case_ids: list[str] = Field(default_factory=list)
 
 
 class ExperimentArtifact(BaseModel):
@@ -81,6 +82,7 @@ class CaseArtifact(BaseModel):
 
     id: str = Field(min_length=1)
     payload: JsonObject
+    enabled: bool = True
 
 
 class RunBatchArtifact(BaseModel):
