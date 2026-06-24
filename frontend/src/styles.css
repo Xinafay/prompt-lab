@@ -1130,7 +1130,7 @@ select {
 
 .bindings-row {
   display: grid;
-  grid-template-columns: minmax(120px, 180px) minmax(110px, 150px) minmax(280px, 1fr);
+  grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
   border-bottom: 1px solid #eef1f5;
 }
 
@@ -1162,6 +1162,12 @@ select {
   color: #111827;
   font-size: 13px;
   line-height: 1.4;
+}
+
+.payload-key-cell {
+  display: grid;
+  align-content: start;
+  gap: 4px;
 }
 
 .bindings-empty,

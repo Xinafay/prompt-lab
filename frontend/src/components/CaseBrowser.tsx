@@ -164,7 +164,6 @@ export function CaseBrowser({ cases }: CaseBrowserProps) {
             <div className="bindings-table" role="table" aria-label="Payload">
               <div className="bindings-row bindings-row-head" role="row">
                 <span role="columnheader">Key</span>
-                <span role="columnheader">Type</span>
                 <span role="columnheader">Preview</span>
               </div>
               {selectedPayloadEntries.length === 0 ? (
@@ -176,16 +175,14 @@ export function CaseBrowser({ cases }: CaseBrowserProps) {
               ) : (
                 selectedPayloadEntries.map(([key, value]) => (
                   <div className="bindings-row" key={key} role="row">
-                    <strong role="cell">{key}</strong>
-                    <span className="binding-meta" role="cell">
-                      {describeValue(value)}
-                    </span>
+                    <div className="payload-key-cell" role="cell">
+                      <strong>{key}</strong>
+                      <span className="binding-meta">
+                        {describeValue(value)}
+                      </span>
+                    </div>
                     <div role="cell">
                       <ValuePreview value={value} />
-                      <details className="binding-json">
-                        <summary>Value JSON</summary>
-                        <pre>{formatJson(value)}</pre>
-                      </details>
                     </div>
                   </div>
                 ))
