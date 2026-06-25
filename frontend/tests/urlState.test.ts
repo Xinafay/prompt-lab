@@ -100,16 +100,26 @@ test("parses and builds case suite routes", () => {
     parseCaseSuitesRoute(
       new URL("http://localhost:5173/case-suites/demo-json-briefs")
     ),
-    { suiteId: "demo-json-briefs" }
+    { suiteId: "demo-json-briefs", tab: "cases" }
+  );
+  assert.deepEqual(
+    parseCaseSuitesRoute(
+      new URL("http://localhost:5173/case-suites/demo-json-briefs/settings")
+    ),
+    { suiteId: "demo-json-briefs", tab: "settings" }
   );
   assert.deepEqual(
     parseCaseSuitesRoute(new URL("http://localhost:5173/case-suites")),
-    { suiteId: null }
+    { suiteId: null, tab: "cases" }
   );
   assert.equal(buildCaseSuitesPath(), "/case-suites");
   assert.equal(
     buildCaseSuitesPath("Demo JSON briefs"),
-    "/case-suites/Demo%20JSON%20briefs"
+    "/case-suites/Demo%20JSON%20briefs/cases"
+  );
+  assert.equal(
+    buildCaseSuitesPath("Demo JSON briefs", "settings"),
+    "/case-suites/Demo%20JSON%20briefs/settings"
   );
 });
 

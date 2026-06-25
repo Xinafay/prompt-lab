@@ -60,6 +60,7 @@ const cases: Case[] = [
 function renderManager(props: Partial<React.ComponentProps<typeof CaseSuiteManager>> = {}) {
   return renderToStaticMarkup(
     React.createElement(CaseSuiteManager, {
+      activeTab: "cases",
       suites,
       selectedSuiteId: "suite-regression",
       cases,
@@ -71,6 +72,7 @@ function renderManager(props: Partial<React.ComponentProps<typeof CaseSuiteManag
       onDeleteSuite: async () => undefined,
       onResetCases: () => undefined,
       onSaveCases: async () => undefined,
+      onTabChange: () => undefined,
       onUpdateSuite: async () => undefined,
       ...props
     })
@@ -99,10 +101,12 @@ test("case suites list renders suite rail metadata and create action", () => {
 });
 
 test("case suite manager renders management controls and disables referenced delete", () => {
-  const html = renderManager();
+  const html = renderManager({ activeTab: "settings" });
 
-  assert.match(html, /Save changes/);
+  assert.match(html, /Case Suite settings/);
+  assert.match(html, />Save<\/button>/);
   assert.match(html, /Delete suite/);
+  assert.match(html, /Danger zone/);
   assert.match(html, /data-tooltip="Cannot delete a suite referenced by experiments: demo-json\."/);
   assert.doesNotMatch(html, /Cannot delete a suite referenced by experiments\./);
   assert.match(html, /<button[^>]*disabled=""[^>]*>Delete suite<\/button>/);
@@ -111,17 +115,20 @@ test("case suite manager renders management controls and disables referenced del
 test("case suite manager renders cases with browser layout and suite actions", () => {
   const html = renderManager();
 
-  assert.match(html, /Suite cases/);
+  assert.match(html, /Case Suite workspace/);
+  assert.match(html, /Cases/);
   assert.match(html, /alpha/);
   assert.match(html, /bravo/);
   assert.match(html, /Add case/);
-  assert.match(html, /Edit/);
-  assert.match(html, /Delete/);
+  assert.match(html, /Edit payload/);
+  assert.match(html, /Delete case/);
   assert.match(html, /bindings-table/);
   assert.doesNotMatch(html, /Delete selected case/);
+  assert.doesNotMatch(html, /Suite cases/);
+  assert.doesNotMatch(html, /Delete suite/);
   assert.doesNotMatch(html, /case-suite-payload-editor/);
   assert.doesNotMatch(html, /Save suite cases/);
-  assert.match(html, /Save changes/);
+  assert.match(html, />Save<\/button>/);
 });
 
 test("case suite manager renders busy and empty states", () => {
@@ -175,12 +182,12 @@ test("case suite creation, add case, and edit case render as modals", () => {
   assert.match(addCaseHtml, /case-file-picker/);
   assert.match(addCaseHtml, /case-file-input/);
   assert.match(addCaseHtml, /Payload JSON/);
-  assert.match(addCaseHtml, /case-payload-modal/);
+  assert.match(addCaseHtml, /modal-card-large-code/);
   assert.match(addCaseHtml, /code-editor/);
   assert.match(editCaseHtml, /role="dialog"/);
   assert.match(editCaseHtml, /Edit case payload/);
   assert.match(editCaseHtml, /Payload JSON/);
-  assert.match(editCaseHtml, /case-payload-modal/);
+  assert.match(editCaseHtml, /modal-card-large-code/);
   assert.match(editCaseHtml, /code-editor/);
 });
 
@@ -274,6 +281,6 @@ test("case suite manager stacks below the shared mobile breakpoint", () => {
 
   assert.match(
     css,
-    /@media \(max-width: 980px\)[\s\S]*?\.case-suite-cases\s*\{[\s\S]*?grid-template-columns:\s*1fr;/
+    /@media \(max-width: 760px\)[\s\S]*?\.settings-section-danger \.disabled-tooltip-wrapper\s*\{[\s\S]*?grid-column:\s*1;/
   );
 });

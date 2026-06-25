@@ -35,31 +35,28 @@ const experiment: Experiment = {
   }
 };
 
-test("experiments list renders management actions", () => {
+test("experiments list renders navigation without management actions", () => {
   const html = renderToStaticMarkup(
     React.createElement(ExperimentsList, {
       experiments: [experiment],
-      onClone: () => undefined,
       onCreate: () => undefined,
-      onDelete: () => undefined,
       onSelect: () => undefined,
       selectedExperimentId: "demo-json"
     })
   );
 
   assert.match(html, /New/);
-  assert.match(html, /Clone/);
-  assert.match(html, /Delete/);
-  assert.match(html, /danger-action/);
+  assert.match(html, /Demo JSON/);
+  assert.doesNotMatch(html, /Clone/);
+  assert.doesNotMatch(html, /Delete/);
+  assert.doesNotMatch(html, /danger-action/);
 });
 
-test("experiments list only shows clone and delete for selected experiment", () => {
+test("experiments list remains navigation when no experiment is selected", () => {
   const html = renderToStaticMarkup(
     React.createElement(ExperimentsList, {
       experiments: [experiment],
-      onClone: () => undefined,
       onCreate: () => undefined,
-      onDelete: () => undefined,
       onSelect: () => undefined,
       selectedExperimentId: null
     })
