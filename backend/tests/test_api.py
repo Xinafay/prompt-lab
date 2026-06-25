@@ -398,6 +398,21 @@ def test_api_rejects_empty_experiment_title() -> None:
         assert response.json()["detail"] == "Experiment title is required"
 
 
+def test_api_rejects_empty_clone_experiment_title() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_runtime_preview_experiment(root)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).post(
+            "/api/experiments/demo/clone",
+            json={"title": "   "},
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Experiment title is required"
+
+
 def test_api_clones_experiment() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -557,6 +572,29 @@ def test_api_create_experiment_returns_409_on_file_exists_error() -> None:
 
             assert response.status_code == 409
             assert response.json()["detail"] == "Experiment already exists"
+        finally:
+            api_module.PromptLabStore.create_experiment = original_create_experiment
+
+
+def test_api_create_experiment_returns_400_on_value_error() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        save_settings(root / "config" / "settings.json", PromptLabSettings())
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        original_create_experiment = api_module.PromptLabStore.create_experiment
+
+        def invalid_create(*_args: object, **_kwargs: object) -> object:
+            raise ValueError("Experiment id is invalid")
+
+        api_module.PromptLabStore.create_experiment = invalid_create
+        try:
+            response = TestClient(app).post(
+                "/api/experiments",
+                json={"title": "Invalid", "output_type": "text"},
+            )
+
+            assert response.status_code == 400
+            assert response.json()["detail"] == "Experiment id is invalid"
         finally:
             api_module.PromptLabStore.create_experiment = original_create_experiment
 
@@ -1930,12 +1968,14 @@ def main() -> int:
         test_api_creates_text_experiment_from_title,
         test_api_creates_pydantic_experiment,
         test_api_rejects_empty_experiment_title,
+        test_api_rejects_empty_clone_experiment_title,
         test_api_clones_experiment,
         test_api_deletes_experiment,
         test_api_rejects_missing_or_blank_model_entrypoint_for_pydantic,
         test_api_rejects_missing_create_experiment_source,
         test_api_rejects_deleting_missing_experiment,
         test_api_create_experiment_returns_409_on_file_exists_error,
+        test_api_create_experiment_returns_400_on_value_error,
         test_api_clone_experiment_returns_409_on_file_exists_error,
         test_api_updates_experiment_manifest_under_experiments,
         test_api_rejects_experiment_update_id_mismatch,
