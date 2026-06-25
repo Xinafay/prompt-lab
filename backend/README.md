@@ -67,10 +67,14 @@ Prompt Lab has repository-local experiment and Case Suite roots:
 - `experiments/` - local runtime experiment workspace, ignored by git.
 - `case_suites/` - local runtime Case Suite workspace, ignored by git.
 
-On backend startup, Prompt Lab independently seeds missing runtime roots:
-`examples/experiments/` into `experiments/`, and `examples/case_suites/` into
-`case_suites/`. Once seeded, the backend lists, loads, and writes only the
-runtime roots.
+On backend startup, Prompt Lab independently seeds experiments and Case Suites.
+Experiment seeding is workspace-style: if `experiments/` already contains any
+`*/experiment.json` manifests, example experiments are not copied over the
+runtime workspace. Case Suite seeding is per-suite: missing example suite
+directories from `examples/case_suites/` are copied into the runtime
+`case_suites/` root, and existing runtime suite directories are never
+overwritten. Once seeded, the backend lists, loads, and writes only the runtime
+roots.
 
 Carmilla exports complete Prompt Lab experiments through its eval runner. From
 the Carmilla repository root:
@@ -88,9 +92,10 @@ experiment metadata. Case payloads belong in a Case Suite under
 `case_suite_id`. The exporter reports created, existing, and skipped file events
 to stderr.
 
-Existing runtime experiments and Case Suites are not migrated when examples
-change. Once a runtime root is seeded, the backend leaves it alone unless the
-user edits or replaces it.
+Existing runtime experiments and existing runtime suite directories are not
+migrated when examples change. The backend may add newly missing example suites
+to `case_suites/`, but it leaves any existing runtime suite directory untouched
+unless the user edits or replaces it.
 
 Environment overrides:
 

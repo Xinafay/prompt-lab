@@ -73,8 +73,13 @@ test("demo cases tab shows suite-backed cases and opens case suites", async ({
     page.getByRole("complementary", { name: "Case suite list" })
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Case Suites" })).toBeVisible();
-  await expect(page.getByText("Demo JSON briefs")).toBeVisible();
-  await expect(page.getByText("Demo string replies")).toBeVisible();
+  const suiteList = page.getByRole("complementary", { name: "Case suite list" });
+  await expect(
+    suiteList.getByRole("button", { name: /Demo JSON briefs/ })
+  ).toBeVisible();
+  await expect(
+    suiteList.getByRole("button", { name: /Demo string replies/ })
+  ).toBeVisible();
 });
 
 test("demo string prompt and validators tabs show source sections", async ({ page }) => {

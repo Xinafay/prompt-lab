@@ -76,10 +76,13 @@ scope. Automatic validators run local rules such as word counts or JSON-path
 counts and currently map binary rule outcomes to grade `5` or `1`.
 
 The running app does not write into `examples/`. At backend startup, example
-experiments and example Case Suites are independently copied into the runtime
-`experiments/` and `case_suites/` roots when those workspaces are missing. Edit
-and run from the runtime roots; update `examples/` only when changing the golden
-starter templates.
+experiments and example Case Suites are seeded with different overwrite rules.
+Experiment seeding is workspace-style: once the runtime `experiments/` root has
+any experiment manifests, example experiments are not copied over it. Case Suite
+seeding is per-suite: missing example suites are copied into the runtime
+`case_suites/` root, but existing runtime suite directories are never
+overwritten. Edit and run from the runtime roots; update `examples/` only when
+changing the golden starter templates.
 
 Examples that contain committed runtime artifacts under version directories
 (`runs/`, `validations/`, `reviews/`, or `comparisons/`) are copied exactly so
@@ -87,6 +90,8 @@ their saved artifacts stay consistent with their manifest. Global default models
 and repeat count are applied only to starter examples without committed runtime
 artifacts.
 
-Existing runtime experiments and Case Suites are not migrated when committed
-examples change. Delete or move `experiments/` and/or `case_suites/` only when
-you intentionally want to reseed from the current examples.
+Existing runtime experiments and existing runtime suite directories are not
+migrated when committed examples change. Delete or move `experiments/` only when
+you intentionally want to reseed the experiment workspace; delete or move a
+specific runtime suite directory only when you intentionally want that suite
+reseeded from the current examples.

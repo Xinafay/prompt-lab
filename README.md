@@ -42,14 +42,20 @@ key in `.servers.jsonc`.
 
 `examples/` contains committed golden templates split into
 `examples/experiments/` and `examples/case_suites/`. On backend startup, Prompt
-Lab independently seeds missing runtime `experiments/` and `case_suites/` roots
-from those example directories. Runtime reads, generated artifacts, and future
-GUI edits use `experiments/` and `case_suites/` only. Both runtime roots are
-ignored by git.
+Lab seeds experiments and Case Suites with different overwrite rules. Experiment
+seeding is workspace-style: if the runtime `experiments/` root already contains
+any experiment manifests, committed example experiments are not copied over it.
+Case Suite seeding is per-suite: missing example suite directories are copied
+into an existing runtime `case_suites/` root, and existing runtime suite
+directories are never overwritten. Runtime reads, generated artifacts, and
+future GUI edits use `experiments/` and `case_suites/` only. Both runtime roots
+are ignored by git.
 
-Existing runtime experiments are not migrated when committed examples change.
-Delete or move `experiments/` and/or `case_suites/` only when you intentionally
-want to reseed from the current examples.
+Existing runtime experiments and existing runtime suite directories are not
+migrated when committed examples change. Delete or move `experiments/` only when
+you intentionally want to reseed the experiment workspace; delete or move a
+specific runtime suite directory only when you intentionally want that suite
+reseeded from examples.
 
 Carmilla can export a complete Prompt Lab experiment directly from saved workflow
 eval fixtures. From the Carmilla repository root, run:
