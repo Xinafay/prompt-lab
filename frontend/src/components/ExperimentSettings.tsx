@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
-import type { Experiment, OutputType } from "../types";
+import type { Experiment } from "../types";
 import { TooltipButton } from "./TooltipButton";
 
 interface ExperimentSettingsProps {
@@ -79,28 +79,6 @@ export function ExperimentSettings({
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Unknown error");
     }
-  }
-
-  function handleOutputTypeChange(type: OutputType) {
-    updateDraft((current) => {
-      if (type === "text") {
-        return { ...current, output: { type: "text" } };
-      }
-      const modelFile =
-        current.output.type === "pydantic" ? current.output.model_file : undefined;
-      const modelEntrypoint =
-        current.output.type === "pydantic"
-          ? current.output.model_entrypoint
-          : undefined;
-      return {
-        ...current,
-        output: {
-          type: "pydantic",
-          model_file: modelFile ?? "model.py",
-          model_entrypoint: modelEntrypoint ?? ""
-        }
-      };
-    });
   }
 
   return (
@@ -183,16 +161,7 @@ export function ExperimentSettings({
         <h3>Version</h3>
         <label className="settings-field">
           <span>Active version</span>
-          <input
-            required
-            value={draft.active_version}
-            onChange={(event) =>
-              updateDraft((current) => ({
-                ...current,
-                active_version: event.target.value
-              }))
-            }
-          />
+          <input readOnly value={draft.active_version} />
         </label>
       </section>
 
@@ -252,44 +221,17 @@ export function ExperimentSettings({
         <h3>Output</h3>
         <label className="settings-field">
           <span>Type</span>
-          <select
-            value={draft.output.type}
-            onChange={(event) => handleOutputTypeChange(event.target.value as OutputType)}
-          >
-            <option value="text">text</option>
-            <option value="pydantic">pydantic</option>
-          </select>
+          <input readOnly value={draft.output.type} />
         </label>
         {draft.output.type === "pydantic" ? (
           <>
             <label className="settings-field">
               <span>Model file</span>
-              <input
-                required
-                value={draft.output.model_file ?? ""}
-                onChange={(event) =>
-                  updateDraft((current) => ({
-                    ...current,
-                    output: { ...current.output, model_file: event.target.value }
-                  }))
-                }
-              />
+              <input readOnly value={draft.output.model_file ?? ""} />
             </label>
             <label className="settings-field">
               <span>Model entrypoint</span>
-              <input
-                required
-                value={draft.output.model_entrypoint ?? ""}
-                onChange={(event) =>
-                  updateDraft((current) => ({
-                    ...current,
-                    output: {
-                      ...current.output,
-                      model_entrypoint: event.target.value
-                    }
-                  }))
-                }
-              />
+              <input readOnly value={draft.output.model_entrypoint ?? ""} />
             </label>
           </>
         ) : null}
@@ -303,16 +245,7 @@ export function ExperimentSettings({
         </label>
         <label className="settings-field">
           <span>Path</span>
-          <input
-            required
-            value={draft.template.path}
-            onChange={(event) =>
-              updateDraft((current) => ({
-                ...current,
-                template: { ...current.template, path: event.target.value }
-              }))
-            }
-          />
+          <input readOnly value={draft.template.path} />
         </label>
       </section>
 
