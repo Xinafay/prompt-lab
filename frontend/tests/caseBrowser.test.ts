@@ -6,6 +6,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { CaseBrowser } from "../src/components/CaseBrowser.tsx";
 
+function functionSource(source: string, name: string): string {
+  const start = source.search(new RegExp(`(?:async )?function ${name}\\b`));
+  assert.notEqual(start, -1, `${name} should exist`);
+  const rest = source.slice(start + 1);
+  const next = rest.search(/\n  (?:async )?function \w+/);
+  return source.slice(start, next === -1 ? undefined : start + 1 + next);
+}
+
 test("case browser renders plain JSON case payloads", () => {
   const html = renderToStaticMarkup(
     React.createElement(CaseBrowser, {
@@ -97,6 +105,51 @@ test("production workbench treats case edits as unsaved navigation state", () =>
   assert.match(source, /activeTab === "cases"[\s\S]*casesDirty/);
   assert.match(source, /Unsaved case inclusion changes/);
   assert.match(source, /handleSaveCaseInclusion/);
+});
+
+test("production workbench resets run-derived state after saving case inclusion", () => {
+  const source = readFileSync(
+    new URL("../src/App.tsx", import.meta.url),
+    "utf8"
+  );
+  const saveCaseInclusionSource = functionSource(
+    source,
+    "handleSaveCaseInclusion"
+  );
+
+  assert.match(
+    saveCaseInclusionSource,
+    /setCommittedValidationState\(null\);[\s\S]*setCompareValidationByVersion\(\{\}\);[\s\S]*setCommittedReviewState\(null\);[\s\S]*setProposalResponse\(null\);[\s\S]*setCreatedVersion\(null\);[\s\S]*setComparison\(null\);/
+  );
+});
+
+test("production workbench only marks case inclusion dirty when it differs", () => {
+  const source = readFileSync(
+    new URL("../src/App.tsx", import.meta.url),
+    "utf8"
+  );
+  const draftChangeSource = functionSource(source, "handleCasesDraftChange");
+
+  assert.match(source, /function caseInclusionMatchesOverview/);
+  assert.match(
+    draftChangeSource,
+    /const isDirty = !caseInclusionMatchesOverview\(nextCases\);[\s\S]*setCasesDraft\(isDirty \? nextCases : null\);[\s\S]*setCasesDirty\(isDirty\);/
+  );
+});
+
+test("production workbench disables run controls for unsaved case inclusion", () => {
+  const source = readFileSync(
+    new URL("../src/App.tsx", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(source, /const runActionDisabled = workflowLocked \|\| casesDirty;/);
+  assert.match(
+    source,
+    /const runActionDisabledReason = workflowLocked[\s\S]*Save case inclusion before running or previewing/
+  );
+  assert.match(source, /disabled=\{runActionDisabled\}/);
+  assert.match(source, /disabledReason=\{runActionDisabledReason\}/);
 });
 
 test("case browser stacks before the full mobile app breakpoint", () => {

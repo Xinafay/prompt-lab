@@ -1530,9 +1530,30 @@ function App() {
     setComparison(null);
   }
 
+  function caseInclusionMatchesOverview(nextCases: Case[]): boolean {
+    if (detailState.status !== "loaded") {
+      return false;
+    }
+    if (nextCases.length !== detailState.overview.cases.length) {
+      return false;
+    }
+    const enabledByCaseId = new Map(
+      detailState.overview.cases.map((artifactCase) => [
+        artifactCase.id,
+        artifactCase.enabled
+      ])
+    );
+    return nextCases.every(
+      (artifactCase) =>
+        enabledByCaseId.has(artifactCase.id) &&
+        enabledByCaseId.get(artifactCase.id) === artifactCase.enabled
+    );
+  }
+
   function handleCasesDraftChange(nextCases: Case[]) {
-    setCasesDraft(nextCases);
-    setCasesDirty(true);
+    const isDirty = !caseInclusionMatchesOverview(nextCases);
+    setCasesDraft(isDirty ? nextCases : null);
+    setCasesDirty(isDirty);
     setWorkflowMessage(null);
   }
 
@@ -1573,6 +1594,12 @@ function App() {
         };
       });
       setDetailState({ status: "loaded", overview, runs });
+      setCommittedValidationState(null);
+      setCompareValidationByVersion({});
+      setCommittedReviewState(null);
+      setProposalResponse(null);
+      setCreatedVersion(null);
+      setComparison(null);
       setCasesDraft(null);
       setCasesDirty(false);
       setWorkflowMessage("Case inclusion saved.");
@@ -2549,6 +2576,12 @@ function App() {
     activeVersion !== null &&
     (baselineVersion === activeVersion || candidateVersion === activeVersion);
   const workflowLocked = workflowBusy || jobStatus?.status === "running";
+  const runActionDisabled = workflowLocked || casesDirty;
+  const runActionDisabledReason = workflowLocked
+    ? "Wait for the current run to finish."
+    : casesDirty
+      ? "Save case inclusion before running or previewing."
+      : null;
   const judgeAction = getJudgeActionState({
     hasReview: reviewState !== null,
     hasRuns,
@@ -2735,8 +2768,8 @@ function App() {
                       activeTab === "runs" ? (
                         <TooltipButton
                           className="secondary-action"
-                          disabled={workflowLocked}
-                          disabledReason="Wait for the current run to finish."
+                          disabled={runActionDisabled}
+                          disabledReason={runActionDisabledReason}
                           onClick={handlePreviewRunPrompts}
                           type="button"
                         >
@@ -2843,8 +2876,8 @@ function App() {
                       ) : activeTab === "runs" ? (
                         <TooltipButton
                           className="primary-action"
-                          disabled={workflowLocked}
-                          disabledReason="Wait for the current run to finish."
+                          disabled={runActionDisabled}
+                          disabledReason={runActionDisabledReason}
                           onClick={handleRunVersion}
                           type="button"
                         >
