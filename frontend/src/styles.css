@@ -1225,12 +1225,6 @@ select {
   gap: 8px;
 }
 
-.case-browser-item-actions .danger-action {
-  min-height: 28px;
-  padding: 0 9px;
-  font-size: 12px;
-}
-
 .case-browser-item-actions .case-run-toggle {
   min-height: 28px;
   font-size: 12px;
@@ -1392,20 +1386,23 @@ select {
 }
 
 .case-detail-summary {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  display: grid;
+  justify-items: end;
   gap: 8px;
-  min-width: 0;
+  min-width: 180px;
 }
 
 .case-detail-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin: -4px 0 12px;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.case-detail-actions .secondary-action {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 .case-run-toggle {

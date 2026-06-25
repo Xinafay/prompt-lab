@@ -99,7 +99,6 @@ export function CaseBrowser({
   const selectedPayloadCount =
     selectedCase === null ? 0 : Object.keys(selectedCase.payload).length;
   const canEdit = onCasesChange !== undefined;
-  const canManageSuiteCases = onEditCase !== undefined || onDeleteCase !== undefined;
 
   function handleRunInclusionChange(caseId: string, enabled: boolean): void {
     if (onCasesChange === undefined) {
@@ -178,55 +177,27 @@ export function CaseBrowser({
                     <span className="case-state-badge">Excluded</span>
                   )}
                 </button>
-                {!canEdit && !canManageSuiteCases ? null : (
+                {canEdit ? (
                   <div className="case-browser-item-actions">
-                    {canEdit ? (
-                      <label
-                        className="case-run-toggle"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <input
-                          checked={artifactCase.enabled}
-                          disabled={isBusy}
-                          onChange={(event) =>
-                            handleRunInclusionChange(
-                              artifactCase.id,
-                              event.currentTarget.checked
-                            )
-                          }
-                          type="checkbox"
-                        />
-                        <span>Include in runs</span>
-                      </label>
-                    ) : null}
-                    {onEditCase === undefined ? null : (
-                      <button
-                        className="secondary-action"
+                    <label
+                      className="case-run-toggle"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <input
+                        checked={artifactCase.enabled}
                         disabled={isBusy}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onEditCase(artifactCase);
-                        }}
-                        type="button"
-                      >
-                        Edit
-                      </button>
-                    )}
-                    {onDeleteCase === undefined ? null : (
-                      <button
-                        className="secondary-action danger-action"
-                        disabled={isBusy}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onDeleteCase(artifactCase);
-                        }}
-                        type="button"
-                      >
-                        Delete
-                      </button>
-                    )}
+                        onChange={(event) =>
+                          handleRunInclusionChange(
+                            artifactCase.id,
+                            event.currentTarget.checked
+                          )
+                        }
+                        type="checkbox"
+                      />
+                      <span>Include in runs</span>
+                    </label>
                   </div>
-                )}
+                ) : null}
               </div>
             ))}
           </div>
@@ -252,6 +223,30 @@ export function CaseBrowser({
                 </span>
                 {selectedCase.enabled ? null : (
                   <span className="case-state-badge">Excluded</span>
+                )}
+                {onEditCase === undefined && onDeleteCase === undefined ? null : (
+                  <div className="case-detail-actions">
+                    {onEditCase === undefined ? null : (
+                      <button
+                        className="secondary-action"
+                        disabled={isBusy}
+                        onClick={() => onEditCase(selectedCase)}
+                        type="button"
+                      >
+                        Edit payload
+                      </button>
+                    )}
+                    {onDeleteCase === undefined ? null : (
+                      <button
+                        className="secondary-action danger-action"
+                        disabled={isBusy}
+                        onClick={() => onDeleteCase(selectedCase)}
+                        type="button"
+                      >
+                        Delete case
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
