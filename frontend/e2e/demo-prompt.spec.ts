@@ -101,7 +101,8 @@ test("demo cases tab shows suite-backed cases and opens case suites", async ({
 
   await suiteDetails.getByRole("button", { name: "Add case" }).click();
   await expect(page.getByRole("dialog", { name: "Add case" })).toBeVisible();
-  await expect(page.getByLabel("Upload case JSON")).toBeVisible();
+  await expect(page.getByText("Choose JSON file")).toBeVisible();
+  await expect(page.getByText("No file selected")).toBeVisible();
   await page.getByRole("button", { name: "Cancel" }).click();
 
   await page.reload();

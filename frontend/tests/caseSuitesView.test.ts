@@ -168,6 +168,10 @@ test("case suite creation, add case, and edit case render as modals", () => {
   assert.match(addCaseHtml, /Add case/);
   assert.match(addCaseHtml, /Case ID/);
   assert.match(addCaseHtml, /Upload case JSON/);
+  assert.match(addCaseHtml, /Choose JSON file/);
+  assert.match(addCaseHtml, /No file selected/);
+  assert.match(addCaseHtml, /case-file-picker/);
+  assert.match(addCaseHtml, /case-file-input/);
   assert.match(addCaseHtml, /Payload JSON/);
   assert.match(addCaseHtml, /case-payload-modal/);
   assert.match(addCaseHtml, /code-editor/);

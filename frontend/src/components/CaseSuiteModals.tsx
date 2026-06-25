@@ -123,6 +123,7 @@ export function AddCaseModal({
 }: AddCaseModalProps) {
   const [caseId, setCaseId] = useState("");
   const [payloadText, setPayloadText] = useState("{\n  \n}");
+  const [uploadFileName, setUploadFileName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const trimmedCaseId = caseId.trim();
   const submitDisabled = isBusy || trimmedCaseId === "";
@@ -139,6 +140,7 @@ export function AddCaseModal({
       if (uploadedCaseId !== "") {
         setCaseId(uploadedCaseId);
       }
+      setUploadFileName(file.name);
       setPayloadText(formatPayload(parsed.payload));
       setError(null);
     } catch (uploadError) {
@@ -189,16 +191,23 @@ export function AddCaseModal({
           />
         </label>
 
-        <label className="settings-field">
+        <label className="settings-field case-file-upload">
           <span>Upload case JSON</span>
-          <input
-            accept="application/json,.json"
-            disabled={isBusy}
-            onChange={(event) =>
-              void handleUploadFile(event.currentTarget.files?.[0] ?? null)
-            }
-            type="file"
-          />
+          <span className="case-file-picker">
+            <span className="case-file-picker-button">Choose JSON file</span>
+            <span className="case-file-picker-name">
+              {uploadFileName ?? "No file selected"}
+            </span>
+            <input
+              accept="application/json,.json"
+              className="case-file-input"
+              disabled={isBusy}
+              onChange={(event) =>
+                void handleUploadFile(event.currentTarget.files?.[0] ?? null)
+              }
+              type="file"
+            />
+          </span>
         </label>
 
         <CodeEditor
