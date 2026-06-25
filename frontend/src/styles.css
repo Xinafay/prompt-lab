@@ -202,8 +202,6 @@ select {
 .case-browser-item-main:focus-visible,
 .case-suite-list-item:focus-visible,
 .case-suite-case-item:focus-visible,
-.case-suite-manager input:focus-visible,
-.case-suite-manager textarea:focus-visible,
 .comparison-controls select:focus-visible,
 .validation-include-control input:focus-visible,
 .reason-input:focus-visible,
@@ -533,8 +531,7 @@ select {
 
 .overview-section,
 .runs-panel,
-.case-browser,
-.case-suite-manager {
+.case-browser {
   min-width: 0;
   border: 1px solid #e4e7ec;
   border-radius: 8px;
@@ -672,6 +669,13 @@ select {
 
 .settings-section-actions button,
 .settings-section-danger button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.settings-section-actions .disabled-tooltip-wrapper,
+.settings-section-danger .disabled-tooltip-wrapper {
   grid-column: 2;
   grid-row: 1 / span 2;
   align-self: center;
@@ -1251,20 +1255,42 @@ select {
   overflow: auto;
 }
 
-.case-suite-manager {
-  display: block;
-  min-height: 640px;
-  overflow: hidden;
-}
-
-.case-suite-sidebar {
+.case-suite-workbench {
+  display: grid;
+  align-content: start;
+  gap: 14px;
   min-width: 0;
-  border-right: 1px solid #e4e7ec;
-  background: #fbfcfd;
 }
 
-.case-suite-editor,
-.case-suite-cases-heading,
+.case-suite-workbench-header {
+  min-width: 0;
+}
+
+.case-suite-cases-view {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.case-suite-cases-toolbar {
+  align-items: center;
+}
+
+.case-suite-cases-toolbar p {
+  margin: 4px 0 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.case-suite-settings-title {
+  margin: 0;
+  color: #111827;
+  font-size: 18px;
+  font-weight: 760;
+  line-height: 1.25;
+}
+
 .case-suite-payload-editor {
   display: grid;
   gap: 10px;
@@ -1275,8 +1301,6 @@ select {
   border-bottom: 1px solid #e4e7ec;
 }
 
-.case-suite-editor-heading h3,
-.case-suite-cases-heading h3,
 .case-suite-payload-heading h3 {
   margin: 0;
   color: #111827;
@@ -1285,9 +1309,7 @@ select {
   line-height: 1.3;
 }
 
-.case-suite-editor-heading p,
 .case-suite-reference,
-.case-suite-cases-heading span,
 .case-suite-list-item span,
 .case-suite-case-item span {
   margin: 0;
@@ -1337,68 +1359,10 @@ select {
   line-height: 1.35;
 }
 
-.case-suite-fields label {
-  display: grid;
-  gap: 5px;
-  min-width: 0;
-}
-
-.case-suite-fields label span {
-  color: #475467;
-  font-size: 12px;
-  font-weight: 750;
-  line-height: 1.3;
-}
-
-.case-suite-fields input,
-.case-suite-fields textarea {
-  width: 100%;
-  min-height: 36px;
-  border: 1px solid #d0d5dd;
-  border-radius: 6px;
-  padding: 7px 9px;
-  background: #ffffff;
-  color: #111827;
-  font-size: 13px;
-  line-height: 1.35;
-}
-
-.case-suite-fields textarea {
-  resize: vertical;
-}
-
-.case-suite-detail {
-  display: grid;
-  align-content: start;
-  gap: 14px;
-  min-width: 0;
-  padding: 16px;
-  overflow: auto;
-}
-
-.case-suite-editor {
-  padding-bottom: 14px;
-  border-bottom: 1px solid #e4e7ec;
-}
-
-.case-suite-editor-heading,
 .case-suite-payload-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-}
-
-.case-suite-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.case-suite-fields {
-  display: grid;
-  grid-template-columns: minmax(180px, 280px) minmax(0, 1fr);
   gap: 12px;
 }
 
@@ -1408,37 +1372,6 @@ select {
   border-radius: 6px;
   background: #fff7ed;
   color: #9a3412;
-}
-
-.case-suite-cases {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-}
-
-.case-suite-cases-list {
-  min-width: 0;
-  border: 1px solid #e4e7ec;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.case-suite-cases-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 12px;
-  border-bottom: 1px solid #e4e7ec;
-  background: #fbfcfd;
-}
-
-.case-suite-cases-heading > div {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 .case-detail-heading {
@@ -3185,9 +3118,6 @@ select {
     border-bottom: 1px solid #e4e7ec;
   }
 
-  .case-suite-cases {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 760px) {
@@ -3275,8 +3205,6 @@ select {
   .case-browser,
   .settings-section-actions,
   .settings-section-danger,
-  .case-suite-fields,
-  .case-suite-cases,
   .case-suite-payload-panel,
   .bindings-row,
   .runs-drilldown,
@@ -3324,8 +3252,7 @@ select {
     width: 100%;
   }
 
-  .case-browser-sidebar,
-  .case-suite-sidebar {
+  .case-browser-sidebar {
     border-right: 0;
     border-bottom: 1px solid #e4e7ec;
   }

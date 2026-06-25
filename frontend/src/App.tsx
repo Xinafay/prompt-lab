@@ -3228,54 +3228,22 @@ function App() {
               ) : null}
 
               {appView === "caseSuites" ? (
-                <>
-                  <div
-                    className="workbench-tabs"
-                    role="tablist"
-                    aria-label="Case Suite sections"
-                  >
-                    <button
-                      aria-selected={activeCaseSuiteTab === "cases"}
-                      className={
-                        activeCaseSuiteTab === "cases"
-                          ? "workbench-tab is-active"
-                          : "workbench-tab"
-                      }
-                      onClick={() => handleCaseSuiteTabSelection("cases")}
-                      role="tab"
-                      type="button"
-                    >
-                      Cases
-                    </button>
-                    <button
-                      aria-selected={activeCaseSuiteTab === "settings"}
-                      className={
-                        activeCaseSuiteTab === "settings"
-                          ? "workbench-tab is-active"
-                          : "workbench-tab"
-                      }
-                      onClick={() => handleCaseSuiteTabSelection("settings")}
-                      role="tab"
-                      type="button"
-                    >
-                      Settings
-                    </button>
-                  </div>
-                  <CaseSuiteManager
-                    cases={caseSuiteCases}
-                    caseSuiteCasesDirty={caseSuiteCasesDirty}
-                    isBusy={caseSuiteBusy}
-                    message={caseSuiteMessage}
-                    onAddCase={requestAddCaseToSuite}
-                    onCasesChange={handleCaseSuiteCasesChange}
-                    onDeleteSuite={handleDeleteCaseSuite}
-                    onResetCases={handleResetCaseSuiteCases}
-                    onSaveCases={handleSaveCaseSuiteCases}
-                    onUpdateSuite={handleUpdateCaseSuite}
-                    selectedSuiteId={selectedCaseSuiteId}
-                    suites={caseSuites}
-                  />
-                </>
+                <CaseSuiteManager
+                  activeTab={activeCaseSuiteTab}
+                  cases={caseSuiteCases}
+                  caseSuiteCasesDirty={caseSuiteCasesDirty}
+                  isBusy={caseSuiteBusy}
+                  message={caseSuiteMessage}
+                  onAddCase={requestAddCaseToSuite}
+                  onCasesChange={handleCaseSuiteCasesChange}
+                  onDeleteSuite={handleDeleteCaseSuite}
+                  onResetCases={handleResetCaseSuiteCases}
+                  onSaveCases={handleSaveCaseSuiteCases}
+                  onTabChange={handleCaseSuiteTabSelection}
+                  onUpdateSuite={handleUpdateCaseSuite}
+                  selectedSuiteId={selectedCaseSuiteId}
+                  suites={caseSuites}
+                />
               ) : null}
 
               {appView === "experiment" && state.experiments.length === 0 ? (
