@@ -1910,17 +1910,13 @@ function App() {
   function handleAddCaseToSuite(artifactCase: Case) {
     handleCaseSuiteCasesChange([...caseSuiteCases, artifactCase]);
     setCaseSuiteDialog(null);
-    setCaseSuiteMessage(`Added ${artifactCase.id}. Save suite cases to apply changes.`);
+    setCaseSuiteMessage(`Added ${artifactCase.id}. Save changes to apply it.`);
   }
 
   async function handleUpdateCaseSuite(
     suiteId: string,
     request: CaseSuiteUpdateRequest
   ) {
-    if (caseSuiteCasesDirty) {
-      setCaseSuiteMessage("Save or reset suite case changes before updating suites.");
-      return;
-    }
     setCaseSuiteBusy(true);
     setCaseSuiteMessage("Saving case suite...");
     try {

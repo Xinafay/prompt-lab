@@ -101,9 +101,10 @@ test("case suites list renders suite rail metadata and create action", () => {
 test("case suite manager renders management controls and disables referenced delete", () => {
   const html = renderManager();
 
-  assert.match(html, /Save suite/);
+  assert.match(html, /Save changes/);
   assert.match(html, /Delete suite/);
-  assert.match(html, /Cannot delete a suite referenced by experiments/);
+  assert.match(html, /data-tooltip="Cannot delete a suite referenced by experiments: demo-json\."/);
+  assert.doesNotMatch(html, /Cannot delete a suite referenced by experiments\./);
   assert.match(html, /<button[^>]*disabled=""[^>]*>Delete suite<\/button>/);
 });
 
@@ -119,7 +120,8 @@ test("case suite manager renders cases with browser layout and suite actions", (
   assert.match(html, /bindings-table/);
   assert.doesNotMatch(html, /Delete selected case/);
   assert.doesNotMatch(html, /case-suite-payload-editor/);
-  assert.match(html, /Save suite cases/);
+  assert.doesNotMatch(html, /Save suite cases/);
+  assert.match(html, /Save changes/);
 });
 
 test("case suite manager renders busy and empty states", () => {

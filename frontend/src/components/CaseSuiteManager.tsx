@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { Case, CaseSuite, CaseSuiteUpdateRequest } from "../types";
 import { CaseBrowser } from "./CaseBrowser";
 import { EditCasePayloadModal } from "./CaseSuiteModals";
+import { TooltipButton } from "./TooltipButton";
 import {
   canSaveSuiteCases,
   SUITE_CASE_SELECTION_BLOCKED_MESSAGE
@@ -56,15 +57,35 @@ export function CaseSuiteManager({
   const [editingCase, setEditingCase] = useState<Case | null>(null);
   const [error, setError] = useState<string | null>(null);
   const referencedBy = selectedSuite?.experiment_ids ?? [];
-  const suiteMutationDisabled = isBusy || caseSuiteCasesDirty;
+  const suiteTitleDirty =
+    selectedSuite !== null && suiteTitle.trim() !== selectedSuite.title;
+  const suiteDescriptionDirty =
+    selectedSuite !== null &&
+    suiteDescription.trim() !== (selectedSuite.description ?? "");
+  const suiteDraftDirty = suiteTitleDirty || suiteDescriptionDirty;
+  const suiteControlsDisabled = isBusy;
   const saveSuiteCasesDisabled = !canSaveSuiteCases({
     isBusy,
     isDirty: caseSuiteCasesDirty,
     hasPayloadError: false,
     selectedSuiteId: selectedSuite?.id ?? null
   });
+  const saveChangesDisabled =
+    isBusy ||
+    selectedSuite === null ||
+    (!suiteDraftDirty && saveSuiteCasesDisabled);
   const deleteDisabled =
-    selectedSuite === null || referencedBy.length > 0 || suiteMutationDisabled;
+    selectedSuite === null || referencedBy.length > 0 || isBusy || caseSuiteCasesDirty;
+  const deleteDisabledReason =
+    selectedSuite === null
+      ? "Select a case suite before deleting."
+      : referencedBy.length > 0
+        ? `Cannot delete a suite referenced by experiments: ${referencedBy.join(", ")}.`
+        : caseSuiteCasesDirty
+          ? "Save or reset suite case changes before deleting this suite."
+          : isBusy
+            ? "Wait for the current suite action to finish."
+            : null;
 
   useEffect(() => {
     setSuiteTitle(selectedSuite?.title ?? "");
@@ -100,7 +121,7 @@ export function CaseSuiteManager({
     setError(null);
   }
 
-  async function handleUpdateSuite(event: FormEvent<HTMLFormElement>) {
+  async function handleSaveChanges(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (selectedSuite === null) return;
     const title = suiteTitle.trim();
@@ -110,12 +131,17 @@ export function CaseSuiteManager({
     }
     setError(null);
     try {
-      await onUpdateSuite(selectedSuite.id, {
-        title,
-        description: suiteDescription.trim()
-      });
-    } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : "Unknown error");
+      if (suiteDraftDirty) {
+        await onUpdateSuite(selectedSuite.id, {
+          title,
+          description: suiteDescription.trim()
+        });
+      }
+      if (!saveSuiteCasesDisabled) {
+        await onSaveCases();
+      }
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Unknown error");
     }
   }
 
@@ -126,15 +152,6 @@ export function CaseSuiteManager({
       await onDeleteSuite(selectedSuite.id);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Unknown error");
-    }
-  }
-
-  async function handleSaveCases() {
-    setError(null);
-    try {
-      await onSaveCases();
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Unknown error");
     }
   }
 
@@ -154,7 +171,7 @@ export function CaseSuiteManager({
           <div className="case-browser-empty">Select a case suite.</div>
         ) : (
           <>
-            <form className="case-suite-editor" onSubmit={handleUpdateSuite}>
+            <form className="case-suite-editor" onSubmit={handleSaveChanges}>
               <div className="case-suite-editor-heading">
                 <div>
                   <h3>{selectedSuite.title}</h3>
@@ -162,33 +179,28 @@ export function CaseSuiteManager({
                 </div>
                 <div className="case-suite-actions">
                   <button
-                    className="secondary-action"
-                    disabled={suiteMutationDisabled}
+                    className="primary-action"
+                    disabled={saveChangesDisabled}
                     type="submit"
                   >
-                    Save suite
+                    Save changes
                   </button>
-                  <button
+                  <TooltipButton
                     className="secondary-action danger-action"
                     disabled={deleteDisabled}
+                    disabledReason={deleteDisabledReason}
                     onClick={handleDeleteSuite}
                     type="button"
                   >
                     Delete suite
-                  </button>
+                  </TooltipButton>
                 </div>
               </div>
-              {referencedBy.length > 0 ? (
-                <p className="case-suite-reference">
-                  Cannot delete a suite referenced by experiments. Referenced by{" "}
-                  {referencedBy.join(", ")}.
-                </p>
-              ) : null}
               <div className="case-suite-fields">
                 <label>
                   <span>Title</span>
                   <input
-                    disabled={suiteMutationDisabled}
+                    disabled={suiteControlsDisabled}
                     onChange={(event) => setSuiteTitle(event.target.value)}
                     value={suiteTitle}
                   />
@@ -196,7 +208,7 @@ export function CaseSuiteManager({
                 <label>
                   <span>Description</span>
                   <textarea
-                    disabled={suiteMutationDisabled}
+                    disabled={suiteControlsDisabled}
                     onChange={(event) => setSuiteDescription(event.target.value)}
                     rows={3}
                     value={suiteDescription}
@@ -217,14 +229,6 @@ export function CaseSuiteManager({
                     type="button"
                   >
                     Add case
-                  </button>
-                  <button
-                    className="primary-action"
-                    disabled={saveSuiteCasesDisabled}
-                    onClick={() => void handleSaveCases()}
-                    type="button"
-                  >
-                    Save suite cases
                   </button>
                   <button
                     className="secondary-action"
