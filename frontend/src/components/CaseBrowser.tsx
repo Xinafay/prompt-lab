@@ -1,4 +1,4 @@
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { Case, VersionOverview } from "../types";
 import { describeValue, ValuePreview } from "./ValuePreview";
@@ -7,6 +7,7 @@ interface CaseBrowserProps {
   cases: VersionOverview["cases"];
   isBusy?: boolean;
   onCasesChange?: (cases: Case[]) => void;
+  suiteTitle?: string | null;
 }
 
 function normalizeQuery(value: string): string {
@@ -23,14 +24,6 @@ function formatCaseTitle(caseId: string): string {
     .filter(Boolean)
     .map((part) => part.charAt(0).toLocaleUpperCase() + part.slice(1))
     .join(" ");
-}
-
-function deriveCaseId(fileName: string): string {
-  return fileName.replace(/\.json$/i, "").trim();
-}
-
-function isJsonObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function caseMatchesQuery(artifactCase: Case, caseQuery: string): boolean {
@@ -55,7 +48,8 @@ function caseMatchesPayloadQuery(
 export function CaseBrowser({
   cases,
   isBusy = false,
-  onCasesChange
+  onCasesChange,
+  suiteTitle = null
 }: CaseBrowserProps) {
   const [caseQuery, setCaseQuery] = useState("");
   const [bindingQuery, setBindingQuery] = useState("");
@@ -63,8 +57,6 @@ export function CaseBrowser({
     cases[0]?.id ?? null
   );
   const [caseMessage, setCaseMessage] = useState<string | null>(null);
-  const [caseError, setCaseError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const filteredCases = useMemo(() => {
     const normalizedCaseQuery = normalizeQuery(caseQuery);
@@ -104,61 +96,14 @@ export function CaseBrowser({
     selectedCase === null ? 0 : Object.keys(selectedCase.payload).length;
   const canEdit = onCasesChange !== undefined;
 
-  async function handleFileInputChange(
-    event: ChangeEvent<HTMLInputElement>
-  ): Promise<void> {
-    const file = event.currentTarget.files?.[0] ?? null;
-    event.currentTarget.value = "";
-    if (file === null || onCasesChange === undefined) {
-      return;
-    }
-    const caseId = deriveCaseId(file.name);
-    if (caseId.length === 0) {
-      setCaseMessage(null);
-      setCaseError("Case file name must include a case id.");
-      return;
-    }
-    if (cases.some((artifactCase) => artifactCase.id === caseId)) {
-      setCaseMessage(null);
-      setCaseError("Case already exists.");
-      return;
-    }
-    try {
-      const parsed = JSON.parse(await file.text()) as unknown;
-      if (!isJsonObject(parsed)) {
-        throw new Error("Case file must contain a JSON object.");
-      }
-      setCaseError(null);
-      setCaseMessage(`Added ${caseId}. Save cases to apply changes.`);
-      setSelectedCaseId(caseId);
-      onCasesChange([
-        ...cases,
-        { id: caseId, payload: parsed, enabled: true }
-      ].sort((left, right) => left.id.localeCompare(right.id)));
-    } catch (error) {
-      setCaseMessage(null);
-      setCaseError(error instanceof Error ? error.message : "Unknown error");
-    }
-  }
-
-  function handleDeleteCase(caseId: string): void {
-    if (onCasesChange === undefined) {
-      return;
-    }
-    setCaseError(null);
-    setCaseMessage(`Removed ${caseId}. Save cases to apply changes.`);
-    onCasesChange(cases.filter((artifactCase) => artifactCase.id !== caseId));
-  }
-
   function handleRunInclusionChange(caseId: string, enabled: boolean): void {
     if (onCasesChange === undefined) {
       return;
     }
-    setCaseError(null);
     setCaseMessage(
       enabled
-        ? `Included ${caseId} in runs. Save cases to apply changes.`
-        : `Excluded ${caseId} from runs. Save cases to apply changes.`
+        ? `Included ${caseId} in this experiment. Save inclusion to apply changes.`
+        : `Excluded ${caseId} from this experiment. Save inclusion to apply changes.`
     );
     onCasesChange(
       cases.map((artifactCase) =>
@@ -175,27 +120,9 @@ export function CaseBrowser({
             <h3>Cases</h3>
             <span>
               {filteredCases.length} of {cases.length}
+              {suiteTitle === null ? null : <> from {suiteTitle}</>}
             </span>
           </div>
-          {!canEdit ? null : (
-            <div className="case-browser-actions">
-              <button
-                className="secondary-action"
-                disabled={isBusy}
-                onClick={() => fileInputRef.current?.click()}
-                type="button"
-              >
-                Upload case JSON
-              </button>
-              <input
-                accept="application/json,.json"
-                className="case-file-input"
-                onChange={(event) => void handleFileInputChange(event)}
-                ref={fileInputRef}
-                type="file"
-              />
-            </div>
-          )}
           <label>
             <span>Find case</span>
             <input
@@ -265,14 +192,6 @@ export function CaseBrowser({
                       />
                       <span>Include in runs</span>
                     </label>
-                    <button
-                      className="secondary-action danger-action"
-                      disabled={isBusy}
-                      onClick={() => handleDeleteCase(artifactCase.id)}
-                      type="button"
-                    >
-                      Delete case
-                    </button>
                   </div>
                 )}
               </div>
@@ -303,9 +222,6 @@ export function CaseBrowser({
                 )}
               </div>
             </div>
-            {caseError === null ? null : (
-              <p className="case-management-message is-error">{caseError}</p>
-            )}
             {caseMessage === null ? null : (
               <p className="case-management-message">{caseMessage}</p>
             )}

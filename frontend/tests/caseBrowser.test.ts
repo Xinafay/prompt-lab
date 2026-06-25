@@ -58,7 +58,7 @@ test("case browser keeps object payload previews compact", () => {
   assert.doesNotMatch(html, /\{&quot;product&quot;:&quot;Atlas Desk Lamp&quot;/);
 });
 
-test("case browser renders case management controls and excluded state", () => {
+test("case browser renders experiment inclusion controls and suite title", () => {
   const html = renderToStaticMarkup(
     React.createElement(CaseBrowser, {
       cases: [
@@ -73,16 +73,18 @@ test("case browser renders case management controls and excluded state", () => {
           payload: { value: "bravo" }
         }
       ],
-      onCasesChange: () => undefined
+      onCasesChange: () => undefined,
+      suiteTitle: "Marketing Demo Suite"
     })
   );
 
-  assert.match(html, /Upload case JSON/);
+  assert.match(html, /2 of 2 from Marketing Demo Suite/);
   assert.match(html, /Include in runs/);
-  assert.match(html, /Delete case/);
   assert.match(html, /Excluded/);
   assert.match(html, /case-browser-item-actions/);
   assert.doesNotMatch(html, /case-detail-actions/);
+  assert.doesNotMatch(html, /Upload case JSON/);
+  assert.doesNotMatch(html, /Delete case/);
 });
 
 test("production workbench treats case edits as unsaved navigation state", () => {
@@ -93,8 +95,8 @@ test("production workbench treats case edits as unsaved navigation state", () =>
 
   assert.match(source, /const \[casesDirty, setCasesDirty\]/);
   assert.match(source, /activeTab === "cases"[\s\S]*casesDirty/);
-  assert.match(source, /Unsaved case changes/);
-  assert.match(source, /handleSaveCases/);
+  assert.match(source, /Unsaved case inclusion changes/);
+  assert.match(source, /handleSaveCaseInclusion/);
 });
 
 test("case browser stacks before the full mobile app breakpoint", () => {

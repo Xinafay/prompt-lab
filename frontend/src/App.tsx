@@ -27,7 +27,7 @@ import {
   previewRunPrompts,
   previewValidationPrompts,
   runVersion,
-  saveCases,
+  saveCaseInclusion,
   validateVersion,
   updateExperiment,
   updateGlobalSettings,
@@ -563,9 +563,9 @@ function App() {
     }
     if (kind === "cases") {
       return {
-        title: "Unsaved case changes",
+        title: "Unsaved case inclusion changes",
         body:
-          "Save case changes before leaving this view, or discard the unsaved changes."
+          "Save case inclusion before leaving this view, or discard the unsaved changes."
       };
     }
     return {
@@ -784,7 +784,7 @@ function App() {
         setPendingNavigation(null);
         return;
       } else if (kind === "cases") {
-        await handleSaveCases({ rethrow: true });
+        await handleSaveCaseInclusion({ rethrow: true });
       } else if (appView === "globalSettings") {
         if (globalSettingsDraft === null) {
           return;
@@ -1536,7 +1536,7 @@ function App() {
     setWorkflowMessage(null);
   }
 
-  async function handleSaveCases(options?: { rethrow?: boolean }) {
+  async function handleSaveCaseInclusion(options?: { rethrow?: boolean }) {
     if (
       selectedExperiment === null ||
       detailState.status !== "loaded" ||
@@ -1547,13 +1547,9 @@ function App() {
     const experiment = selectedExperiment;
     const version = detailState.overview.version;
     setWorkflowBusy(true);
-    setWorkflowMessage("Saving cases...");
+    setWorkflowMessage("Saving case inclusion...");
     try {
-      const response = await saveCases(experiment.id, {
-        cases: casesDraft.map((artifactCase) => ({
-          case_id: artifactCase.id,
-          payload: artifactCase.payload
-        })),
+      const response = await saveCaseInclusion(experiment.id, {
         excluded_case_ids: casesDraft
           .filter((artifactCase) => !artifactCase.enabled)
           .map((artifactCase) => artifactCase.id)
@@ -1579,7 +1575,7 @@ function App() {
       setDetailState({ status: "loaded", overview, runs });
       setCasesDraft(null);
       setCasesDirty(false);
-      setWorkflowMessage("Cases saved.");
+      setWorkflowMessage("Case inclusion saved.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       setWorkflowMessage(message);
@@ -1674,7 +1670,7 @@ function App() {
       return;
     }
     if (casesDirty) {
-      setWorkflowMessage("Save case changes before running.");
+      setWorkflowMessage("Save case inclusion before running.");
       return;
     }
 
@@ -1773,7 +1769,7 @@ function App() {
       return;
     }
     if (casesDirty) {
-      setWorkflowMessage("Save case changes before previewing run prompts.");
+      setWorkflowMessage("Save case inclusion before previewing run prompts.");
       return;
     }
     const experimentId = selectedExperiment.id;
@@ -2615,16 +2611,16 @@ function App() {
       </div>
     ) : activeTab === "cases" && casesDirty ? (
       <div className="workflow-unsaved-action">
-        <span>Unsaved case changes.</span>
+        <span>Unsaved case inclusion changes.</span>
         <TooltipButton
           className="secondary-action"
           disabled={workflowLocked || casesDraft === null}
           disabledReason={
             workflowLocked
               ? "Wait for the current workflow action to finish."
-              : "Change cases before saving."
+              : "Change case inclusion before saving."
           }
-          onClick={() => void handleSaveCases()}
+          onClick={() => void handleSaveCaseInclusion()}
           type="button"
         >
           Save
@@ -2923,6 +2919,9 @@ function App() {
                         cases={casesDraft ?? detailState.overview.cases}
                         isBusy={workflowLocked}
                         onCasesChange={handleCasesDraftChange}
+                        suiteTitle={
+                          detailState.overview.case_suite?.title ?? null
+                        }
                       />
                     ) : null}
 
