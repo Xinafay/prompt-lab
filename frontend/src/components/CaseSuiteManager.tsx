@@ -221,6 +221,11 @@ export function CaseSuiteManager({
             <div className="settings-actions">
               {activeTab === "cases" ? (
                 <>
+                  {caseSuiteCasesDirty ? (
+                    <span className="settings-unsaved-action">
+                      Unsaved suite case changes.
+                    </span>
+                  ) : null}
                   <TooltipButton
                     className="secondary-action"
                     disabled={resetCasesDisabled}
@@ -242,6 +247,11 @@ export function CaseSuiteManager({
                 </>
               ) : (
                 <>
+                  {suiteDraftDirty ? (
+                    <span className="settings-unsaved-action">
+                      Unsaved suite settings changes.
+                    </span>
+                  ) : null}
                   <TooltipButton
                     className="secondary-action"
                     disabled={resetSettingsDisabled}
@@ -306,8 +316,8 @@ export function CaseSuiteManager({
               ) : null}
               {error !== null ? <div className="settings-error">{error}</div> : null}
               {caseSuiteCasesDirty ? (
-                <div className="settings-message">
-                  Unsaved suite case changes. {SUITE_CASE_SELECTION_BLOCKED_MESSAGE}
+                <div className="settings-warning-message">
+                  {SUITE_CASE_SELECTION_BLOCKED_MESSAGE}
                 </div>
               ) : null}
               <div className="settings-header case-suite-cases-toolbar">

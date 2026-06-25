@@ -100,6 +100,9 @@ export function GlobalSettings({
           <p>Edit application-level settings stored in config/settings.json.</p>
         </div>
         <div className="settings-actions">
+          {isDirty ? (
+            <span className="settings-unsaved-action">Unsaved settings changes.</span>
+          ) : null}
           <TooltipButton
             className="secondary-action"
             disabled={isBusy || !isDirty}

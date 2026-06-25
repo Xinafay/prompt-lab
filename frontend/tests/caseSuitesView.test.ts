@@ -131,6 +131,31 @@ test("case suite manager renders cases with browser layout and suite actions", (
   assert.match(html, />Save<\/button>/);
 });
 
+test("case suite manager surfaces dirty save state near actions", () => {
+  const casesHtml = renderManager({ caseSuiteCasesDirty: true });
+  const settingsHtml = renderManager({
+    activeTab: "settings",
+    suites: [
+      {
+        ...suites[0],
+        experiment_ids: [],
+        title: "Saved title"
+      }
+    ]
+  });
+  const source = readFileSync(
+    new URL("../src/components/CaseSuiteManager.tsx", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(casesHtml, /settings-unsaved-action/);
+  assert.match(casesHtml, /settings-warning-message/);
+  assert.match(casesHtml, /Unsaved suite case changes\./);
+  assert.match(casesHtml, /Save or reset suite case changes before switching suites\./);
+  assert.match(source, /Unsaved suite settings changes\./);
+  assert.match(settingsHtml, />Save<\/button>/);
+});
+
 test("case suite manager renders busy and empty states", () => {
   const html = renderManager({
     cases: [],

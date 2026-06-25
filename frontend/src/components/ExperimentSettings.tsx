@@ -95,6 +95,9 @@ export function ExperimentSettings({
           <p>Edit the manifest stored in the runtime experiments workspace.</p>
         </div>
         <div className="settings-actions">
+          {isDirty ? (
+            <span className="settings-unsaved-action">Unsaved settings changes.</span>
+          ) : null}
           <TooltipButton
             className="secondary-action"
             disabled={isBusy || !isDirty}
