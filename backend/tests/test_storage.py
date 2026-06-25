@@ -649,6 +649,99 @@ def test_store_create_experiment_slug_falls_back_for_symbol_title() -> None:
         assert (root / "experiments" / "experiment" / "experiment.json").is_file()
 
 
+def test_store_create_experiment_rejects_whitespace_title() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+        settings = PromptLabSettings(
+            schema_version="prompt_lab.settings/v1",
+            default_generator_model="local/generator",
+            default_validator_model="local/validator",
+            default_judge_model="local/judge",
+            default_repeat_count=1,
+        )
+
+        try:
+            store.create_experiment(
+                title="   ",
+                output_type="text",
+                model_entrypoint=None,
+                settings=settings,
+            )
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Expected whitespace title to be rejected")
+
+        assert not (root / "experiments").exists()
+
+
+def test_store_create_experiment_rejects_invalid_output_type() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+        settings = PromptLabSettings(
+            schema_version="prompt_lab.settings/v1",
+            default_generator_model="local/generator",
+            default_validator_model="local/validator",
+            default_judge_model="local/judge",
+            default_repeat_count=1,
+        )
+
+        try:
+            store.create_experiment(
+                title="Demo",
+                output_type="typo",
+                model_entrypoint=None,
+                settings=settings,
+            )
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Expected invalid output type to be rejected")
+
+        assert not (root / "experiments").exists()
+
+
+def test_store_create_experiment_rejects_pydantic_missing_model_entrypoint() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+        settings = PromptLabSettings(
+            schema_version="prompt_lab.settings/v1",
+            default_generator_model="local/generator",
+            default_validator_model="local/validator",
+            default_judge_model="local/judge",
+            default_repeat_count=1,
+        )
+
+        for bad_model_entrypoint in (None, "", "   "):
+            try:
+                store.create_experiment(
+                    title="Structured Output",
+                    output_type="pydantic",
+                    model_entrypoint=bad_model_entrypoint,
+                    settings=settings,
+                )
+            except ValueError:
+                pass
+            else:
+                raise AssertionError(
+                    "Expected pydantic missing/blank model entrypoint to be rejected"
+                )
+
+        assert not (root / "experiments").exists()
+
+
 def main() -> int:
     tests = [
         test_store_does_not_list_examples_directly,
@@ -672,6 +765,9 @@ def main() -> int:
         test_store_creates_text_experiment_with_unique_slug,
         test_store_creates_pydantic_experiment_with_empty_model_file,
         test_store_create_experiment_slug_falls_back_for_symbol_title,
+        test_store_create_experiment_rejects_whitespace_title,
+        test_store_create_experiment_rejects_invalid_output_type,
+        test_store_create_experiment_rejects_pydantic_missing_model_entrypoint,
     ]
     for test in tests:
         test()

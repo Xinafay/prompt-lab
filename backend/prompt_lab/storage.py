@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 from pathlib import Path, PureWindowsPath
 from typing import Any, Literal
 
@@ -117,9 +116,10 @@ class PromptLabStore:
         model_entrypoint: str | None,
         settings: PromptLabSettings,
     ) -> ExperimentArtifact:
-        experiment_id = self._available_experiment_id(title)
-        experiment_dir = self.experiments_root.resolve() / experiment_id
-        version_dir = experiment_dir / "versions" / "v001"
+        if title.strip() == "":
+            raise ValueError("Experiment title cannot be blank")
+        if output_type not in {"text", "pydantic"}:
+            raise ValueError("Unsupported output type")
         output: dict[str, Any]
         if output_type == "pydantic":
             if model_entrypoint is None or model_entrypoint.strip() == "":
@@ -131,6 +131,9 @@ class PromptLabStore:
             }
         else:
             output = {"type": "text"}
+        experiment_id = self._available_experiment_id(title)
+        experiment_dir = self.experiments_root.resolve() / experiment_id
+        version_dir = experiment_dir / "versions" / "v001"
         artifact = ExperimentArtifact.model_validate(
             {
                 "schema_version": "prompt_lab.experiment/v1",
