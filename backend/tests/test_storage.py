@@ -3,8 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 
+from pydantic import ValidationError
+
+import prompt_lab.storage as storage_module
 from prompt_lab.errors import NotFoundError
+from prompt_lab.settings import PromptLabSettings
 from prompt_lab.models.artifacts import ExperimentArtifact
 from prompt_lab.models.validators import (
     AutomaticValidatorDefinition,
@@ -75,7 +80,7 @@ def test_store_loads_cases_for_experiment() -> None:
             encoding="utf-8",
         )
         (cases / "case-a.json").write_text(
-            '{"schema_version":"prompt_lab.case/v2","id":"case-a","title":"Case A","stores":{"case":{"kind":"flat_file_tree","values":{"text":{"__carmilla_flat_file_node__":"file","value":"hello"}}}},"bindings":{"text":{"kind":"store_scope","store":"case","path":"text"}}}',
+            '{"text":"hello"}',
             encoding="utf-8",
         )
 
@@ -84,6 +89,7 @@ def test_store_loads_cases_for_experiment() -> None:
         loaded = store.load_cases("demo")
         assert len(loaded) == 1
         assert loaded[0].id == "case-a"
+        assert loaded[0].payload == {"text": "hello"}
 
 
 def test_store_rejects_read_path_escape() -> None:
@@ -223,8 +229,7 @@ def test_store_loads_validators_sorted_by_filename() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
         experiment = root / "experiments" / "demo"
-        validators = experiment / "validators"
-        (experiment / "versions" / "v001").mkdir(parents=True)
+        validators = experiment / "versions" / "v001" / "validators"
         validators.mkdir(parents=True)
         write_experiment_manifest(experiment / "experiment.json")
         (validators / "b.json").write_text(
@@ -272,7 +277,7 @@ def test_store_loads_validators_sorted_by_filename() -> None:
             examples_root=root / "examples",
         )
 
-        loaded = store.load_validators("demo")
+        loaded = store.load_validators("demo", "v001")
 
         assert [validator.validator_id for validator in loaded] == [
             "clarity",
@@ -292,7 +297,7 @@ def test_store_returns_empty_validators_when_directory_missing() -> None:
             examples_root=root / "examples",
         )
 
-        assert store.load_validators("demo") == []
+        assert store.load_validators("demo", "v001") == []
 
 
 def test_store_writes_validation_artifact_and_rejects_path_escape() -> None:
@@ -547,6 +552,528 @@ def test_store_rejects_save_missing_active_version() -> None:
             raise AssertionError("Expected missing active version to be rejected")
 
 
+def test_store_creates_text_experiment_with_unique_slug() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        existing = root / "experiments" / "demo-title"
+        (existing / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(
+            existing / "experiment.json",
+            experiment_id="demo-title",
+        )
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+        settings = PromptLabSettings(
+            schema_version="prompt_lab.settings/v1",
+            default_generator_model="openai/generator",
+            default_validator_model="openai/validator",
+            default_judge_model="openai/judge",
+            default_repeat_count=4,
+        )
+
+        created = store.create_experiment(
+            title="Demo Title",
+            output_type="text",
+            model_entrypoint=None,
+            settings=settings,
+        )
+
+        created_dir = root / "experiments" / "demo-title-2"
+        assert created.id == "demo-title-2"
+        assert created.title == "Demo Title"
+        assert created.active_version == "v001"
+        assert created.output.type == "text"
+        assert created.models.generator_model == "openai/generator"
+        assert created.models.validator_model == "openai/validator"
+        assert created.models.judge_model == "openai/judge"
+        assert created.run_defaults.repeat_count == 4
+        assert (created_dir / "experiment.json").is_file()
+        assert (created_dir / "versions" / "v001" / "prompt.md").read_text(
+            encoding="utf-8"
+        ) == ""
+        assert not (created_dir / "versions" / "v001" / "model.py").exists()
+
+
+def test_store_creates_pydantic_experiment_with_empty_model_file() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+        settings = PromptLabSettings(
+            schema_version="prompt_lab.settings/v1",
+            default_generator_model="local/generator",
+            default_validator_model="local/validator",
+            default_judge_model="local/judge",
+            default_repeat_count=1,
+        )
+
+        created = store.create_experiment(
+            title="Structured Output",
+            output_type="pydantic",
+            model_entrypoint="model.Output",
+            settings=settings,
+        )
+
+        version_dir = root / "experiments" / "structured-output" / "versions" / "v001"
+        assert created.id == "structured-output"
+        assert created.output.type == "pydantic"
+        assert created.output.model_file == "model.py"
+        assert created.output.model_entrypoint == "model.Output"
+        assert (version_dir / "prompt.md").read_text(encoding="utf-8") == ""
+        assert (version_dir / "model.py").read_text(encoding="utf-8") == ""
+
+
+def test_store_create_experiment_slug_falls_back_for_symbol_title() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+        settings = PromptLabSettings(
+            schema_version="prompt_lab.settings/v1",
+            default_generator_model="local/generator",
+            default_validator_model="local/validator",
+            default_judge_model="local/judge",
+            default_repeat_count=1,
+        )
+
+        created = store.create_experiment(
+            title="!!!",
+            output_type="text",
+            model_entrypoint=None,
+            settings=settings,
+        )
+
+        assert created.id == "experiment"
+        assert (root / "experiments" / "experiment" / "experiment.json").is_file()
+
+
+def test_store_create_experiment_rejects_whitespace_title() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+        settings = PromptLabSettings(
+            schema_version="prompt_lab.settings/v1",
+            default_generator_model="local/generator",
+            default_validator_model="local/validator",
+            default_judge_model="local/judge",
+            default_repeat_count=1,
+        )
+
+        try:
+            store.create_experiment(
+                title="   ",
+                output_type="text",
+                model_entrypoint=None,
+                settings=settings,
+            )
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Expected whitespace title to be rejected")
+
+        assert not (root / "experiments").exists()
+
+
+def test_store_create_experiment_rejects_invalid_output_type() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+        settings = PromptLabSettings(
+            schema_version="prompt_lab.settings/v1",
+            default_generator_model="local/generator",
+            default_validator_model="local/validator",
+            default_judge_model="local/judge",
+            default_repeat_count=1,
+        )
+
+        try:
+            store.create_experiment(
+                title="Demo",
+                output_type="typo",  # type: ignore[reportArgumentType]
+                model_entrypoint=None,
+                settings=settings,
+            )
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Expected invalid output type to be rejected")
+
+        assert not (root / "experiments").exists()
+
+
+def test_store_create_experiment_rejects_pydantic_missing_model_entrypoint() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+        settings = PromptLabSettings(
+            schema_version="prompt_lab.settings/v1",
+            default_generator_model="local/generator",
+            default_validator_model="local/validator",
+            default_judge_model="local/judge",
+            default_repeat_count=1,
+        )
+
+        for bad_model_entrypoint in (None, "", "   "):
+            try:
+                store.create_experiment(
+                    title="Structured Output",
+                    output_type="pydantic",
+                    model_entrypoint=bad_model_entrypoint,
+                    settings=settings,
+                )
+            except ValueError:
+                pass
+            else:
+                raise AssertionError(
+                    "Expected pydantic missing/blank model entrypoint to be rejected"
+                )
+
+        assert not (root / "experiments").exists()
+
+
+def test_store_clones_experiment_directory_and_rewrites_manifest() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source = root / "experiments" / "demo"
+        version_dir = source / "versions" / "v001"
+        validators_dir = version_dir / "validators"
+        cases_dir = source / "cases"
+        validators_dir.mkdir(parents=True)
+        cases_dir.mkdir(parents=True)
+        write_experiment_manifest(source / "experiment.json")
+        (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
+        (validators_dir / "quality.json").write_text(
+            '{"schema_version":"prompt_lab.validator/v1","validator_id":"quality","type":"llm_questionnaire","title":"Quality","checks":[{"check_id":"ok","title":"OK","question":"OK?"}]}',
+            encoding="utf-8",
+        )
+        (cases_dir / "case-a.json").write_text('{"value":"alpha"}', encoding="utf-8")
+        (version_dir / "runs" / "run-001").mkdir(parents=True)
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        cloned = store.clone_experiment(
+            source_experiment_id="demo",
+            title="Demo Clone",
+        )
+
+        clone_dir = root / "experiments" / "demo-clone"
+        assert cloned.id == "demo-clone"
+        assert cloned.title == "Demo Clone"
+        assert (clone_dir / "cases" / "case-a.json").is_file()
+        assert (clone_dir / "versions" / "v001" / "prompt.md").read_text(
+            encoding="utf-8"
+        ) == "Say {{ value }}"
+        assert (clone_dir / "versions" / "v001" / "validators" / "quality.json").is_file()
+        assert (clone_dir / "versions" / "v001" / "runs" / "run-001").is_dir()
+        saved = json.loads((clone_dir / "experiment.json").read_text(encoding="utf-8"))
+        assert saved["id"] == "demo-clone"
+        assert saved["title"] == "Demo Clone"
+
+
+def test_store_clone_uses_unique_slug_when_destination_exists() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source = root / "experiments" / "demo"
+        collision = root / "experiments" / "demo-clone"
+        (source / "versions" / "v001").mkdir(parents=True)
+        (collision / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(source / "experiment.json")
+        write_experiment_manifest(
+            collision / "experiment.json",
+            experiment_id="demo-clone",
+        )
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        cloned = store.clone_experiment(
+            source_experiment_id="demo",
+            title="Demo Clone",
+        )
+
+        clone_dir = root / "experiments" / "demo-clone-2"
+        assert cloned.id == "demo-clone-2"
+        assert clone_dir.is_dir()
+        saved = json.loads((clone_dir / "experiment.json").read_text(encoding="utf-8"))
+        assert saved["id"] == "demo-clone-2"
+        assert saved["title"] == "Demo Clone"
+
+
+def test_store_clone_rejects_whitespace_title_without_creating_fallback() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source = root / "experiments" / "demo"
+        (source / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(source / "experiment.json")
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        try:
+            store.clone_experiment(
+                source_experiment_id="demo",
+                title="   ",
+            )
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Expected whitespace clone title to be rejected")
+
+        assert not (root / "experiments" / "experiment").exists()
+
+
+def test_store_clone_removes_destination_when_source_manifest_is_invalid() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source = root / "experiments" / "demo"
+        (source / "versions" / "v001").mkdir(parents=True)
+        (source / "experiment.json").write_text(
+            '{"schema_version":"prompt_lab.experiment/v1","id":"demo"}',
+            encoding="utf-8",
+        )
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        try:
+            store.clone_experiment(
+                source_experiment_id="demo",
+                title="Demo Clone",
+            )
+        except ValidationError:
+            pass
+        else:
+            raise AssertionError("Expected invalid source manifest to be rejected")
+
+        assert not (root / "experiments" / "demo-clone").exists()
+
+
+def test_store_clone_rejects_source_symlink_before_copying() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source = root / "experiments" / "demo"
+        version = source / "versions" / "v001"
+        version.mkdir(parents=True)
+        write_experiment_manifest(source / "experiment.json")
+        secret = root / "secret"
+        secret.write_text("hidden", encoding="utf-8")
+        try:
+            (version / "secret-link").symlink_to(secret)
+        except (OSError, NotImplementedError):
+            return
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        try:
+            store.clone_experiment(
+                source_experiment_id="demo",
+                title="Demo Clone",
+            )
+        except NotFoundError:
+            pass
+        else:
+            raise AssertionError("Expected source symlink to be rejected")
+
+        assert not (root / "experiments" / "demo-clone").exists()
+
+
+def test_store_clone_rejects_manifest_symlink_before_reading() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source = root / "experiments" / "demo"
+        (source / "versions" / "v001").mkdir(parents=True)
+        secret_manifest = root / "secret-experiment.json"
+        write_experiment_manifest(secret_manifest)
+        try:
+            (source / "experiment.json").symlink_to(secret_manifest)
+        except (OSError, NotImplementedError):
+            return
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        secret_manifest.chmod(0)
+        try:
+            try:
+                store.clone_experiment(
+                    source_experiment_id="demo",
+                    title="Demo Clone",
+                )
+            except NotFoundError:
+                pass
+            else:
+                raise AssertionError("Expected manifest symlink to be rejected")
+
+            assert not (root / "experiments" / "demo-clone").exists()
+        finally:
+            secret_manifest.chmod(0o600)
+
+
+def test_store_clone_rejects_top_level_source_symlink() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        real_source = root / "experiments" / "real-demo"
+        (real_source / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(
+            real_source / "experiment.json",
+            experiment_id="real-demo",
+        )
+        try:
+            (root / "experiments" / "demo").symlink_to(
+                real_source,
+                target_is_directory=True,
+            )
+        except (OSError, NotImplementedError):
+            return
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        try:
+            store.clone_experiment(
+                source_experiment_id="demo",
+                title="Demo Clone",
+            )
+        except NotFoundError:
+            pass
+        else:
+            raise AssertionError("Expected top-level source symlink to be rejected")
+
+        assert not (root / "experiments" / "demo-clone").exists()
+
+
+def test_store_clone_rolls_back_destination_when_manifest_write_fails() -> None:
+    class DeliberateWriteError(Exception):
+        pass
+
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source = root / "experiments" / "demo"
+        (source / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(source / "experiment.json")
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+        destination_manifest = (
+            root / "experiments" / "demo-clone" / "experiment.json"
+        )
+        original_write_json = storage_module._write_json
+
+        def failing_write_json(path: Path, value: dict[str, Any]) -> None:
+            if path.resolve() == destination_manifest.resolve():
+                raise DeliberateWriteError("deliberate clone manifest write failure")
+            original_write_json(path, value)
+
+        storage_module._write_json = failing_write_json
+        try:
+            try:
+                store.clone_experiment(
+                    source_experiment_id="demo",
+                    title="Demo Clone",
+                )
+            except DeliberateWriteError:
+                pass
+            else:
+                raise AssertionError("Expected clone manifest rewrite to fail")
+
+            assert not (root / "experiments" / "demo-clone").exists()
+        finally:
+            storage_module._write_json = original_write_json
+
+
+def test_store_delete_experiment_removes_directory() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        experiment = root / "experiments" / "demo"
+        (experiment / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(experiment / "experiment.json")
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        store.delete_experiment("demo")
+
+        assert not experiment.exists()
+
+
+def test_store_delete_experiment_rejects_top_level_symlink() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        real_experiment = root / "experiments" / "real-demo"
+        (real_experiment / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(
+            real_experiment / "experiment.json",
+            experiment_id="real-demo",
+        )
+        link = root / "experiments" / "demo"
+        try:
+            link.symlink_to(real_experiment, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            return
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        try:
+            store.delete_experiment("demo")
+        except NotFoundError:
+            pass
+        else:
+            raise AssertionError("Expected top-level experiment symlink to be rejected")
+
+        assert real_experiment.is_dir()
+        assert link.is_symlink()
+
+
+def test_store_delete_experiment_rejects_path_escape() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        experiment = root / "experiments" / "demo"
+        (experiment / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(experiment / "experiment.json")
+        outside = root / "secret"
+        outside.mkdir()
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        try:
+            store.delete_experiment("../secret")
+        except NotFoundError as exc:
+            assert str(root) not in str(exc)
+        else:
+            raise AssertionError("Expected escaped delete to be rejected")
+        assert outside.is_dir()
+
+
 def main() -> int:
     tests = [
         test_store_does_not_list_examples_directly,
@@ -567,6 +1094,23 @@ def main() -> int:
         test_store_saves_experiment_manifest_under_experiments_root,
         test_store_rejects_save_experiment_id_mismatch,
         test_store_rejects_save_missing_active_version,
+        test_store_creates_text_experiment_with_unique_slug,
+        test_store_creates_pydantic_experiment_with_empty_model_file,
+        test_store_create_experiment_slug_falls_back_for_symbol_title,
+        test_store_create_experiment_rejects_whitespace_title,
+        test_store_create_experiment_rejects_invalid_output_type,
+        test_store_create_experiment_rejects_pydantic_missing_model_entrypoint,
+        test_store_clones_experiment_directory_and_rewrites_manifest,
+        test_store_clone_uses_unique_slug_when_destination_exists,
+        test_store_clone_rejects_whitespace_title_without_creating_fallback,
+        test_store_clone_removes_destination_when_source_manifest_is_invalid,
+        test_store_clone_rejects_source_symlink_before_copying,
+        test_store_clone_rejects_manifest_symlink_before_reading,
+        test_store_clone_rejects_top_level_source_symlink,
+        test_store_clone_rolls_back_destination_when_manifest_write_fails,
+        test_store_delete_experiment_removes_directory,
+        test_store_delete_experiment_rejects_top_level_symlink,
+        test_store_delete_experiment_rejects_path_escape,
     ]
     for test in tests:
         test()

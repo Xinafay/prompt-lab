@@ -6,10 +6,9 @@ proposal generation, and deterministic version comparison.
 
 Prompt Lab stores experiments as filesystem artifacts. Carmilla or another external tool may export neutral experiment bundles into this repository, but Prompt Lab does not import Carmilla workflow runtime, workflow state, or workflow classes.
 
-The current case format is `prompt_lab.case/v2`. Cases contain serialized
-`stores` and prompt-visible `bindings`; Prompt Lab materializes them into one
-plain context dictionary for both jinjax prompt rendering and Pydantic
-validation. See `FORMAT.md` for the artifact contract.
+Cases are plain JSON objects. The case id is the filename stem under `cases/`,
+and the file content is the context dictionary passed directly to jinjax prompt
+rendering and Pydantic validation. See `FORMAT.md` for the artifact contract.
 
 ## Setup
 

@@ -5,9 +5,11 @@ import logging
 import re
 import shutil
 import time
+import uuid
 from collections.abc import Iterator
 from dataclasses import asdict
 from pathlib import Path, PureWindowsPath
+from typing import Literal
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -28,7 +30,12 @@ from prompt_lab.dry_run import (
 from prompt_lab.experiment_seed import seed_experiments_from_examples
 from prompt_lab.judge import build_judge_prompt
 from prompt_lab.jobs import JobAlreadyRunningError, JobManager
-from prompt_lab.models.artifacts import ExperimentArtifact, RunArtifact
+from prompt_lab.models.artifacts import (
+    CaseArtifact,
+    ExperimentArtifact,
+    JsonObject,
+    RunArtifact,
+)
 from prompt_lab.models.judgments import (
     FindingDecisionSet,
     JudgmentArtifact,
@@ -68,6 +75,7 @@ from prompt_lab.validation import (
 logger = logging.getLogger(__name__)
 _VALIDATOR_DEFINITION_ADAPTER = TypeAdapter(ValidatorDefinition)
 PROMPT_PREVIEW_MAX_PROMPTS = 100
+_MODEL_PLACEHOLDER = "<<MODEL>>"
 
 
 class HumanNotesRequest(BaseModel):
@@ -90,10 +98,59 @@ class RunVersionRequest(BaseModel):
     dry_run: bool = False
 
 
+class ExperimentCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    output_type: Literal["text", "pydantic"]
+    model_entrypoint: str | None = None
+
+
+class ExperimentCloneRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+
+
+class CaseUploadRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    case_id: str = Field(min_length=1)
+    payload: JsonObject
+
+
+class CaseRunInclusionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+
+
+class CaseSetUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cases: list[CaseUploadRequest]
+    excluded_case_ids: list[str] = Field(default_factory=list)
+
+
 class DryRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dry_run: bool = False
+
+
+class VersionSourceUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["create_next", "overwrite_current"]
+    prompt: str = Field(min_length=1)
+    model_py: str | None = Field(default=None, min_length=1)
+
+
+class VersionValidatorsUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["create_next", "overwrite_current"]
+    validators: list[ValidatorDefinition]
 
 
 class PromptPreviewItem(BaseModel):
@@ -1067,6 +1124,189 @@ def _remove_generated_version_dirs(version_dir: Path) -> None:
             shutil.rmtree(path)
 
 
+def _case_response(
+    artifact_case: CaseArtifact, experiment: ExperimentArtifact
+) -> dict[str, object]:
+    excluded_case_ids = set(experiment.run_defaults.excluded_case_ids)
+    return artifact_case.model_copy(
+        update={"enabled": artifact_case.id not in excluded_case_ids}
+    ).model_dump(mode="json")
+
+
+def _case_responses(
+    cases: list[CaseArtifact], experiment: ExperimentArtifact
+) -> list[dict[str, object]]:
+    return [_case_response(artifact_case, experiment) for artifact_case in cases]
+
+
+def _enabled_cases(
+    cases: list[CaseArtifact], experiment: ExperimentArtifact
+) -> list[CaseArtifact]:
+    excluded_case_ids = set(experiment.run_defaults.excluded_case_ids)
+    return [
+        artifact_case
+        for artifact_case in cases
+        if artifact_case.id not in excluded_case_ids
+    ]
+
+
+def _validate_case_set_update(request: CaseSetUpdateRequest) -> set[str]:
+    case_ids: set[str] = set()
+    for artifact_case in request.cases:
+        _validate_case_id_path_segment(artifact_case.case_id)
+        if artifact_case.case_id in case_ids:
+            raise HTTPException(status_code=400, detail="Duplicate case id")
+        case_ids.add(artifact_case.case_id)
+    excluded_case_ids = set(request.excluded_case_ids)
+    for case_id in excluded_case_ids:
+        _validate_case_id_path_segment(case_id)
+    unknown_excluded_ids = sorted(excluded_case_ids - case_ids)
+    if unknown_excluded_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Excluded case not found: {unknown_excluded_ids[0]}",
+        )
+    return case_ids
+
+
+def _validate_version_source_update(
+    *, experiment: ExperimentArtifact, request: VersionSourceUpdateRequest
+) -> None:
+    if experiment.output.type == "pydantic":
+        if request.prompt.count(_MODEL_PLACEHOLDER) != 1:
+            raise HTTPException(
+                status_code=400,
+                detail="pydantic prompt must contain exactly one <<MODEL>>",
+            )
+        if request.model_py is None or not request.model_py.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="pydantic source update must include model_py",
+            )
+        return
+
+    if _MODEL_PLACEHOLDER in request.prompt:
+        raise HTTPException(
+            status_code=400,
+            detail="text prompt cannot contain <<MODEL>>",
+        )
+    if request.model_py is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="text source update cannot include model_py",
+        )
+
+
+def _write_version_source_files(
+    *,
+    version_dir: Path,
+    experiment: ExperimentArtifact,
+    prompt: str,
+    model_py: str | None,
+) -> None:
+    prompt_target = _resolve_version_local_write_path(
+        version_dir, experiment.template.path
+    )
+    model_target: Path | None = None
+    if experiment.output.type == "pydantic":
+        model_file = experiment.output.model_file
+        assert model_file is not None
+        model_target = _resolve_version_local_write_path(version_dir, model_file)
+
+    prompt_target.parent.mkdir(parents=True, exist_ok=True)
+    prompt_target.write_text(prompt, encoding="utf-8")
+    if model_target is not None:
+        assert model_py is not None
+        model_target.parent.mkdir(parents=True, exist_ok=True)
+        model_target.write_text(model_py, encoding="utf-8")
+
+
+def _validate_version_validators_update(
+    request: VersionValidatorsUpdateRequest,
+) -> None:
+    seen: set[str] = set()
+    for validator in request.validators:
+        _validate_validator_id_path_segment(validator.validator_id)
+        if validator.validator_id in seen:
+            raise HTTPException(
+                status_code=400,
+                detail=f"duplicate validator_id: {validator.validator_id}",
+            )
+        seen.add(validator.validator_id)
+
+
+def _write_version_validator_files(
+    version_dir: Path,
+    validators: list[ValidatorDefinition],
+) -> None:
+    validators_dir = _resolve_version_local_write_path(
+        version_dir, "validators/.validator-dir"
+    ).parent
+
+    temp_dir = _unique_version_local_temp_dir(version_dir, "validators")
+    backup_dir = _unique_version_local_temp_dir(version_dir, "validators-old")
+    moved_existing = False
+    published = False
+    temp_dir.mkdir()
+
+    try:
+        for validator in validators:
+            target = _resolve_version_local_write_path(
+                version_dir,
+                f"{temp_dir.name}/{validator.validator_id}.json",
+            )
+            _write_json(target, validator.model_dump(mode="json"))
+
+        if validators_dir.exists():
+            validators_dir.rename(backup_dir)
+            moved_existing = True
+        temp_dir.rename(validators_dir)
+        published = True
+    finally:
+        if published:
+            if backup_dir.exists():
+                _remove_path(backup_dir)
+        else:
+            if temp_dir.exists():
+                _remove_path(temp_dir)
+            if moved_existing and backup_dir.exists() and not validators_dir.exists():
+                backup_dir.rename(validators_dir)
+
+
+def _unique_version_local_temp_dir(version_dir: Path, prefix: str) -> Path:
+    for _ in range(100):
+        temp_dir = _resolve_version_local_write_path(
+            version_dir, f".{prefix}.{uuid.uuid4().hex}.tmp"
+        )
+        if not temp_dir.exists():
+            return temp_dir
+    raise RuntimeError("Could not allocate temporary version directory")
+
+
+def _unique_version_staging_dir(versions_root: Path, version: str) -> Path:
+    for _ in range(100):
+        staging_dir = versions_root / f".{version}.{uuid.uuid4().hex}.tmp"
+        if not staging_dir.exists():
+            return staging_dir
+    raise RuntimeError("Could not allocate temporary staging directory")
+
+
+def _cleanup_version_staging_dir(staging_dir: Path) -> None:
+    if staging_dir.exists():
+        shutil.rmtree(staging_dir)
+
+
+def _remove_path(path: Path) -> None:
+    if path.is_dir():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+
+
+def _is_version_publish_collision(target: Path) -> bool:
+    return target.exists()
+
+
 def _load_validated_proposal_source(
     *,
     proposal_dir: Path,
@@ -1283,6 +1523,65 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     def list_experiments() -> list[dict[str, object]]:
         return [item.model_dump(mode="json") for item in store.list_experiments()]
 
+    @app.post("/api/experiments")
+    def create_experiment(request: ExperimentCreateRequest) -> dict[str, object]:
+        title = request.title.strip()
+        if title == "":
+            raise HTTPException(
+                status_code=400,
+                detail="Experiment title is required",
+            )
+        normalized_model_entrypoint = (
+            request.model_entrypoint.strip()
+            if request.model_entrypoint is not None
+            else None
+        )
+        if request.output_type == "pydantic" and (
+            normalized_model_entrypoint is None or normalized_model_entrypoint == ""
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Model entrypoint is required for pydantic experiments",
+            )
+        settings = load_settings(resolved_config.settings_path)
+        try:
+            experiment = store.create_experiment(
+                title=title,
+                output_type=request.output_type,
+                model_entrypoint=normalized_model_entrypoint,
+                settings=settings,
+            )
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return experiment.model_dump(mode="json")
+
+    @app.post("/api/experiments/{experiment_id}/clone")
+    def clone_experiment(
+        experiment_id: str,
+        request: ExperimentCloneRequest,
+    ) -> dict[str, object]:
+        title = request.title.strip()
+        if title == "":
+            raise HTTPException(
+                status_code=400,
+                detail="Experiment title is required",
+            )
+        try:
+            experiment = store.clone_experiment(
+                source_experiment_id=experiment_id,
+                title=title,
+            )
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return experiment.model_dump(mode="json")
+
+    @app.delete("/api/experiments/{experiment_id}")
+    def delete_experiment(experiment_id: str) -> dict[str, object]:
+        store.delete_experiment(experiment_id)
+        return {"experiment_id": experiment_id}
+
     @app.get("/api/settings")
     def get_settings() -> dict[str, object]:
         return load_settings(resolved_config.settings_path).model_dump(mode="json")
@@ -1341,7 +1640,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             else None
         )
         cases = store.load_cases(experiment_id)
-        validators = store.load_validators(experiment_id)
+        validators = store.load_validators(experiment_id, version)
         return {
             "experiment": experiment.model_dump(mode="json"),
             "version": version,
@@ -1349,8 +1648,197 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             "model_py": model_source,
             "model_file": model_file,
             "rubric": _read_optional_text(experiment_dir / "rubric.md"),
-            "cases": [case.model_dump(mode="json") for case in cases],
+            "cases": _case_responses(cases, experiment),
             "validators": [validator.model_dump(mode="json") for validator in validators],
+        }
+
+    @app.post("/api/experiments/{experiment_id}/cases")
+    def upload_case(
+        experiment_id: str, request: CaseUploadRequest
+    ) -> dict[str, object]:
+        _validate_case_id_path_segment(request.case_id)
+        experiment = store.load_experiment(experiment_id)
+        try:
+            artifact_case = store.write_case(
+                experiment_id, request.case_id, request.payload
+            )
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail="Case already exists") from exc
+        return _case_response(artifact_case, experiment)
+
+    @app.put("/api/experiments/{experiment_id}/cases")
+    def update_cases(
+        experiment_id: str, request: CaseSetUpdateRequest
+    ) -> dict[str, object]:
+        _validate_case_set_update(request)
+        experiment = store.load_experiment(experiment_id)
+        experiment.run_defaults.excluded_case_ids = sorted(
+            set(request.excluded_case_ids)
+        )
+        store.save_experiment(experiment_id, experiment)
+        cases = store.replace_cases(
+            experiment_id,
+            [
+                CaseArtifact.model_validate(
+                    {
+                        "id": item.case_id,
+                        "payload": item.payload,
+                    }
+                )
+                for item in request.cases
+            ],
+        )
+        return {
+            "experiment": experiment.model_dump(mode="json"),
+            "cases": _case_responses(cases, experiment),
+        }
+
+    @app.delete("/api/experiments/{experiment_id}/cases/{case_id}")
+    def delete_case(experiment_id: str, case_id: str) -> dict[str, object]:
+        _validate_case_id_path_segment(case_id)
+        experiment = store.load_experiment(experiment_id)
+        store.delete_case(experiment_id, case_id)
+        excluded_case_ids = [
+            item for item in experiment.run_defaults.excluded_case_ids if item != case_id
+        ]
+        if excluded_case_ids != experiment.run_defaults.excluded_case_ids:
+            experiment.run_defaults.excluded_case_ids = excluded_case_ids
+            store.save_experiment(experiment_id, experiment)
+        return {"case_id": case_id}
+
+    @app.patch("/api/experiments/{experiment_id}/cases/{case_id}/run-inclusion")
+    def update_case_run_inclusion(
+        experiment_id: str, case_id: str, request: CaseRunInclusionRequest
+    ) -> dict[str, object]:
+        _validate_case_id_path_segment(case_id)
+        experiment = store.load_experiment(experiment_id)
+        matching_case = next(
+            (
+                artifact_case
+                for artifact_case in store.load_cases(experiment_id)
+                if artifact_case.id == case_id
+            ),
+            None,
+        )
+        if matching_case is None:
+            raise HTTPException(status_code=404, detail="Case not found")
+
+        excluded_case_ids = set(experiment.run_defaults.excluded_case_ids)
+        if request.enabled:
+            excluded_case_ids.discard(case_id)
+        else:
+            excluded_case_ids.add(case_id)
+        experiment.run_defaults.excluded_case_ids = sorted(excluded_case_ids)
+        store.save_experiment(experiment_id, experiment)
+        return _case_response(matching_case, experiment)
+
+    @app.post("/api/experiments/{experiment_id}/versions/{version}/source")
+    def update_version_source(
+        experiment_id: str,
+        version: str,
+        request: VersionSourceUpdateRequest,
+    ) -> dict[str, object]:
+        experiment = store.load_experiment(experiment_id)
+        source_version_dir = store.version_dir(experiment_id, version)
+        _validate_version_source_update(experiment=experiment, request=request)
+
+        if request.mode == "create_next":
+            versions_root = source_version_dir.parent
+            new_version, new_version_dir = _next_numeric_version_dir(versions_root)
+            staging_dir = versions_root / f".{new_version}.tmp"
+            if staging_dir.exists():
+                shutil.rmtree(staging_dir)
+            try:
+                shutil.copytree(source_version_dir, staging_dir)
+                _remove_generated_version_dirs(staging_dir)
+                legacy_cases_dir = staging_dir / "cases"
+                if legacy_cases_dir.exists():
+                    shutil.rmtree(legacy_cases_dir)
+                _write_version_source_files(
+                    version_dir=staging_dir,
+                    experiment=experiment,
+                    prompt=request.prompt,
+                    model_py=request.model_py,
+                )
+                staging_dir.rename(new_version_dir)
+            except Exception:
+                if staging_dir.exists():
+                    shutil.rmtree(staging_dir)
+                if new_version_dir.exists():
+                    shutil.rmtree(new_version_dir)
+                raise
+            return {
+                "version": new_version,
+                "source_version": version,
+                "mode": request.mode,
+                "version_dir": str(new_version_dir),
+            }
+
+        _write_version_source_files(
+            version_dir=source_version_dir,
+            experiment=experiment,
+            prompt=request.prompt,
+            model_py=request.model_py,
+        )
+        _remove_generated_version_dirs(source_version_dir)
+        return {
+            "version": version,
+            "source_version": version,
+            "mode": request.mode,
+            "version_dir": str(source_version_dir),
+        }
+
+    @app.post("/api/experiments/{experiment_id}/versions/{version}/validators")
+    def update_version_validators(
+        experiment_id: str,
+        version: str,
+        request: VersionValidatorsUpdateRequest,
+    ) -> dict[str, object]:
+        store.load_experiment(experiment_id)
+        source_version_dir = store.version_dir(experiment_id, version)
+        _validate_version_validators_update(request)
+
+        if request.mode == "create_next":
+            versions_root = source_version_dir.parent
+            for _ in range(100):
+                new_version, new_version_dir = _next_numeric_version_dir(versions_root)
+                staging_dir = _unique_version_staging_dir(versions_root, new_version)
+                try:
+                    shutil.copytree(source_version_dir, staging_dir)
+                    _remove_generated_version_dirs(staging_dir)
+                    legacy_cases_dir = staging_dir / "cases"
+                    if legacy_cases_dir.exists():
+                        shutil.rmtree(legacy_cases_dir)
+                    _write_version_validator_files(staging_dir, request.validators)
+                    try:
+                        staging_dir.rename(new_version_dir)
+                    except OSError:
+                        if _is_version_publish_collision(new_version_dir):
+                            _cleanup_version_staging_dir(staging_dir)
+                            continue
+                        raise
+                except Exception:
+                    _cleanup_version_staging_dir(staging_dir)
+                    raise
+                break
+            else:
+                raise RuntimeError("Could not allocate next version")
+            return {
+                "version": new_version,
+                "source_version": version,
+                "mode": request.mode,
+                "version_dir": str(new_version_dir),
+            }
+
+        _write_version_validator_files(source_version_dir, request.validators)
+        _remove_runtime_children(
+            source_version_dir, ["validations", "reviews", "comparisons"]
+        )
+        return {
+            "version": version,
+            "source_version": version,
+            "mode": request.mode,
+            "version_dir": str(source_version_dir),
         }
 
     @app.get("/api/experiments/{experiment_id}/versions/{version}/runs")
@@ -1374,6 +1862,9 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         cases = store.load_cases(experiment_id)
         if not cases:
             raise HTTPException(status_code=400, detail="Version has no cases")
+        cases = _enabled_cases(cases, experiment)
+        if not cases:
+            raise HTTPException(status_code=400, detail="Version has no enabled cases")
         for case in cases:
             _validate_case_id_path_segment(case.id)
         repeat_count = experiment.run_defaults.repeat_count
@@ -1482,6 +1973,9 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         cases = store.load_cases(experiment_id)
         if not cases:
             raise HTTPException(status_code=400, detail="Version has no cases")
+        cases = _enabled_cases(cases, experiment)
+        if not cases:
+            raise HTTPException(status_code=400, detail="Version has no enabled cases")
         for case in cases:
             _validate_case_id_path_segment(case.id)
         repeat_count = experiment.run_defaults.repeat_count
@@ -1635,7 +2129,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             cases=case_ids,
             repeat_count=experiment.run_defaults.repeat_count,
         )
-        validators = store.load_validators(experiment_id)
+        validators = store.load_validators(experiment_id, version)
         active_validators = enabled_validators(validators)
         if not active_validators:
             raise HTTPException(
@@ -1765,7 +2259,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 cases=case_ids,
                 repeat_count=experiment.run_defaults.repeat_count,
             )
-            validators = store.load_validators(experiment_id)
+            validators = store.load_validators(experiment_id, version)
             active_validators = enabled_validators(validators)
             if not active_validators:
                 raise HTTPException(
@@ -2768,26 +3262,22 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             if legacy_cases_dir.exists():
                 shutil.rmtree(legacy_cases_dir)
 
-            prompt_target = _resolve_version_local_write_path(
-                staging_dir, experiment.template.path
-            )
-            prompt_target.parent.mkdir(parents=True, exist_ok=True)
-            prompt_target.write_text(
-                proposal_prompt_path.read_text(encoding="utf-8"),
-                encoding="utf-8",
-            )
             proposal_model_path = proposal_dir / "model.py"
-            if experiment.output.type == "pydantic" and proposal_model_path.is_file():
+            proposal_model_source: str | None = None
+            if experiment.output.type == "pydantic":
                 model_file = experiment.output.model_file
                 assert model_file is not None
-                model_target = _resolve_version_local_write_path(
-                    staging_dir, model_file
+                proposal_model_source = (
+                    proposal_model_path.read_text(encoding="utf-8")
+                    if proposal_model_path.is_file()
+                    else store.read_text(experiment_id, version, model_file)
                 )
-                model_target.parent.mkdir(parents=True, exist_ok=True)
-                model_target.write_text(
-                    proposal_model_path.read_text(encoding="utf-8"),
-                    encoding="utf-8",
-                )
+            _write_version_source_files(
+                version_dir=staging_dir,
+                experiment=experiment,
+                prompt=proposal_prompt_path.read_text(encoding="utf-8"),
+                model_py=proposal_model_source,
+            )
             staging_dir.rename(new_version_dir)
         except Exception:
             if staging_dir.exists():

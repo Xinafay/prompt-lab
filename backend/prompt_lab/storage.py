@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import re
+import shutil
 from pathlib import Path, PureWindowsPath
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import TypeAdapter
 
 from prompt_lab.errors import NotFoundError
+from prompt_lab.settings import PromptLabSettings
 from prompt_lab.models.artifacts import CaseArtifact, ExperimentArtifact
 from prompt_lab.models.validators import (
     ValidationBatchArtifact,
@@ -49,6 +52,11 @@ def _validate_storage_id(value: str, label: str) -> None:
         raise NotFoundError(f"{label} not found")
 
 
+def _slugify_title(title: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+    return slug or "experiment"
+
+
 class PromptLabStore:
     """Filesystem-backed Prompt Lab artifact store."""
 
@@ -82,6 +90,129 @@ class PromptLabStore:
     def load_experiment(self, experiment_id: str) -> ExperimentArtifact:
         path = self.experiment_dir(experiment_id) / "experiment.json"
         return ExperimentArtifact.model_validate(_read_json(path))
+
+    def _available_experiment_id(self, title: str) -> str:
+        base = _slugify_title(title)
+        resolved_root = self.experiments_root.resolve()
+        self.experiments_root.mkdir(parents=True, exist_ok=True)
+        candidate = base
+        suffix = 2
+        while True:
+            _validate_storage_id(candidate, "Experiment")
+            candidate_dir = (resolved_root / candidate).resolve()
+            if candidate_dir != resolved_root and not candidate_dir.is_relative_to(
+                resolved_root
+            ):
+                raise NotFoundError("Experiment not found")
+            if not candidate_dir.exists():
+                return candidate
+            candidate = f"{base}-{suffix}"
+            suffix += 1
+
+    def create_experiment(
+        self,
+        *,
+        title: str,
+        output_type: Literal["text", "pydantic"],
+        model_entrypoint: str | None,
+        settings: PromptLabSettings,
+    ) -> ExperimentArtifact:
+        if title.strip() == "":
+            raise ValueError("Experiment title cannot be blank")
+        if output_type not in {"text", "pydantic"}:
+            raise ValueError("Unsupported output type")
+        output: dict[str, Any]
+        if output_type == "pydantic":
+            if model_entrypoint is None or model_entrypoint.strip() == "":
+                raise ValueError("pydantic output requires model_entrypoint")
+            output = {
+                "type": "pydantic",
+                "model_file": "model.py",
+                "model_entrypoint": model_entrypoint.strip(),
+            }
+        else:
+            output = {"type": "text"}
+        experiment_id = self._available_experiment_id(title)
+        experiment_dir = self.experiments_root.resolve() / experiment_id
+        version_dir = experiment_dir / "versions" / "v001"
+        artifact = ExperimentArtifact.model_validate(
+            {
+                "schema_version": "prompt_lab.experiment/v1",
+                "id": experiment_id,
+                "title": title,
+                "description": "",
+                "active_version": "v001",
+                "output": output,
+                "template": {"engine": "jinjax", "path": "prompt.md"},
+                "models": {
+                    "generator_model": settings.default_generator_model,
+                    "validator_model": settings.default_validator_model,
+                    "judge_model": settings.default_judge_model,
+                },
+                "run_defaults": {
+                    "repeat_count": settings.default_repeat_count,
+                    "llm_cache": "disabled",
+                    "case_order": "case-major",
+                    "excluded_case_ids": [],
+                },
+            }
+        )
+        try:
+            version_dir.mkdir(parents=True, exist_ok=False)
+        except FileExistsError:
+            raise FileExistsError("Experiment already exists")
+        _write_json(experiment_dir / "experiment.json", artifact.model_dump(mode="json"))
+        (version_dir / "prompt.md").write_text("", encoding="utf-8")
+        if output_type == "pydantic":
+            (version_dir / "model.py").write_text("", encoding="utf-8")
+        return artifact
+
+    def clone_experiment(
+        self,
+        *,
+        source_experiment_id: str,
+        title: str,
+    ) -> ExperimentArtifact:
+        if title.strip() == "":
+            raise ValueError("Experiment title cannot be blank")
+        _validate_storage_id(source_experiment_id, "Experiment")
+        if (self.experiments_root / source_experiment_id).is_symlink():
+            raise NotFoundError("Experiment not found")
+        source_dir = self.experiment_dir(source_experiment_id)
+        for path in source_dir.rglob("*"):
+            if path.is_symlink():
+                raise NotFoundError("Experiment not found")
+        source_artifact = self.load_experiment(source_experiment_id)
+        experiment_id = self._available_experiment_id(title)
+        destination = self.experiments_root.resolve() / experiment_id
+        cloned = source_artifact.model_copy(
+            update={
+                "id": experiment_id,
+                "title": title,
+            }
+        )
+        try:
+            shutil.copytree(source_dir, destination)
+        except FileExistsError:
+            raise FileExistsError("Experiment already exists")
+        except Exception:
+            if destination.exists():
+                shutil.rmtree(destination)
+            raise
+        try:
+            _write_json(destination / "experiment.json", cloned.model_dump(mode="json"))
+        except Exception:
+            if destination.exists():
+                shutil.rmtree(destination)
+            raise
+        return cloned
+
+    def delete_experiment(self, experiment_id: str) -> None:
+        _validate_storage_id(experiment_id, "Experiment")
+        if (self.experiments_root / experiment_id).is_symlink():
+            raise NotFoundError("Experiment not found")
+        experiment_dir = self.experiment_dir(experiment_id)
+        shutil.rmtree(experiment_dir)
 
     def list_versions(self, experiment_id: str) -> list[str]:
         versions_root = self.experiment_dir(experiment_id) / "versions"
@@ -125,13 +256,69 @@ class PromptLabStore:
         cases_dir = self.experiment_dir(experiment_id) / "cases"
         if not cases_dir.is_dir():
             return []
-        return [
-            CaseArtifact.model_validate(_read_json(path))
-            for path in sorted(cases_dir.glob("*.json"))
-        ]
+        cases: list[CaseArtifact] = []
+        for path in sorted(cases_dir.glob("*.json")):
+            cases.append(
+                CaseArtifact.model_validate(
+                    {
+                        "id": path.stem,
+                        "payload": _read_json(path),
+                    }
+                )
+            )
+        return cases
 
-    def load_validators(self, experiment_id: str) -> list[ValidatorDefinition]:
-        validators_dir = self.experiment_dir(experiment_id) / "validators"
+    def case_path(self, experiment_id: str, case_id: str) -> Path:
+        _validate_storage_id(case_id, "Case")
+        cases_dir = self.experiment_dir(experiment_id) / "cases"
+        resolved_cases_dir = cases_dir.resolve()
+        candidate = (resolved_cases_dir / f"{case_id}.json").resolve()
+        if candidate != resolved_cases_dir and not candidate.is_relative_to(
+            resolved_cases_dir
+        ):
+            raise NotFoundError("Case not found")
+        return candidate
+
+    def write_case(
+        self,
+        experiment_id: str,
+        case_id: str,
+        payload: dict[str, Any],
+        *,
+        overwrite: bool = False,
+    ) -> CaseArtifact:
+        path = self.case_path(experiment_id, case_id)
+        if path.exists() and not overwrite:
+            raise FileExistsError("Case already exists")
+        _write_json(path, payload)
+        return CaseArtifact.model_validate({"id": case_id, "payload": payload})
+
+    def delete_case(self, experiment_id: str, case_id: str) -> None:
+        path = self.case_path(experiment_id, case_id)
+        if not path.is_file():
+            raise NotFoundError("Case not found")
+        path.unlink()
+
+    def replace_cases(
+        self, experiment_id: str, cases: list[CaseArtifact]
+    ) -> list[CaseArtifact]:
+        cases_dir = self.experiment_dir(experiment_id) / "cases"
+        cases_dir.mkdir(parents=True, exist_ok=True)
+        case_ids = {artifact_case.id for artifact_case in cases}
+        for path in cases_dir.glob("*.json"):
+            if path.stem not in case_ids:
+                path.unlink()
+        for artifact_case in cases:
+            _write_json(
+                self.case_path(experiment_id, artifact_case.id),
+                artifact_case.payload,
+            )
+        return self.load_cases(experiment_id)
+
+    def load_validators(
+        self, experiment_id: str, version: str
+    ) -> list[ValidatorDefinition]:
+        validators_dir = self.version_dir(experiment_id, version) / "validators"
         if not validators_dir.is_dir():
             return []
         return [

@@ -1,0 +1,341 @@
+import { cpSync, existsSync, readdirSync, rmSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { expect, test } from "@playwright/test";
+
+test.describe.configure({ mode: "serial" });
+
+const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+const demoFixtureNames = ["demo-json", "demo-string"] as const;
+
+function removeManagedExperimentFixtures() {
+  const experimentsRoot = resolve(repoRoot, "experiments");
+  if (!existsSync(experimentsRoot)) return;
+  for (const entry of readdirSync(experimentsRoot, { withFileTypes: true })) {
+    if (entry.isDirectory() && entry.name.startsWith("managed-")) {
+      rmSync(resolve(experimentsRoot, entry.name), { recursive: true, force: true });
+    }
+  }
+}
+
+function resetDemoFixtures() {
+  removeManagedExperimentFixtures();
+  for (const fixtureName of demoFixtureNames) {
+    const source = resolve(repoRoot, "examples", fixtureName);
+    const destination = resolve(repoRoot, "experiments", fixtureName);
+    rmSync(destination, { recursive: true, force: true });
+    cpSync(source, destination, { recursive: true });
+  }
+}
+
+test.beforeAll(() => {
+  resetDemoFixtures();
+});
+
+test.afterAll(() => {
+  removeManagedExperimentFixtures();
+});
+
+async function selectVersion(page: import("@playwright/test").Page, version: string) {
+  const versionSelect = page.getByLabel("Version");
+  await expect(versionSelect).toBeVisible();
+  if ((await versionSelect.inputValue()) !== version) {
+    await versionSelect.selectOption(version);
+  }
+  await expect(versionSelect).toHaveValue(version);
+}
+
+test("demo string prompt and validators tabs show source sections", async ({ page }) => {
+  await page.goto("/demo-string/prompt");
+
+  const prompt = page.getByRole("region", { name: "Prompt source" });
+  await expect(prompt.getByRole("heading", { name: "Demo String" })).toBeVisible();
+  await expect(prompt.getByRole("heading", { name: "Prompt" })).toBeVisible();
+  await expect(prompt.getByText("Reply to the customer ticket")).toBeVisible();
+  await expect(prompt.getByText("Reply quality")).not.toBeVisible();
+
+  await page.getByRole("tab", { name: "Validators" }).click();
+
+  const validators = page.getByRole("region", { name: "Validators" });
+  await expect(validators.getByRole("heading", { name: "Validators" })).toBeVisible();
+  await expect(
+    validators.getByRole("article", { name: /Reply quality validator/i })
+  ).toBeVisible();
+  await expect(
+    validators.getByRole("article", { name: /Reply stats validator/i })
+  ).toBeVisible();
+  await expect(
+    validators.getByRole("button", { name: /Edit Reply quality validator/i })
+  ).toBeVisible();
+  await expect(validators.getByRole("region", { name: "Validator editor" })).not.toBeVisible();
+});
+
+test("demo string compare shows validator matrix and evidence modal", async ({
+  page
+}) => {
+  await page.goto("/demo-string/compare");
+
+  await page.getByRole("button", { name: /^(Recompare|Compare) versions$/ }).click();
+
+  const comparison = page.getByRole("region", { name: "Comparison" });
+  await expect(
+    comparison.getByRole("heading", { name: "Compare matrix" })
+  ).toBeVisible();
+  await expect(comparison.getByRole("columnheader", { name: /v001/ })).toBeVisible();
+  await expect(comparison.getByRole("columnheader", { name: /v002/ })).toBeVisible();
+  await expect(comparison.getByRole("rowheader", { name: /Reply quality/ })).toBeVisible();
+  await expect(comparison.getByRole("rowheader", { name: /Answers question/ })).toBeVisible();
+
+  await comparison
+    .getByRole("button", { name: /The reply is too vague/ })
+    .click();
+  await expect(page.getByRole("dialog")).toContainText("Evidence");
+  await expect(page.getByRole("dialog")).toContainText("billing-reply");
+});
+
+test("demo json prompt shows prompt and model source", async ({ page }) => {
+  await page.goto("/demo-json/prompt");
+
+  const prompt = page.getByRole("region", { name: "Prompt source" });
+  await expect(prompt).toBeVisible();
+  await expect(prompt.getByRole("heading", { name: "Demo JSON" })).toBeVisible();
+  await expect(prompt.getByRole("heading", { name: "Prompt" })).toBeVisible();
+  await expect(
+    prompt.getByText("Create a concise launch-readiness report")
+  ).toBeVisible();
+
+  await expect(prompt.getByRole("heading", { name: "Model" })).toBeVisible();
+  await expect(prompt.getByText("model.py").first()).toBeVisible();
+  await expect(prompt.getByText("class DemoReport")).toBeVisible();
+});
+
+test("demo json validators show large read-only cards with all checks", async ({
+  page
+}) => {
+  await page.goto("/demo-json/validators");
+  await selectVersion(page, "v002");
+
+  const validators = page.getByRole("region", { name: "Validators" });
+  const reportShape = validators.getByRole("article", {
+    name: /Report shape validator/i
+  });
+
+  await expect(reportShape).toBeVisible();
+  await expect(reportShape.getByText("Automatic", { exact: true })).toBeVisible();
+  await expect(reportShape.getByText("Enabled", { exact: true })).toBeVisible();
+  await expect(reportShape.getByText("Output only", { exact: true })).toBeVisible();
+  await expect(reportShape.getByText("3 checks", { exact: true })).toBeVisible();
+  await expect(reportShape.getByText("Summary present")).toBeVisible();
+  await expect(
+    reportShape.getByText("Requires $.summary in output_json to exist.")
+  ).toBeVisible();
+  await expect(reportShape.getByText("Three tags")).toBeVisible();
+  await expect(
+    reportShape.getByText("Requires $.tags in output_json to contain exactly 3 items.")
+  ).toBeVisible();
+  await expect(reportShape.getByText("Risk count")).toBeVisible();
+  await expect(
+    reportShape.getByText("Requires $.risks in output_json to contain between 1 and 3 items.")
+  ).toBeVisible();
+});
+
+test("demo json validator edit modal confirms discarding unsaved edits", async ({
+  page
+}) => {
+  await page.goto("/demo-json/validators");
+  await selectVersion(page, "v002");
+
+  const validators = page.getByRole("region", { name: "Validators" });
+  await validators
+    .getByRole("button", { name: /Edit Report quality validator/i })
+    .click();
+
+  const dialog = page.getByRole("dialog", {
+    name: /Edit validator:/i
+  });
+  const editor = dialog.getByRole("region", { name: "Validator editor" });
+  await editor.getByLabel("Title").first().fill("Discard me");
+  await dialog.getByRole("button", { name: "Cancel" }).first().click();
+
+  await expect(dialog.getByRole("alert")).toContainText(
+    "Discard unsaved validator edits?"
+  );
+  await dialog.getByRole("button", { name: "Keep editing" }).click();
+  await expect(editor.getByLabel("Title").first()).toHaveValue("Discard me");
+
+  await dialog.getByRole("button", { name: "Cancel" }).first().click();
+  await dialog.getByRole("button", { name: "Discard edits" }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await expect(validators.getByText("Discard me")).not.toBeVisible();
+});
+
+test("demo json validators can be saved as next version", async ({ page }) => {
+  await page.goto("/demo-json/validators");
+  await selectVersion(page, "v001");
+
+  const validators = page.getByRole("region", { name: "Validators" });
+  await validators
+    .getByRole("button", { name: /Edit Report quality validator/i })
+    .click();
+
+  const editedTitle = `Report quality e2e ${Date.now()}`;
+  const dialog = page.getByRole("dialog", {
+    name: /Edit validator:/i
+  });
+  const editor = dialog.getByRole("region", { name: "Validator editor" });
+  await editor.getByLabel("Title").first().fill(editedTitle);
+  await dialog.getByRole("button", { name: "Save changes" }).click();
+
+  await validators.getByRole("button", { name: "Save as next version" }).click();
+
+  await expect(
+    validators.getByText(/^Created v\d+ and switched to it\.$/)
+  ).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Validators" })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
+  await expect(validators.getByText(editedTitle)).toBeVisible();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+});
+
+test("demo json proposal shows new prompt and model plus diff", async ({
+  page
+}) => {
+  await page.goto("/demo-json/proposal");
+  await page.getByLabel("Version").selectOption("v002");
+
+  const proposal = page.getByRole("region", { name: "Proposal" });
+  await expect(proposal.getByRole("heading", { name: "Rationale" })).toBeVisible();
+  await expect(proposal.getByText("Proposed prompt")).toBeVisible();
+  await expect(proposal.getByText("Proposed model")).toBeVisible();
+  await expect(proposal.getByText("set launch_ready to false")).toBeVisible();
+  await expect(proposal.getByText("max_length=3").first()).toBeVisible();
+
+  await proposal.getByRole("tab", { name: "Diff" }).click();
+
+  const promptDiff = proposal.getByRole("region", { name: "Prompt diff" });
+  await expect(promptDiff.getByText("Prompt diff")).toBeVisible();
+  await expect(proposal.getByRole("region", { name: "Model diff" })).toBeVisible();
+  await expect(
+    promptDiff.locator(".cm-line", {
+      hasText: /set launch_ready\s+based on the.*risks/
+    })
+  ).toBeVisible();
+  await expect(
+    promptDiff.locator(".cm-line", {
+      hasText: /set launch_ready.*to false/
+    })
+  ).toBeVisible();
+});
+
+test("demo json validators can overwrite current version", async ({ page }) => {
+  await page.goto("/demo-json/validators");
+  await selectVersion(page, "v002");
+
+  const validators = page.getByRole("region", { name: "Validators" });
+  await validators
+    .getByRole("button", { name: /Edit Report quality validator/i })
+    .click();
+
+  const editedDescription = `Checks whether the structured report is useful and grounded. e2e ${Date.now()}`;
+  const editDialog = page.getByRole("dialog", {
+    name: /Edit validator:/i
+  });
+  const editor = editDialog.getByRole("region", { name: "Validator editor" });
+  await editor.getByLabel("Description").first().fill(editedDescription);
+  await editDialog.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+
+  await validators.getByRole("button", { name: "Overwrite current version" }).click();
+  const dialog = page.getByRole("dialog", {
+    name: "Overwrite current validators?"
+  });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Overwrite current version" }).click();
+
+  await expect(
+    validators.getByText(
+      "Overwrote validators for v002 and cleared generated validation artifacts."
+    )
+  ).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Validators" })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
+
+  await page.getByRole("tab", { name: "Runs" }).click();
+  const runs = page.getByRole("region", { name: "Run results" });
+  await expect(runs.getByRole("heading", { name: "Active run" })).toBeVisible();
+  await expect(runs.getByRole("cell", { name: /product brief/i }).first()).toBeVisible();
+  await expect(runs.getByText("Output JSON")).toBeVisible();
+
+  await page.getByRole("tab", { name: "Validation" }).click();
+  const validation = page.getByRole("region", { name: "Validation" });
+  await expect(
+    validation.getByText("No validation loaded. Validate the active run to review evidence.")
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Validate active run" })).toBeVisible();
+});
+
+test("experiment management creates clones and deletes experiments", async ({
+  page
+}) => {
+  await page.goto("/demo-json/settings");
+
+  const unique = Date.now();
+  await page.getByRole("button", { name: "New" }).click();
+  const newDialog = page.getByRole("dialog", { name: "New experiment" });
+  await expect(newDialog).toBeVisible();
+  await newDialog.getByLabel("Title").fill(`Managed Text ${unique}`);
+  await newDialog.getByRole("button", { name: "Create experiment" }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/managed-text-${unique}/prompt$`));
+  await expect(
+    page.getByRole("navigation", { name: "Experiments" })
+  ).toContainText(`Managed Text ${unique}`);
+
+  await page.getByRole("button", { name: "New" }).click();
+  const pydanticDialog = page.getByRole("dialog", { name: "New experiment" });
+  await pydanticDialog.getByLabel("Title").fill(`Managed JSON ${unique}`);
+  await pydanticDialog.getByLabel("Output type").selectOption("pydantic");
+  await pydanticDialog.getByLabel("Model entrypoint").fill("model.Output");
+  await pydanticDialog.getByRole("button", { name: "Create experiment" }).click();
+  await expect(page).toHaveURL(new RegExp(`/managed-json-${unique}/prompt$`));
+  await expect(page.getByRole("region", { name: "Prompt source" })).toContainText(
+    "model.py"
+  );
+
+  await page.goto("/demo-json/settings");
+  await page
+    .getByRole("navigation", { name: "Experiments" })
+    .getByRole("button", { name: "Clone", exact: true })
+    .click();
+  const cloneDialog = page.getByRole("dialog", { name: "Clone experiment" });
+  await cloneDialog.getByLabel("Title").fill(`Managed Clone ${unique}`);
+  await cloneDialog.getByRole("button", { name: "Clone experiment" }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/managed-clone-${unique}/settings$`));
+  await page.getByRole("tab", { name: "Cases" }).click();
+  await expect(page.getByRole("region", { name: "Cases" })).toContainText(
+    "product-brief"
+  );
+  await page.getByRole("tab", { name: "Validators" }).click();
+  await expect(page.getByRole("region", { name: "Validators" })).toContainText(
+    "Report"
+  );
+
+  await page
+    .getByRole("navigation", { name: "Experiments" })
+    .getByRole("button", { name: "Delete", exact: true })
+    .click();
+  const deleteDialog = page.getByRole("dialog", { name: "Delete experiment" });
+  await expect(deleteDialog).toContainText(
+    "runs, validations, reviews, proposals, and comparisons"
+  );
+  await deleteDialog.getByRole("button", { name: "Delete experiment" }).click();
+
+  await expect(
+    page.getByRole("navigation", { name: "Experiments" })
+  ).not.toContainText(`Managed Clone ${unique}`);
+});

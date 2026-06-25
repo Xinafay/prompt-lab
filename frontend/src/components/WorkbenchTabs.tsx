@@ -6,8 +6,9 @@ interface WorkbenchTabsProps {
 }
 
 const tabLabels: Record<WorkbenchTab, string> = {
-  overview: "Overview",
+  prompt: "Prompt",
   settings: "Settings",
+  validators: "Validators",
   cases: "Cases",
   runs: "Runs",
   validation: "Validation",

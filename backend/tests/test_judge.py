@@ -68,23 +68,8 @@ def valid_judgment_payload(**overrides: Any) -> dict[str, Any]:
 
 def valid_case_payload(**overrides: Any) -> dict[str, Any]:
     payload: dict[str, Any] = {
-        "schema_version": "prompt_lab.case/v2",
         "id": "case-a",
-        "title": "Case A",
-        "stores": {
-            "case": {
-                "kind": "flat_file_tree",
-                "values": {
-                    "value": {
-                        "__carmilla_flat_file_node__": "file",
-                        "value": "hello",
-                    }
-                },
-            }
-        },
-        "bindings": {
-            "value": {"kind": "store_scope", "store": "case", "path": "value"}
-        },
+        "payload": {"value": "hello"},
     }
     payload.update(overrides)
     return payload

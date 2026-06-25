@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
-import type { Case, PromptBinding, StoreScopeBinding, VersionOverview } from "../types";
+import type { Case, VersionOverview } from "../types";
 import { describeValue, ValuePreview } from "./ValuePreview";
 
 interface CaseBrowserProps {
   cases: VersionOverview["cases"];
+  isBusy?: boolean;
+  onCasesChange?: (cases: Case[]) => void;
 }
 
 function normalizeQuery(value: string): string {
@@ -15,97 +17,54 @@ function formatJson(value: unknown): string {
   return JSON.stringify(value, null, 2) ?? "undefined";
 }
 
+function formatCaseTitle(caseId: string): string {
+  return caseId
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toLocaleUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function deriveCaseId(fileName: string): string {
+  return fileName.replace(/\.json$/i, "").trim();
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function caseMatchesQuery(artifactCase: Case, caseQuery: string): boolean {
   if (caseQuery === "") {
     return true;
   }
-  return (
-    artifactCase.title.toLocaleLowerCase().includes(caseQuery) ||
-    artifactCase.id.toLocaleLowerCase().includes(caseQuery)
-  );
+  return artifactCase.id.toLocaleLowerCase().includes(caseQuery);
 }
 
-function caseMatchesBindingQuery(
+function caseMatchesPayloadQuery(
   artifactCase: Case,
-  bindingQuery: string
+  payloadQuery: string
 ): boolean {
-  if (bindingQuery === "") {
+  if (payloadQuery === "") {
     return true;
   }
-  return Object.keys(artifactCase.bindings).some((key) =>
-    key.toLocaleLowerCase().includes(bindingQuery)
+  return Object.keys(artifactCase.payload).some((key) =>
+    key.toLocaleLowerCase().includes(payloadQuery)
   );
 }
 
-function displayPath(path: string): string {
-  const normalized = path.trim().replace(/^\/+|\/+$/g, "");
-  return normalized === "" ? "." : normalized;
-}
-
-function resolveStoreScopePreview(
-  artifactCase: Case,
-  binding: StoreScopeBinding
-): unknown {
-  const store = artifactCase.stores[binding.store];
-  if (store === undefined) {
-    return `Missing store: ${binding.store}`;
-  }
-
-  const normalizedPath = binding.path.trim().replace(/^\/+|\/+$/g, "");
-  if (normalizedPath === "") {
-    return store.values;
-  }
-
-  let current: unknown = store.values;
-  for (const segment of normalizedPath.split("/")) {
-    if (
-      current === null ||
-      typeof current !== "object" ||
-      !(segment in current)
-    ) {
-      return `Missing store path: ${binding.path}`;
-    }
-    current = (current as Record<string, unknown>)[segment];
-  }
-  return unwrapFlatFileNodePreview(current);
-}
-
-function unwrapFlatFileNodePreview(value: unknown): unknown {
-  if (
-    value !== null &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    Object.keys(value).length === 2 &&
-    (value as Record<string, unknown>).__carmilla_flat_file_node__ === "file" &&
-    "value" in value
-  ) {
-    return (value as Record<string, unknown>).value;
-  }
-  return value;
-}
-
-function describeBinding(binding: PromptBinding): string {
-  if (binding.kind === "value") {
-    return `value | ${describeValue(binding.value)}`;
-  }
-  return `store_scope | store: ${binding.store} | path: ${displayPath(
-    binding.path
-  )}`;
-}
-
-function bindingPreview(artifactCase: Case, binding: PromptBinding): unknown {
-  if (binding.kind === "value") {
-    return binding.value;
-  }
-  return resolveStoreScopePreview(artifactCase, binding);
-}
-
-export function CaseBrowser({ cases }: CaseBrowserProps) {
+export function CaseBrowser({
+  cases,
+  isBusy = false,
+  onCasesChange
+}: CaseBrowserProps) {
   const [caseQuery, setCaseQuery] = useState("");
   const [bindingQuery, setBindingQuery] = useState("");
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(
     cases[0]?.id ?? null
   );
+  const [caseMessage, setCaseMessage] = useState<string | null>(null);
+  const [caseError, setCaseError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const filteredCases = useMemo(() => {
     const normalizedCaseQuery = normalizeQuery(caseQuery);
@@ -113,7 +72,7 @@ export function CaseBrowser({ cases }: CaseBrowserProps) {
     return cases.filter(
       (artifactCase) =>
         caseMatchesQuery(artifactCase, normalizedCaseQuery) &&
-        caseMatchesBindingQuery(artifactCase, normalizedBindingQuery)
+        caseMatchesPayloadQuery(artifactCase, normalizedBindingQuery)
     );
   }, [bindingQuery, caseQuery, cases]);
 
@@ -133,16 +92,80 @@ export function CaseBrowser({ cases }: CaseBrowserProps) {
     filteredCases.find((artifactCase) => artifactCase.id === selectedCaseId) ??
     null;
   const normalizedBindingQuery = normalizeQuery(bindingQuery);
-  const selectedBindingEntries =
+  const selectedPayloadEntries =
     selectedCase === null
       ? []
-      : Object.entries(selectedCase.bindings).filter(
+      : Object.entries(selectedCase.payload).filter(
           ([key]) =>
             normalizedBindingQuery === "" ||
             key.toLocaleLowerCase().includes(normalizedBindingQuery)
         );
-  const selectedBindingCount =
-    selectedCase === null ? 0 : Object.keys(selectedCase.bindings).length;
+  const selectedPayloadCount =
+    selectedCase === null ? 0 : Object.keys(selectedCase.payload).length;
+  const canEdit = onCasesChange !== undefined;
+
+  async function handleFileInputChange(
+    event: ChangeEvent<HTMLInputElement>
+  ): Promise<void> {
+    const file = event.currentTarget.files?.[0] ?? null;
+    event.currentTarget.value = "";
+    if (file === null || onCasesChange === undefined) {
+      return;
+    }
+    const caseId = deriveCaseId(file.name);
+    if (caseId.length === 0) {
+      setCaseMessage(null);
+      setCaseError("Case file name must include a case id.");
+      return;
+    }
+    if (cases.some((artifactCase) => artifactCase.id === caseId)) {
+      setCaseMessage(null);
+      setCaseError("Case already exists.");
+      return;
+    }
+    try {
+      const parsed = JSON.parse(await file.text()) as unknown;
+      if (!isJsonObject(parsed)) {
+        throw new Error("Case file must contain a JSON object.");
+      }
+      setCaseError(null);
+      setCaseMessage(`Added ${caseId}. Save cases to apply changes.`);
+      setSelectedCaseId(caseId);
+      onCasesChange([
+        ...cases,
+        { id: caseId, payload: parsed, enabled: true }
+      ].sort((left, right) => left.id.localeCompare(right.id)));
+    } catch (error) {
+      setCaseMessage(null);
+      setCaseError(error instanceof Error ? error.message : "Unknown error");
+    }
+  }
+
+  function handleDeleteCase(caseId: string): void {
+    if (onCasesChange === undefined) {
+      return;
+    }
+    setCaseError(null);
+    setCaseMessage(`Removed ${caseId}. Save cases to apply changes.`);
+    onCasesChange(cases.filter((artifactCase) => artifactCase.id !== caseId));
+  }
+
+  function handleRunInclusionChange(caseId: string, enabled: boolean): void {
+    if (onCasesChange === undefined) {
+      return;
+    }
+    setCaseError(null);
+    setCaseMessage(
+      enabled
+        ? `Included ${caseId} in runs. Save cases to apply changes.`
+        : `Excluded ${caseId} from runs. Save cases to apply changes.`
+    );
+    onCasesChange(
+      cases.map((artifactCase) =>
+        artifactCase.id === caseId ? { ...artifactCase, enabled } : artifactCase
+      )
+    );
+  }
 
   return (
     <section className="case-browser" aria-label="Cases">
@@ -154,6 +177,25 @@ export function CaseBrowser({ cases }: CaseBrowserProps) {
               {filteredCases.length} of {cases.length}
             </span>
           </div>
+          {!canEdit ? null : (
+            <div className="case-browser-actions">
+              <button
+                className="secondary-action"
+                disabled={isBusy}
+                onClick={() => fileInputRef.current?.click()}
+                type="button"
+              >
+                Upload case JSON
+              </button>
+              <input
+                accept="application/json,.json"
+                className="case-file-input"
+                onChange={(event) => void handleFileInputChange(event)}
+                ref={fileInputRef}
+                type="file"
+              />
+            </div>
+          )}
           <label>
             <span>Find case</span>
             <input
@@ -164,10 +206,10 @@ export function CaseBrowser({ cases }: CaseBrowserProps) {
             />
           </label>
           <label>
-            <span>Find binding key</span>
+            <span>Find payload key</span>
             <input
               onChange={(event) => setBindingQuery(event.target.value)}
-              placeholder="Binding key"
+              placeholder="Payload key"
               type="search"
               value={bindingQuery}
             />
@@ -181,21 +223,59 @@ export function CaseBrowser({ cases }: CaseBrowserProps) {
         ) : (
           <div className="case-browser-list" role="listbox" aria-label="Case list">
             {filteredCases.map((artifactCase) => (
-              <button
+              <div
                 aria-selected={artifactCase.id === selectedCase?.id}
-                className={
-                  artifactCase.id === selectedCase?.id
-                    ? "case-browser-item is-selected"
-                    : "case-browser-item"
-                }
+                className={[
+                  "case-browser-item",
+                  artifactCase.id === selectedCase?.id ? "is-selected" : null,
+                  artifactCase.enabled ? null : "is-disabled"
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
                 key={artifactCase.id}
-                onClick={() => setSelectedCaseId(artifactCase.id)}
                 role="option"
-                type="button"
               >
-                <strong>{artifactCase.title || "(untitled case)"}</strong>
-                <span>{artifactCase.id}</span>
-              </button>
+                <button
+                  className="case-browser-item-main"
+                  onClick={() => setSelectedCaseId(artifactCase.id)}
+                  type="button"
+                >
+                  <strong>{formatCaseTitle(artifactCase.id)}</strong>
+                  <span>{artifactCase.id}</span>
+                  {artifactCase.enabled ? null : (
+                    <span className="case-state-badge">Excluded</span>
+                  )}
+                </button>
+                {!canEdit ? null : (
+                  <div className="case-browser-item-actions">
+                    <label
+                      className="case-run-toggle"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <input
+                        checked={artifactCase.enabled}
+                        disabled={isBusy}
+                        onChange={(event) =>
+                          handleRunInclusionChange(
+                            artifactCase.id,
+                            event.currentTarget.checked
+                          )
+                        }
+                        type="checkbox"
+                      />
+                      <span>Include in runs</span>
+                    </label>
+                    <button
+                      className="secondary-action danger-action"
+                      disabled={isBusy}
+                      onClick={() => handleDeleteCase(artifactCase.id)}
+                      type="button"
+                    >
+                      Delete case
+                    </button>
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         )}
@@ -210,40 +290,48 @@ export function CaseBrowser({ cases }: CaseBrowserProps) {
           <>
             <div className="case-detail-heading">
               <div>
-                <h3>{selectedCase.title || "(untitled case)"}</h3>
+                <h3>{formatCaseTitle(selectedCase.id)}</h3>
                 <p>{selectedCase.id}</p>
               </div>
-              <span>
-                {selectedBindingEntries.length} of {selectedBindingCount} binding
-                {selectedBindingCount === 1 ? "" : "s"}
-              </span>
+              <div className="case-detail-summary">
+                <span>
+                  {selectedPayloadEntries.length} of {selectedPayloadCount} payload
+                  key{selectedPayloadCount === 1 ? "" : "s"}
+                </span>
+                {selectedCase.enabled ? null : (
+                  <span className="case-state-badge">Excluded</span>
+                )}
+              </div>
             </div>
+            {caseError === null ? null : (
+              <p className="case-management-message is-error">{caseError}</p>
+            )}
+            {caseMessage === null ? null : (
+              <p className="case-management-message">{caseMessage}</p>
+            )}
 
-            <div className="bindings-table" role="table" aria-label="Bindings">
+            <div className="bindings-table" role="table" aria-label="Payload">
               <div className="bindings-row bindings-row-head" role="row">
                 <span role="columnheader">Key</span>
-                <span role="columnheader">Type/metadata</span>
                 <span role="columnheader">Preview</span>
               </div>
-              {selectedBindingEntries.length === 0 ? (
+              {selectedPayloadEntries.length === 0 ? (
                 <div className="bindings-empty">
-                  {selectedBindingCount === 0
-                    ? "No bindings in this case."
-                    : "No bindings match the current key filter."}
+                  {selectedPayloadCount === 0
+                    ? "No payload keys in this case."
+                    : "No payload keys match the current key filter."}
                 </div>
               ) : (
-                selectedBindingEntries.map(([key, binding]) => (
+                selectedPayloadEntries.map(([key, value]) => (
                   <div className="bindings-row" key={key} role="row">
-                    <strong role="cell">{key}</strong>
-                    <span className="binding-meta" role="cell">
-                      {describeBinding(binding)}
-                    </span>
+                    <div className="payload-key-cell" role="cell">
+                      <strong>{key}</strong>
+                      <span className="binding-meta">
+                        {describeValue(value)}
+                      </span>
+                    </div>
                     <div role="cell">
-                      <ValuePreview value={bindingPreview(selectedCase, binding)} />
-                      <details className="binding-json">
-                        <summary>Binding JSON</summary>
-                        <pre>{formatJson(binding)}</pre>
-                      </details>
+                      <ValuePreview value={value} />
                     </div>
                   </div>
                 ))
@@ -251,13 +339,8 @@ export function CaseBrowser({ cases }: CaseBrowserProps) {
             </div>
 
             <details className="case-bindings-json">
-              <summary>Full bindings JSON</summary>
-              <pre>{formatJson(selectedCase.bindings)}</pre>
-            </details>
-
-            <details className="case-bindings-json">
-              <summary>Full stores JSON</summary>
-              <pre>{formatJson(selectedCase.stores)}</pre>
+              <summary>Full payload JSON</summary>
+              <pre>{formatJson(selectedCase.payload)}</pre>
             </details>
           </>
         )}

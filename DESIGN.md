@@ -129,9 +129,10 @@ A case is a JSON file describing one concrete prompt invocation. It contains ser
 
 ### Validators
 
-Validators are experiment-level JSON definitions under `validators/`. They state
-what should be checked after a run. Enabled validators run in the explicit
-`Validate active run` stage before judging.
+Validators are version-level JSON definitions under
+`versions/<version>/validators/`. They state what should be checked after a run.
+Enabled validators run in the explicit `Validate active run` stage before
+judging.
 
 LLM questionnaire validators ask `validator_model` to grade concrete checks on
 the global `grade: 1..5 | null` scale over configured input scope. Automatic
@@ -181,13 +182,13 @@ Recommended experiment layout:
 ```text
 experiments/<experiment-id>/
   experiment.json
-  validators/
-    <validator-id>.json
   cases/
     <case-id>.json
   versions/
     v001/
       prompt.md
+      validators/
+        <validator-id>.json
       model.py                 # only for pydantic output
       runs/
         <run-batch-id>/
@@ -773,16 +774,22 @@ Show:
 - last run;
 - last judgment/comparison.
 
-### Experiment Overview
+### Prompt
 
 Show:
 
 - active version selector;
 - prompt editor;
 - Pydantic model editor or text-output notice;
-- validator list and validation status;
-- cases list;
-- buttons: `Run version`, `Validate active run`, `Judge validated run`, `Compare with previous version`, `Create proposal`.
+- buttons: `Run version`.
+
+### Validators
+
+Show:
+
+- validator list;
+- validator type, input scope, and enabled status;
+- configured checks.
 
 ### Runs
 
@@ -875,13 +882,13 @@ Output:
 ```text
 <eval-name>/
   experiment.json
-  validators/
-    <validator-id>.json
   cases/
     <case-name>.json
   versions/
     v001/
       prompt.md
+      validators/
+        <validator-id>.json
       model.py
 ```
 

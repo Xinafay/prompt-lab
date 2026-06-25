@@ -36,10 +36,10 @@ test("runs view renders output JSON and rendered prompt with code viewers", () =
       cases: [
         {
           id: "case-a",
-          title: "Case A",
-          source: null,
-          stores: {},
-          bindings: {}
+          enabled: true,
+          payload: {
+            value: "hello"
+          }
         }
       ],
       runBatchId: "run-001",

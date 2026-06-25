@@ -1,0 +1,11 @@
+{
+  "brief": {
+    "product": "Nimbus Backup",
+    "audience": "small finance teams",
+    "requirements": [
+      "summarize reliability benefit",
+      "include three tags",
+      "list adoption risks"
+    ]
+  }
+}

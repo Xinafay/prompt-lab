@@ -56,6 +56,7 @@ class RunDefaults(BaseModel):
     repeat_count: int = Field(default=3, ge=1)
     llm_cache: Literal["disabled"] = "disabled"
     case_order: Literal["case-major"] = "case-major"
+    excluded_case_ids: list[str] = Field(default_factory=list)
 
 
 class ExperimentArtifact(BaseModel):
@@ -74,56 +75,14 @@ class ExperimentArtifact(BaseModel):
     run_defaults: RunDefaults = Field(default_factory=RunDefaults)
 
 
-class CaseSource(BaseModel):
-    """Optional source metadata for imported cases."""
-
-    model_config = ConfigDict(extra="allow")
-
-    type: str | None = None
-
-
-class FlatFileTreeStore(BaseModel):
-    """A neutral serialized flat-file tree store produced by an external system."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["flat_file_tree"]
-    values: JsonObject
-
-
-class StoreScopeBinding(BaseModel):
-    """Bind a prompt variable to a scope inside a named store."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["store_scope"]
-    store: str = Field(min_length=1)
-    path: str = ""
-
-
-class ValueBinding(BaseModel):
-    """Bind a prompt variable directly to a JSON-like value."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["value"]
-    value: Any
-
-
-PromptBinding = StoreScopeBinding | ValueBinding
-
-
 class CaseArtifact(BaseModel):
     """One prompt input case."""
 
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["prompt_lab.case/v2"]
     id: str = Field(min_length=1)
-    title: str = Field(min_length=1)
-    source: CaseSource | None = None
-    stores: dict[str, FlatFileTreeStore]
-    bindings: dict[str, PromptBinding]
+    payload: JsonObject
+    enabled: bool = True
 
 
 class RunBatchArtifact(BaseModel):

@@ -718,6 +718,102 @@ def test_api_create_version_copies_clean_source_and_replaces_pydantic_files() ->
         )
 
 
+def test_api_manual_source_create_next_version_replaces_prompt_and_model() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        review_dir = write_review_fixture(root)
+        version_dir = review_dir.parents[1]
+        (version_dir / "runs" / "batch-001").mkdir(parents=True)
+        (version_dir / "runs" / "batch-001" / "run.json").write_text(
+            "{}", encoding="utf-8"
+        )
+        (version_dir / "validations" / "validation-001").mkdir(parents=True)
+        (version_dir / "comparisons" / "comparison-001").mkdir(parents=True)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).post(
+            "/api/experiments/demo/versions/v001/source",
+            json={
+                "mode": "create_next",
+                "prompt": "Manual prompt\n\n<<MODEL>>",
+                "model_py": (
+                    "from pydantic import BaseModel\n\n"
+                    "class DemoOutput(BaseModel):\n"
+                    "    answer: str\n"
+                    "    confidence: float\n"
+                ),
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["version"] == "v002"
+        assert response.json()["source_version"] == "v001"
+        assert response.json()["mode"] == "create_next"
+        runtime_version_dir = runtime_review_dir(root).parents[1]
+        new_version_dir = runtime_version_dir.parent / "v002"
+        assert (new_version_dir / "prompt.md").read_text(encoding="utf-8") == (
+            "Manual prompt\n\n<<MODEL>>"
+        )
+        assert "confidence: float" in (new_version_dir / "model.py").read_text(
+            encoding="utf-8"
+        )
+        assert not (new_version_dir / "runs").exists()
+        assert not (new_version_dir / "validations").exists()
+        assert not (new_version_dir / "reviews").exists()
+        assert not (new_version_dir / "comparisons").exists()
+        assert (runtime_version_dir / "prompt.md").read_text(encoding="utf-8") == (
+            "Say {{ value }}\n\n<<MODEL>>"
+        )
+        manifest = json.loads(
+            (runtime_version_dir.parent.parent / "experiment.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert manifest["active_version"] == "v001"
+
+
+def test_api_manual_source_overwrite_replaces_files_and_clears_artifacts() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        review_dir = write_review_fixture(root)
+        version_dir = review_dir.parents[1]
+        (version_dir / "runs" / "batch-001").mkdir(parents=True)
+        (version_dir / "validations" / "validation-001").mkdir(parents=True)
+        (version_dir / "reviews" / "review-002").mkdir(parents=True)
+        (version_dir / "comparisons" / "comparison-001").mkdir(parents=True)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).post(
+            "/api/experiments/demo/versions/v001/source",
+            json={
+                "mode": "overwrite_current",
+                "prompt": "Overwritten prompt\n\n<<MODEL>>",
+                "model_py": (
+                    "from pydantic import BaseModel\n\n"
+                    "class DemoOutput(BaseModel):\n"
+                    "    answer: str\n"
+                    "    summary: str\n"
+                ),
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["version"] == "v001"
+        assert response.json()["source_version"] == "v001"
+        assert response.json()["mode"] == "overwrite_current"
+        runtime_version_dir = runtime_review_dir(root).parents[1]
+        assert (runtime_version_dir / "prompt.md").read_text(encoding="utf-8") == (
+            "Overwritten prompt\n\n<<MODEL>>"
+        )
+        assert "summary: str" in (runtime_version_dir / "model.py").read_text(
+            encoding="utf-8"
+        )
+        assert not (runtime_version_dir / "runs").exists()
+        assert not (runtime_version_dir / "validations").exists()
+        assert not (runtime_version_dir / "reviews").exists()
+        assert not (runtime_version_dir / "comparisons").exists()
+
+
 def test_api_updating_review_decisions_invalidates_existing_proposal() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -911,6 +1007,8 @@ def main() -> int:
         test_api_generates_dry_run_proposal_without_live_llm,
         test_api_reports_active_proposal_job_and_rejects_second_proposal,
         test_api_create_version_copies_clean_source_and_replaces_pydantic_files,
+        test_api_manual_source_create_next_version_replaces_prompt_and_model,
+        test_api_manual_source_overwrite_replaces_files_and_clears_artifacts,
         test_api_updating_review_decisions_invalidates_existing_proposal,
         test_api_updating_review_human_notes_invalidates_existing_proposal,
         test_api_create_version_rejects_mismatched_source_without_creating_version,

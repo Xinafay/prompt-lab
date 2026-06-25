@@ -45,7 +45,7 @@ config starts the backend on `127.0.0.1:8000` and the Vite frontend on
 The UI supports the MVP flow:
 
 - list experiments;
-- inspect the active version through `Overview`, `Cases`, `Runs`, `Review`, `Proposal`, and `Compare` tabs;
+- inspect the active version through `Prompt`, `Settings`, `Validators`, `Cases`, `Runs`, `Validation`, `Review`, `Proposal`, and `Compare` tabs;
 - browse cases with title/id filtering, variable-key filtering, compact value previews, and collapsed raw JSON;
 - run the active version and stream job progress over SSE;
 - enable `Dry-run` in the workflow toolbar to exercise run, judge, proposal, and comparison paths without real model calls;

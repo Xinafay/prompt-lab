@@ -7,13 +7,10 @@ from pydantic import ValidationError
 from prompt_lab.models.artifacts import (
     CaseArtifact,
     ExperimentArtifact,
-    FlatFileTreeStore,
     OutputConfig,
     RunArtifact,
     RunBatchArtifact,
     RunDefaults,
-    StoreScopeBinding,
-    ValueBinding,
 )
 
 
@@ -156,41 +153,25 @@ def test_run_defaults_rejects_invalid_values_and_extras() -> None:
     assert_validation_error(RunDefaults, {"unknown": True}, "Extra inputs are not permitted")
 
 
-def test_case_artifact_validates_v2_stores_and_bindings() -> None:
+def test_case_artifact_validates_plain_payload() -> None:
     case = CaseArtifact.model_validate(
         {
-            "schema_version": "prompt_lab.case/v2",
             "id": "case-a",
-            "title": "Case A",
-            "stores": {
-                "case": {
-                    "kind": "flat_file_tree",
-                    "values": {
-                        "chapter.md": {
-                            "__carmilla_flat_file_node__": "file",
-                            "value": "Hello",
-                        }
-                    },
-                }
-            },
-            "bindings": {
-                "chapter": {
-                    "kind": "store_scope",
-                    "store": "case",
-                    "path": "chapter.md",
-                },
-                "metadata": {"kind": "value", "value": {"tone": "quiet"}},
+            "payload": {
+                "chapter": {"text": "Hello"},
+                "metadata": {"tone": "quiet"},
             },
         }
     )
 
-    assert isinstance(case.stores["case"], FlatFileTreeStore)
-    assert isinstance(case.bindings["chapter"], StoreScopeBinding)
-    assert isinstance(case.bindings["metadata"], ValueBinding)
-    assert case.bindings["chapter"].path == "chapter.md"
+    assert case.id == "case-a"
+    assert case.payload == {
+        "chapter": {"text": "Hello"},
+        "metadata": {"tone": "quiet"},
+    }
 
 
-def test_case_artifact_rejects_v1_variables_shape() -> None:
+def test_case_artifact_rejects_legacy_case_shape() -> None:
     assert_validation_error(
         CaseArtifact,
         {
@@ -199,7 +180,7 @@ def test_case_artifact_rejects_v1_variables_shape() -> None:
             "title": "Case A",
             "variables": {"chapter_text": "Hello"},
         },
-        "Input should be 'prompt_lab.case/v2'",
+        "Field required",
     )
 
 
@@ -331,8 +312,8 @@ def main() -> int:
         test_text_experiment_artifact_validates,
         test_output_config_rejects_invalid_mode_fields,
         test_run_defaults_rejects_invalid_values_and_extras,
-        test_case_artifact_validates_v2_stores_and_bindings,
-        test_case_artifact_rejects_v1_variables_shape,
+        test_case_artifact_validates_plain_payload,
+        test_case_artifact_rejects_legacy_case_shape,
         test_run_artifact_accepts_valid_text_and_pydantic_outputs,
         test_run_artifact_enforces_status_error_fields,
         test_run_artifact_enforces_output_type_fields,

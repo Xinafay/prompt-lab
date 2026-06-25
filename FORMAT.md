@@ -144,95 +144,23 @@ evidence before asking the judge model to synthesize findings.
 
 ## Case
 
-Cases use `prompt_lab.case/v2`. A case represents one concrete prompt
-invocation.
+A case represents one concrete prompt invocation. Cases live under `cases/` as
+plain JSON objects. The case id is the filename stem, for example
+`cases/chapter-one.json` has case id `chapter-one`.
 
 ```json
 {
-  "schema_version": "prompt_lab.case/v2",
-  "id": "case-id",
-  "title": "Case title",
-  "source": {
-    "type": "carmilla.workflow_step_eval"
+  "chapter": {
+    "title": "Chapter One",
+    "paragraphs": ["..."]
   },
-  "stores": {
-    "case": {
-      "kind": "flat_file_tree",
-      "values": {
-        "chapter": {
-          "__carmilla_flat_file_node__": "file",
-          "value": {
-            "title": "Chapter One",
-            "paragraphs": ["..."]
-          }
-        }
-      }
-    }
-  },
-  "bindings": {
-    "chapter": {
-      "kind": "store_scope",
-      "store": "case",
-      "path": "chapter"
-    },
-    "current_entities": {
-      "kind": "value",
-      "value": ["Ada", "Mina"]
-    }
-  }
+  "current_entities": ["Ada", "Mina"]
 }
 ```
 
-### Stores
-
-`stores` hold serialized source data. The supported store kind is
-`flat_file_tree`.
-
-Flat-file tree directories are plain JSON objects. File leaves use this exact
-shape:
-
-```json
-{
-  "__carmilla_flat_file_node__": "file",
-  "value": "any JSON value"
-}
-```
-
-The explicit file-node wrapper is required so a directory named
-`__carmilla_flat_file_node__` can still be represented without ambiguity.
-
-### Bindings
-
-`bindings` define the top-level names visible in jinjax prompt templates and in
-Pydantic validation context.
-
-`store_scope` binds a top-level name to a path inside a store:
-
-```json
-{
-  "kind": "store_scope",
-  "store": "case",
-  "path": "chapter"
-}
-```
-
-`value` binds a top-level name directly to a JSON value. Use it for computed
-inputs that are produced during workflow-step replay and are not naturally stored
-in the flat-file tree:
-
-```json
-{
-  "kind": "value",
-  "value": {
-    "name": "Ada",
-    "rank": 2
-  }
-}
-```
-
-Prompt Lab materializes `stores + bindings` into one plain dictionary before
-rendering and validation. For the case above, templates can reference
-`{{ chapter.title }}` and `{{ current_entities }}`.
+Prompt Lab passes the case object directly to prompt rendering and validation.
+For the case above, templates can reference `{{ chapter.title }}` and
+`{{ current_entities }}`.
 
 ## Version
 

@@ -3,8 +3,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   apiGet,
   cancelJob,
+  cloneExperiment,
   compareVersions,
+  createExperiment,
   createProposalVersion,
+  deleteExperiment,
   generateProposal,
   getActiveJob,
   getExperimentVersions,
@@ -23,19 +26,27 @@ import {
   previewRunPrompts,
   previewValidationPrompts,
   runVersion,
+  saveCases,
   validateVersion,
   updateExperiment,
   updateGlobalSettings,
   updateHumanNotes,
   updateReviewDecisions,
-  updateValidationInclusion
+  updateValidationInclusion,
+  updateVersionSource,
+  updateVersionValidators
 } from "./api";
 import { CaseBrowser } from "./components/CaseBrowser";
 import { ComparisonView } from "./components/ComparisonView";
+import {
+  CloneExperimentModal,
+  DeleteExperimentModal,
+  NewExperimentModal
+} from "./components/ExperimentManagementModals";
 import { ExperimentSettings } from "./components/ExperimentSettings";
-import { ExperimentOverview } from "./components/ExperimentOverview";
 import { ExperimentsList } from "./components/ExperimentsList";
 import { GlobalSettings } from "./components/GlobalSettings";
+import { PromptView } from "./components/PromptView";
 import { PromptPreviewModal } from "./components/PromptPreviewModal";
 import { ProposalView } from "./components/ProposalView";
 import { ReviewView } from "./components/ReviewView";
@@ -45,14 +56,18 @@ import {
   buildValidationInclusionUpdate,
   ValidationView
 } from "./components/ValidationView";
+import { ValidatorsView } from "./components/ValidatorsView";
 import { snapshotReviewState } from "./components/reviewStateSnapshot";
 import { snapshotValidationState } from "./components/validationStateSnapshot";
 import { WorkbenchTabs } from "./components/WorkbenchTabs";
 import { WorkflowToolbar } from "./components/WorkflowToolbar";
 import type {
+  Case,
   CompareMatrixResponse,
   CreatedVersionResponse,
   Experiment,
+  ExperimentCloneRequest,
+  ExperimentCreateRequest,
   FindingDecisionValue,
   GlobalSettings as GlobalSettingsModel,
   JobEvent,
@@ -63,6 +78,10 @@ import type {
   RunsResponse,
   ValidationState,
   VersionOverview,
+  VersionSourceDraft,
+  VersionSourceSaveMode,
+  VersionValidatorsDraft,
+  VersionValidatorsSaveMode,
   VersionSummary,
   WorkflowMode
 } from "./types";
@@ -101,13 +120,39 @@ type GlobalSettingsState =
 type HistoryMode = "push" | "replace";
 type AppView = "experiment" | "globalSettings";
 type PromptPreviewAction = () => void | Promise<void>;
+type SourceViewMode = "edit" | "diff";
+type UnsavedNavigationKind =
+  | "settings"
+  | "source"
+  | "validators"
+  | "cases"
+  | "validation"
+  | "review";
 
-type PendingNavigation =
+type ExperimentManagementDialog =
+  | { kind: "new" }
+  | { kind: "clone"; experiment: Experiment }
+  | { kind: "delete"; experiment: Experiment };
+
+type PendingNavigationTarget =
   | { kind: "experiment"; experiment: Experiment | null }
+  | { kind: "experimentDialog"; dialog: ExperimentManagementDialog }
   | { kind: "globalSettings" }
   | { kind: "route"; route: ReturnType<typeof currentExperimentRoute> }
   | { kind: "tab"; tab: WorkbenchTab }
   | { kind: "version"; version: string };
+
+type PendingNavigation = PendingNavigationTarget & {
+  unsavedKind: UnsavedNavigationKind;
+};
+
+type PendingSourceOverwrite = {
+  navigation: PendingNavigation | null;
+};
+
+type PendingValidatorsOverwrite = {
+  navigation: PendingNavigation | null;
+};
 
 function currentExperimentRoute() {
   return parseExperimentRoute(new URL(window.location.href));
@@ -127,6 +172,26 @@ function workflowCompletionMessage(kind: string): string {
 
 function hasCompletedValidation(state: ValidationState | null): boolean {
   return state?.validation_batch.status === "completed";
+}
+
+function sourceDraftFromOverview(overview: VersionOverview): VersionSourceDraft {
+  return {
+    prompt: overview.prompt,
+    model_py:
+      overview.experiment.output.type === "pydantic"
+        ? overview.model_py ?? ""
+        : null
+  };
+}
+
+function sourceDraftsMatch(
+  left: VersionSourceDraft,
+  right: VersionSourceDraft
+): boolean {
+  return (
+    left.prompt === right.prompt &&
+    (left.model_py ?? null) === (right.model_py ?? null)
+  );
 }
 
 function App() {
@@ -174,6 +239,24 @@ function App() {
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<Experiment | null>(null);
+  const [experimentDialog, setExperimentDialog] =
+    useState<ExperimentManagementDialog | null>(null);
+  const [experimentActionBusy, setExperimentActionBusy] = useState(false);
+  const [experimentActionError, setExperimentActionError] = useState<string | null>(
+    null
+  );
+  const [sourceEditing, setSourceEditing] = useState(false);
+  const [sourceDraft, setSourceDraft] = useState<VersionSourceDraft | null>(null);
+  const [sourceViewMode, setSourceViewMode] = useState<SourceViewMode>("edit");
+  const [pendingSourceOverwrite, setPendingSourceOverwrite] =
+    useState<PendingSourceOverwrite | null>(null);
+  const [validatorsDraft, setValidatorsDraft] =
+    useState<VersionValidatorsDraft | null>(null);
+  const [validatorsDirty, setValidatorsDirty] = useState(false);
+  const [pendingValidatorsOverwrite, setPendingValidatorsOverwrite] =
+    useState<PendingValidatorsOverwrite | null>(null);
+  const [casesDraft, setCasesDraft] = useState<Case[] | null>(null);
+  const [casesDirty, setCasesDirty] = useState(false);
   const [globalSettingsBusy, setGlobalSettingsBusy] = useState(false);
   const [globalSettingsMessage, setGlobalSettingsMessage] =
     useState<string | null>(null);
@@ -192,6 +275,16 @@ function App() {
   const workflowRequestIdRef = useRef(0);
   const baselineVersionRef = useRef("v001");
   const candidateVersionRef = useRef("v001");
+  const preserveNextValidatorsCleanMessageRef = useRef(false);
+  const sourceDirty = useMemo(() => {
+    if (detailState.status !== "loaded" || sourceDraft === null) {
+      return false;
+    }
+    return !sourceDraftsMatch(
+      sourceDraft,
+      sourceDraftFromOverview(detailState.overview)
+    );
+  }, [detailState, sourceDraft]);
 
   function writeExperimentRoute(
     experimentId: string,
@@ -221,6 +314,33 @@ function App() {
     if (selectedExperiment !== null) {
       writeExperimentRoute(selectedExperiment.id, activeTab, historyMode);
     }
+  }
+
+  function clearSourceEditor(
+    options: { clearPendingOverwrite?: boolean } = {}
+  ) {
+    setSourceEditing(false);
+    setSourceDraft(null);
+    setSourceViewMode("edit");
+    if (options.clearPendingOverwrite ?? true) {
+      setPendingSourceOverwrite(null);
+    }
+  }
+
+  function clearValidatorEditor(
+    options: { clearPendingOverwrite?: boolean } = {}
+  ) {
+    setValidatorsDraft(null);
+    setValidatorsDirty(false);
+    preserveNextValidatorsCleanMessageRef.current = false;
+    if (options.clearPendingOverwrite ?? true) {
+      setPendingValidatorsOverwrite(null);
+    }
+  }
+
+  function clearCaseEditor() {
+    setCasesDraft(null);
+    setCasesDirty(false);
   }
 
   function activateTab(tab: WorkbenchTab, historyMode: HistoryMode = "replace") {
@@ -259,6 +379,9 @@ function App() {
     setSettingsBusy(false);
     setSettingsDirty(false);
     setSettingsDraft(null);
+    clearSourceEditor();
+    clearValidatorEditor();
+    clearCaseEditor();
     setPendingNavigation(null);
     setNavigationError(null);
     setNavigationSaving(false);
@@ -302,13 +425,32 @@ function App() {
     setSettingsBusy(false);
     setSettingsDirty(false);
     setSettingsDraft(null);
+    clearSourceEditor();
+    clearValidatorEditor();
+    clearCaseEditor();
     setPendingNavigation(null);
     setNavigationError(null);
     setNavigationSaving(false);
     writeGlobalSettingsRoute(options?.historyMode ?? "replace");
   }
 
-  function unsavedNavigationKind(): "settings" | "validation" | "review" | null {
+  function unsavedNavigationKind(): UnsavedNavigationKind | null {
+    if (
+      appView === "experiment" &&
+      activeTab === "prompt" &&
+      sourceDirty &&
+      !workflowBusy
+    ) {
+      return "source";
+    }
+    if (
+      appView === "experiment" &&
+      activeTab === "validators" &&
+      validatorsDirty &&
+      !workflowBusy
+    ) {
+      return "validators";
+    }
     if (
       appView === "experiment" &&
       activeTab === "validation" &&
@@ -316,6 +458,14 @@ function App() {
       !workflowBusy
     ) {
       return "validation";
+    }
+    if (
+      appView === "experiment" &&
+      activeTab === "cases" &&
+      casesDirty &&
+      !workflowBusy
+    ) {
+      return "cases";
     }
     if (
       appView === "experiment" &&
@@ -343,17 +493,33 @@ function App() {
     return null;
   }
 
-  function shouldBlockUnsavedNavigation(): boolean {
-    return unsavedNavigationKind() !== null;
+  function buildPendingNavigation(
+    navigation: PendingNavigationTarget
+  ): PendingNavigation | null {
+    const unsavedKind = unsavedNavigationKind();
+    if (unsavedKind === null) {
+      return null;
+    }
+    return { ...navigation, unsavedKind };
   }
 
-  function canSavePendingNavigation(): boolean {
-    const kind = unsavedNavigationKind();
+  function canSavePendingNavigation(
+    kind: UnsavedNavigationKind | null
+  ): boolean {
     if (kind === "validation") {
       return validationState !== null;
     }
     if (kind === "review") {
       return reviewState !== null;
+    }
+    if (kind === "source") {
+      return sourceDraft !== null;
+    }
+    if (kind === "validators") {
+      return validatorsDraft !== null;
+    }
+    if (kind === "cases") {
+      return casesDraft !== null;
     }
     if (appView === "globalSettings") {
       return globalSettingsDraft !== null;
@@ -361,19 +527,42 @@ function App() {
     return settingsDraft !== null;
   }
 
-  function pendingNavigationCopy(): { title: string; body: string } {
-    if (unsavedNavigationKind() === "validation") {
+  function pendingNavigationCopy(
+    kind: UnsavedNavigationKind | null
+  ): { title: string; body: string } {
+    if (kind === "validation") {
       return {
         title: "Unsaved validation changes",
         body:
           "Save validation inclusion before leaving this view, or discard the unsaved changes."
       };
     }
-    if (unsavedNavigationKind() === "review") {
+    if (kind === "review") {
       return {
         title: "Unsaved review changes",
         body:
           "Save review changes before leaving this view, or discard the unsaved changes."
+      };
+    }
+    if (kind === "source") {
+      return {
+        title: "Unsaved source changes",
+        body:
+          "Save the prompt and model as a new version, overwrite the current version, or discard the draft changes."
+      };
+    }
+    if (kind === "validators") {
+      return {
+        title: "Unsaved validator changes",
+        body:
+          "Save validators as a new version, overwrite the current version, or discard the draft changes."
+      };
+    }
+    if (kind === "cases") {
+      return {
+        title: "Unsaved case changes",
+        body:
+          "Save case changes before leaving this view, or discard the unsaved changes."
       };
     }
     return {
@@ -397,9 +586,13 @@ function App() {
     );
   }
 
-  function performPendingNavigation(navigation: PendingNavigation) {
+  async function performPendingNavigation(navigation: PendingNavigation) {
     if (navigation.kind === "experiment") {
       selectExperiment(navigation.experiment, { historyMode: "push" });
+      return;
+    }
+    if (navigation.kind === "experimentDialog") {
+      openExperimentDialog(navigation.dialog);
       return;
     }
     if (navigation.kind === "globalSettings") {
@@ -417,16 +610,17 @@ function App() {
       activateTab(navigation.tab, "push");
       return;
     }
-    void performActiveVersionChange(navigation.version);
+    await performActiveVersionChange(navigation.version);
   }
 
   function requestExperimentSelection(experiment: Experiment | null) {
     if (appView === "experiment" && experiment?.id === selectedExperiment?.id) {
       return;
     }
-    if (shouldBlockUnsavedNavigation()) {
+    const navigation = buildPendingNavigation({ kind: "experiment", experiment });
+    if (navigation !== null) {
       setNavigationError(null);
-      setPendingNavigation({ kind: "experiment", experiment });
+      setPendingNavigation(navigation);
       return;
     }
     selectExperiment(experiment, { historyMode: "push" });
@@ -436,9 +630,10 @@ function App() {
     if (appView === "globalSettings") {
       return;
     }
-    if (shouldBlockUnsavedNavigation()) {
+    const navigation = buildPendingNavigation({ kind: "globalSettings" });
+    if (navigation !== null) {
       setNavigationError(null);
-      setPendingNavigation({ kind: "globalSettings" });
+      setPendingNavigation(navigation);
       return;
     }
     selectGlobalSettings({ historyMode: "push" });
@@ -448,12 +643,81 @@ function App() {
     if (tab === activeTab) {
       return;
     }
-    if (shouldBlockUnsavedNavigation()) {
+    const navigation = buildPendingNavigation({ kind: "tab", tab });
+    if (navigation !== null) {
       setNavigationError(null);
-      setPendingNavigation({ kind: "tab", tab });
+      setPendingNavigation(navigation);
       return;
     }
     activateTab(tab, "push");
+  }
+
+  function openExperimentDialog(dialog: ExperimentManagementDialog) {
+    setExperimentActionError(null);
+    setExperimentDialog(dialog);
+  }
+
+  function requestExperimentDialog(dialog: ExperimentManagementDialog) {
+    const navigation = buildPendingNavigation({
+      kind: "experimentDialog",
+      dialog
+    });
+    if (navigation !== null) {
+      setNavigationError(null);
+      setPendingNavigation(navigation);
+      return;
+    }
+    openExperimentDialog(dialog);
+  }
+
+  async function routeAfterExperimentMutation(
+    experiment: Experiment,
+    tab: WorkbenchTab
+  ) {
+    const experiments = await apiGet<Experiment[]>("/api/experiments");
+    setState({ status: "loaded", experiments });
+    selectExperiment(experiment, {
+      historyMode: "replace",
+      tab
+    });
+  }
+
+  async function refreshAfterExperimentDelete(deletedExperimentId: string) {
+    const experiments = await apiGet<Experiment[]>("/api/experiments");
+    setState({ status: "loaded", experiments });
+    const deletedIndex =
+      state.status === "loaded"
+        ? state.experiments.findIndex(
+            (experiment) => experiment.id === deletedExperimentId
+          )
+        : -1;
+    const nextExperiment =
+      experiments[deletedIndex] ??
+      experiments[deletedIndex - 1] ??
+      experiments[0] ??
+      null;
+    selectExperiment(nextExperiment, {
+      historyMode: "replace",
+      tab: "prompt"
+    });
+  }
+
+  function requestNewExperiment() {
+    requestExperimentDialog({ kind: "new" });
+  }
+
+  function requestCloneExperiment(experiment: Experiment) {
+    requestExperimentDialog({ kind: "clone", experiment });
+  }
+
+  function requestDeleteExperiment(experiment: Experiment) {
+    requestExperimentDialog({ kind: "delete", experiment });
+  }
+
+  function closeExperimentDialog() {
+    if (experimentActionBusy) return;
+    setExperimentDialog(null);
+    setExperimentActionError(null);
   }
 
   function handleStayOnSettings() {
@@ -461,16 +725,22 @@ function App() {
     setNavigationError(null);
   }
 
-  function handleDiscardSettingsAndContinue() {
+  async function handleDiscardSettingsAndContinue() {
     if (pendingNavigation === null) {
       return;
     }
     const navigation = pendingNavigation;
-    const kind = unsavedNavigationKind();
+    const kind = navigation.unsavedKind;
     if (kind === "validation") {
       restoreCommittedValidationState();
     } else if (kind === "review") {
       restoreCommittedReviewState();
+    } else if (kind === "source") {
+      clearSourceEditor();
+    } else if (kind === "validators") {
+      clearValidatorEditor();
+    } else if (kind === "cases") {
+      clearCaseEditor();
     } else if (appView === "globalSettings") {
       setGlobalSettingsDirty(false);
       setGlobalSettingsDraft(null);
@@ -480,7 +750,7 @@ function App() {
     }
     setPendingNavigation(null);
     setNavigationError(null);
-    performPendingNavigation(navigation);
+    await performPendingNavigation(navigation);
   }
 
   async function handleSaveSettingsAndContinue() {
@@ -488,7 +758,7 @@ function App() {
       return;
     }
     const navigation = pendingNavigation;
-    const kind = unsavedNavigationKind();
+    const kind = navigation.unsavedKind;
     setNavigationSaving(true);
     setNavigationError(null);
     try {
@@ -496,6 +766,22 @@ function App() {
         await handleSaveValidationInclusion({ rethrow: true });
       } else if (kind === "review") {
         await handleSaveReviewChanges({ rethrow: true });
+      } else if (kind === "source") {
+        await handleSaveVersionSource("create_next", {
+          navigation,
+          rethrow: true
+        });
+        setPendingNavigation(null);
+        return;
+      } else if (kind === "validators") {
+        await handleSaveVersionValidators("create_next", {
+          navigation,
+          rethrow: true
+        });
+        setPendingNavigation(null);
+        return;
+      } else if (kind === "cases") {
+        await handleSaveCases({ rethrow: true });
       } else if (appView === "globalSettings") {
         if (globalSettingsDraft === null) {
           return;
@@ -512,7 +798,7 @@ function App() {
         setSettingsDraft(null);
       }
       setPendingNavigation(null);
-      performPendingNavigation(navigation);
+      await performPendingNavigation(navigation);
     } catch (error) {
       setNavigationError(error instanceof Error ? error.message : "Unknown error");
     } finally {
@@ -738,14 +1024,15 @@ function App() {
     function handlePopState() {
       const url = new URL(window.location.href);
       const requestedRoute = currentExperimentRoute();
-      if (shouldBlockUnsavedNavigation()) {
+      const navigation = buildPendingNavigation(
+        isGlobalSettingsRoute(url)
+          ? { kind: "globalSettings" }
+          : { kind: "route", route: requestedRoute }
+      );
+      if (navigation !== null) {
         writeCurrentRoute("replace");
         setNavigationError(null);
-        setPendingNavigation(
-          isGlobalSettingsRoute(url)
-            ? { kind: "globalSettings" }
-            : { kind: "route", route: requestedRoute }
-        );
+        setPendingNavigation(navigation);
         return;
       }
       if (isGlobalSettingsRoute(url)) {
@@ -771,6 +1058,7 @@ function App() {
   }, [
     activeTab,
     appView,
+    casesDirty,
     decisionsDirty,
     globalSettingsBusy,
     globalSettingsDirty,
@@ -779,6 +1067,8 @@ function App() {
     selectedExperiment,
     settingsBusy,
     settingsDirty,
+    sourceDirty,
+    validatorsDirty,
     validationDirty,
     validationState,
     workflowBusy,
@@ -790,8 +1080,11 @@ function App() {
       !settingsDirty &&
       !globalSettingsDirty &&
       !validationDirty &&
+      !casesDirty &&
       !decisionsDirty &&
-      !humanNotesDirty
+      !humanNotesDirty &&
+      !sourceDirty &&
+      !validatorsDirty
     ) {
       return;
     }
@@ -806,10 +1099,13 @@ function App() {
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, [
+    casesDirty,
     decisionsDirty,
     globalSettingsDirty,
     humanNotesDirty,
     settingsDirty,
+    sourceDirty,
+    validatorsDirty,
     validationDirty
   ]);
 
@@ -975,12 +1271,382 @@ function App() {
     return `${count} experiment${count === 1 ? "" : "s"} available`;
   }, [appView, state]);
 
+  function handleSourceEdit() {
+    if (detailState.status !== "loaded") {
+      return;
+    }
+    setSourceDraft(sourceDraftFromOverview(detailState.overview));
+    setSourceEditing(true);
+    setSourceViewMode("edit");
+    setWorkflowMessage(null);
+  }
+
+  function handleSourceDraftChange(draft: VersionSourceDraft) {
+    setSourceDraft(draft);
+    setWorkflowMessage(null);
+  }
+
+  function handleSourceReset() {
+    if (detailState.status !== "loaded") {
+      clearSourceEditor();
+      return;
+    }
+    setSourceDraft(sourceDraftFromOverview(detailState.overview));
+    setSourceViewMode("edit");
+    setWorkflowMessage(null);
+  }
+
+  function requestSourceOverwrite(navigation: PendingNavigation | null = null) {
+    if (sourceDraft === null || !sourceDirty || workflowBusy) {
+      return;
+    }
+    setPendingSourceOverwrite({ navigation });
+  }
+
+  function handleCancelSourceOverwrite() {
+    setPendingSourceOverwrite(null);
+  }
+
+  async function handleConfirmSourceOverwrite() {
+    if (pendingSourceOverwrite === null) {
+      return;
+    }
+    const navigation = pendingSourceOverwrite.navigation;
+    setNavigationError(null);
+    try {
+      await handleSaveVersionSource("overwrite_current", {
+        navigation,
+        rethrow: true
+      });
+      setPendingSourceOverwrite(null);
+      if (navigation !== null) {
+        setPendingNavigation(null);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      if (navigation !== null) {
+        setNavigationError(message);
+      }
+      setPendingSourceOverwrite(null);
+    }
+  }
+
+  async function refreshCurrentVersionAfterSourceOverwrite(
+    experiment: Experiment,
+    version: string
+  ) {
+    const [overview, runs, latestValidation, latestReview] = await Promise.all([
+      getVersionOverview(experiment.id, version),
+      getVersionRuns(experiment.id, version),
+      getLatestValidationState(experiment.id, version),
+      getLatestReviewState(experiment.id, version)
+    ]);
+    const latestProposal =
+      latestReview === null
+        ? null
+        : await getReviewProposal(experiment.id, version, latestReview.review_id);
+    setDetailState({ status: "loaded", overview, runs });
+    setCommittedValidationState(latestValidation);
+    setCompareValidationByVersion({});
+    setCommittedReviewState(latestReview);
+    setProposalResponse(latestProposal);
+    setCreatedVersion(null);
+    setComparison(null);
+  }
+
+  async function handleSaveVersionSource(
+    mode: VersionSourceSaveMode,
+    options?: { navigation?: PendingNavigation | null; rethrow?: boolean }
+  ) {
+    if (
+      selectedExperiment === null ||
+      detailState.status !== "loaded" ||
+      sourceDraft === null
+    ) {
+      return;
+    }
+    const experiment = selectedExperiment;
+    const version = experiment.active_version;
+    const navigation = options?.navigation ?? null;
+    setWorkflowBusy(true);
+    setWorkflowMessage(
+      mode === "create_next"
+        ? "Saving source as next version..."
+        : "Overwriting current version..."
+    );
+    try {
+      const response = await updateVersionSource(experiment.id, version, {
+        mode,
+        prompt: sourceDraft.prompt,
+        model_py:
+          detailState.overview.experiment.output.type === "pydantic"
+            ? sourceDraft.model_py ?? ""
+            : null
+      });
+      setVersionSummaries((current) => {
+        if (current.some((summary) => summary.version === response.version)) {
+          return current;
+        }
+        return [...current, { version: response.version, is_active: false }].sort(
+          (left, right) => left.version.localeCompare(right.version)
+        );
+      });
+
+      if (mode === "create_next") {
+        const savedExperiment = await updateExperiment(experiment.id, {
+          ...experiment,
+          active_version: response.version
+        });
+        setCommittedReviewState(null);
+        setProposalResponse(null);
+        setCreatedVersion(null);
+        setComparison(null);
+        setCompareValidationByVersion({});
+        await refreshExperimentsAfterSettingsSave(savedExperiment);
+        clearSourceEditor();
+        setWorkflowMessage(`Created ${response.version} and switched to it.`);
+        activateTab("prompt");
+      } else {
+        await refreshCurrentVersionAfterSourceOverwrite(experiment, version);
+        clearSourceEditor({ clearPendingOverwrite: false });
+        setWorkflowMessage(`Overwrote ${version} and cleared generated artifacts.`);
+        activateTab("prompt");
+      }
+
+      if (navigation !== null) {
+        await performPendingNavigation(navigation);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setWorkflowMessage(message);
+      if (options?.rethrow) {
+        throw error;
+      }
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
+
+  function handleValidatorsDraftChange(draft: VersionValidatorsDraft | null) {
+    const hadDirtyDraft = validatorsDirty;
+    setValidatorsDraft(draft);
+    setValidatorsDirty(draft !== null);
+    if (draft === null && preserveNextValidatorsCleanMessageRef.current) {
+      preserveNextValidatorsCleanMessageRef.current = false;
+      return;
+    }
+    if (draft !== null) {
+      preserveNextValidatorsCleanMessageRef.current = false;
+      setWorkflowMessage(null);
+    } else if (hadDirtyDraft) {
+      setWorkflowMessage(null);
+    }
+  }
+
+  function handleValidatorsReset() {
+    clearValidatorEditor();
+    setWorkflowMessage(null);
+  }
+
+  function requestValidatorsOverwrite(
+    navigation: PendingNavigation | null = null
+  ) {
+    if (validatorsDraft === null || !validatorsDirty || workflowBusy) {
+      return;
+    }
+    setPendingValidatorsOverwrite({ navigation });
+  }
+
+  function handleCancelValidatorsOverwrite() {
+    setPendingValidatorsOverwrite(null);
+  }
+
+  async function handleConfirmValidatorsOverwrite() {
+    if (pendingValidatorsOverwrite === null) {
+      return;
+    }
+    const navigation = pendingValidatorsOverwrite.navigation;
+    setNavigationError(null);
+    try {
+      await handleSaveVersionValidators("overwrite_current", {
+        navigation,
+        rethrow: true
+      });
+      setPendingValidatorsOverwrite(null);
+      if (navigation !== null) {
+        setPendingNavigation(null);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      if (navigation !== null) {
+        setNavigationError(message);
+      }
+      setPendingValidatorsOverwrite(null);
+    }
+  }
+
+  async function refreshCurrentVersionAfterValidatorsOverwrite(
+    experiment: Experiment,
+    version: string
+  ) {
+    const [overview, runs] = await Promise.all([
+      getVersionOverview(experiment.id, version),
+      getVersionRuns(experiment.id, version)
+    ]);
+    setDetailState({ status: "loaded", overview, runs });
+    setCommittedValidationState(null);
+    setCompareValidationByVersion({});
+    setCommittedReviewState(null);
+    setProposalResponse(null);
+    setCreatedVersion(null);
+    setComparison(null);
+  }
+
+  function handleCasesDraftChange(nextCases: Case[]) {
+    setCasesDraft(nextCases);
+    setCasesDirty(true);
+    setWorkflowMessage(null);
+  }
+
+  async function handleSaveCases(options?: { rethrow?: boolean }) {
+    if (
+      selectedExperiment === null ||
+      detailState.status !== "loaded" ||
+      casesDraft === null
+    ) {
+      return;
+    }
+    const experiment = selectedExperiment;
+    const version = detailState.overview.version;
+    setWorkflowBusy(true);
+    setWorkflowMessage("Saving cases...");
+    try {
+      const response = await saveCases(experiment.id, {
+        cases: casesDraft.map((artifactCase) => ({
+          case_id: artifactCase.id,
+          payload: artifactCase.payload
+        })),
+        excluded_case_ids: casesDraft
+          .filter((artifactCase) => !artifactCase.enabled)
+          .map((artifactCase) => artifactCase.id)
+      });
+      const runs = await getVersionRuns(experiment.id, version);
+      const overview = {
+        ...detailState.overview,
+        experiment: response.experiment,
+        cases: response.cases
+      };
+      setSelectedExperiment(response.experiment);
+      setState((current) => {
+        if (current.status !== "loaded") {
+          return current;
+        }
+        return {
+          status: "loaded",
+          experiments: current.experiments.map((item) =>
+            item.id === response.experiment.id ? response.experiment : item
+          )
+        };
+      });
+      setDetailState({ status: "loaded", overview, runs });
+      setCasesDraft(null);
+      setCasesDirty(false);
+      setWorkflowMessage("Cases saved.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setWorkflowMessage(message);
+      if (options?.rethrow) {
+        throw error;
+      }
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
+
+  async function handleSaveVersionValidators(
+    mode: VersionValidatorsSaveMode,
+    options?: { navigation?: PendingNavigation | null; rethrow?: boolean }
+  ) {
+    if (
+      selectedExperiment === null ||
+      detailState.status !== "loaded" ||
+      validatorsDraft === null
+    ) {
+      return;
+    }
+    const experiment = selectedExperiment;
+    const version = experiment.active_version;
+    const navigation = options?.navigation ?? null;
+    setWorkflowBusy(true);
+    setWorkflowMessage(
+      mode === "create_next"
+        ? "Saving validators as next version..."
+        : "Overwriting current validators..."
+    );
+    try {
+      const response = await updateVersionValidators(experiment.id, version, {
+        mode,
+        validators: validatorsDraft.validators
+      });
+      setVersionSummaries((current) => {
+        if (current.some((summary) => summary.version === response.version)) {
+          return current;
+        }
+        return [...current, { version: response.version, is_active: false }].sort(
+          (left, right) => left.version.localeCompare(right.version)
+        );
+      });
+
+      if (mode === "create_next") {
+        const savedExperiment = await updateExperiment(experiment.id, {
+          ...experiment,
+          active_version: response.version
+        });
+        setCommittedValidationState(null);
+        setCompareValidationByVersion({});
+        setCommittedReviewState(null);
+        setProposalResponse(null);
+        setCreatedVersion(null);
+        setComparison(null);
+        await refreshExperimentsAfterSettingsSave(savedExperiment);
+        clearValidatorEditor();
+        preserveNextValidatorsCleanMessageRef.current = true;
+        setWorkflowMessage(`Created ${response.version} and switched to it.`);
+        activateTab("validators");
+      } else {
+        await refreshCurrentVersionAfterValidatorsOverwrite(experiment, version);
+        clearValidatorEditor({ clearPendingOverwrite: false });
+        preserveNextValidatorsCleanMessageRef.current = true;
+        setWorkflowMessage(
+          `Overwrote validators for ${version} and cleared generated validation artifacts.`
+        );
+        activateTab("validators");
+      }
+
+      if (navigation !== null) {
+        await performPendingNavigation(navigation);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setWorkflowMessage(message);
+      if (options?.rethrow) {
+        throw error;
+      }
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
+
   async function handleRunVersion() {
     if (selectedExperiment === null || detailState.status !== "loaded") {
       return;
     }
     if (workflowLocked) {
       setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
+    if (casesDirty) {
+      setWorkflowMessage("Save case changes before running.");
       return;
     }
 
@@ -1076,6 +1742,10 @@ function App() {
     }
     if (workflowLocked) {
       setWorkflowMessage("Wait for the current workflow action to finish.");
+      return;
+    }
+    if (casesDirty) {
+      setWorkflowMessage("Save case changes before previewing run prompts.");
       return;
     }
     const experimentId = selectedExperiment.id;
@@ -1524,6 +2194,7 @@ function App() {
 
   async function handleCreateVersion() {
     if (selectedExperiment === null || reviewState === null) return;
+    const experiment = selectedExperiment;
     const experimentId = selectedExperiment.id;
     const version = selectedExperiment.active_version;
     const selectionKey = `${experimentId}:${version}`;
@@ -1547,13 +2218,21 @@ function App() {
       candidateVersionRef.current = response.version;
       setCandidateVersion(response.version);
       setComparison(null);
-      setWorkflowMessage(`Created ${response.version}.`);
+      const savedExperiment = await updateExperiment(experimentId, {
+        ...experiment,
+        active_version: response.version
+      });
+      setCommittedReviewState(null);
+      setProposalResponse(null);
+      await refreshExperimentsAfterSettingsSave(savedExperiment);
+      setWorkflowMessage(`Created ${response.version} and switched to it.`);
+      activateTab("prompt");
     } catch (error) {
-      if (isWorkflowCurrent(requestId, selectionKey)) {
+      if (workflowRequestIdRef.current === requestId) {
         setWorkflowMessage(error instanceof Error ? error.message : "Unknown error");
       }
     } finally {
-      if (isWorkflowCurrent(requestId, selectionKey)) {
+      if (workflowRequestIdRef.current === requestId) {
         setWorkflowBusy(false);
       }
     }
@@ -1637,6 +2316,64 @@ function App() {
     setWorkflowMessage(null);
   }
 
+  async function handleCreateExperiment(request: ExperimentCreateRequest) {
+    setExperimentActionBusy(true);
+    setExperimentActionError(null);
+    try {
+      const created = await createExperiment(request);
+      setExperimentDialog(null);
+      await routeAfterExperimentMutation(created, "prompt");
+      setWorkflowMessage(`Created ${created.title}.`);
+    } catch (error) {
+      setExperimentActionError(
+        error instanceof Error ? error.message : "Unknown error"
+      );
+      throw error;
+    } finally {
+      setExperimentActionBusy(false);
+    }
+  }
+
+  async function handleCloneExperiment(request: ExperimentCloneRequest) {
+    if (experimentDialog?.kind !== "clone") return;
+    const sourceExperiment = experimentDialog.experiment;
+    setExperimentActionBusy(true);
+    setExperimentActionError(null);
+    try {
+      const cloned = await cloneExperiment(sourceExperiment.id, request);
+      setExperimentDialog(null);
+      await routeAfterExperimentMutation(cloned, "settings");
+      setSettingsMessage(`Cloned ${sourceExperiment.title}.`);
+    } catch (error) {
+      setExperimentActionError(
+        error instanceof Error ? error.message : "Unknown error"
+      );
+      throw error;
+    } finally {
+      setExperimentActionBusy(false);
+    }
+  }
+
+  async function handleDeleteExperiment() {
+    if (experimentDialog?.kind !== "delete") return;
+    const deletedExperiment = experimentDialog.experiment;
+    setExperimentActionBusy(true);
+    setExperimentActionError(null);
+    try {
+      await deleteExperiment(deletedExperiment.id);
+      setExperimentDialog(null);
+      await refreshAfterExperimentDelete(deletedExperiment.id);
+      setWorkflowMessage(`Deleted ${deletedExperiment.title}.`);
+    } catch (error) {
+      setExperimentActionError(
+        error instanceof Error ? error.message : "Unknown error"
+      );
+      throw error;
+    } finally {
+      setExperimentActionBusy(false);
+    }
+  }
+
   async function refreshExperimentsAfterSettingsSave(savedExperiment: Experiment) {
     const [experiments, overview, runs, latestValidation, versions] = await Promise.all([
       apiGet<Experiment[]>("/api/experiments"),
@@ -1707,9 +2444,10 @@ function App() {
   }
 
   async function handleActiveVersionChange(version: string) {
-    if (shouldBlockUnsavedNavigation()) {
+    const navigation = buildPendingNavigation({ kind: "version", version });
+    if (navigation !== null) {
       setNavigationError(null);
-      setPendingNavigation({ kind: "version", version });
+      setPendingNavigation(navigation);
       return;
     }
     await performActiveVersionChange(version);
@@ -1729,6 +2467,7 @@ function App() {
     setProposalResponse(null);
     setCreatedVersion(null);
     setComparison(null);
+    clearCaseEditor();
     try {
       const savedExperiment = await updateExperiment(selectedExperiment.id, {
         ...selectedExperiment,
@@ -1803,9 +2542,10 @@ function App() {
     sameVersion: baselineVersion === candidateVersion,
     versionCount: knownVersions.length
   });
-  const pendingNavigationDialog = pendingNavigationCopy();
+  const pendingNavigationKind = pendingNavigation?.unsavedKind ?? null;
+  const pendingNavigationDialog = pendingNavigationCopy(pendingNavigationKind);
   const pendingNavigationSaveDisabled =
-    navigationSaving || !canSavePendingNavigation();
+    navigationSaving || !canSavePendingNavigation(pendingNavigationKind);
   const hasUnsavedReviewChanges = decisionsDirty || humanNotesDirty;
   const workflowUnsavedChangesAction =
     activeTab === "validation" && validationDirty ? (
@@ -1837,6 +2577,23 @@ function App() {
               : "Change review decisions or human notes before saving."
           }
           onClick={() => void handleSaveReviewChanges()}
+          type="button"
+        >
+          Save
+        </TooltipButton>
+      </div>
+    ) : activeTab === "cases" && casesDirty ? (
+      <div className="workflow-unsaved-action">
+        <span>Unsaved case changes.</span>
+        <TooltipButton
+          className="secondary-action"
+          disabled={workflowLocked || casesDraft === null}
+          disabledReason={
+            workflowLocked
+              ? "Wait for the current workflow action to finish."
+              : "Change cases before saving."
+          }
+          onClick={() => void handleSaveCases()}
           type="button"
         >
           Save
@@ -1880,6 +2637,9 @@ function App() {
           <div className="tool-layout">
             <ExperimentsList
               experiments={state.experiments}
+              onClone={requestCloneExperiment}
+              onCreate={requestNewExperiment}
+              onDelete={requestDeleteExperiment}
               onSelect={requestExperimentSelection}
               selectedExperimentId={
                 appView === "experiment" ? selectedExperiment?.id ?? null : null
@@ -2076,12 +2836,25 @@ function App() {
                   />
 
                   <div className="workbench-body">
-                    {activeTab === "overview" ? (
-                      <ExperimentOverview
+                    {activeTab === "prompt" ? (
+                      <PromptView
                         overview={detailState.overview}
                         isRunning={workflowLocked}
+                        isSourceEditing={sourceEditing}
                         onRunVersion={handleRunVersion}
+                        onSourceDraftChange={handleSourceDraftChange}
+                        onSourceEdit={handleSourceEdit}
+                        onSourceOverwriteCurrent={() => requestSourceOverwrite()}
+                        onSourceReset={handleSourceReset}
+                        onSourceSaveAsNext={() =>
+                          void handleSaveVersionSource("create_next")
+                        }
+                        onSourceViewModeChange={setSourceViewMode}
                         showRunAction={false}
+                        sourceBusy={workflowLocked}
+                        sourceDirty={sourceDirty}
+                        sourceDraft={sourceDraft}
+                        sourceViewMode={sourceViewMode}
                       />
                     ) : null}
 
@@ -2097,8 +2870,28 @@ function App() {
                       />
                     ) : null}
 
+                    {activeTab === "validators" ? (
+                      <ValidatorsView
+                        isBusy={workflowLocked}
+                        message={workflowMessage}
+                        onDraftChange={handleValidatorsDraftChange}
+                        onOverwriteCurrent={() =>
+                          requestValidatorsOverwrite()
+                        }
+                        onReset={handleValidatorsReset}
+                        onSaveAsNext={() =>
+                          void handleSaveVersionValidators("create_next")
+                        }
+                        validators={detailState.overview.validators ?? []}
+                      />
+                    ) : null}
+
                     {activeTab === "cases" ? (
-                      <CaseBrowser cases={detailState.overview.cases} />
+                      <CaseBrowser
+                        cases={casesDraft ?? detailState.overview.cases}
+                        isBusy={workflowLocked}
+                        onCasesChange={handleCasesDraftChange}
+                      />
                     ) : null}
 
                     {activeTab === "runs" ? (
@@ -2179,7 +2972,38 @@ function App() {
         />
       ) : null}
 
-      {pendingNavigation !== null ? (
+      {experimentDialog?.kind === "new" ? (
+        <NewExperimentModal
+          error={experimentActionError}
+          isBusy={experimentActionBusy}
+          onCancel={closeExperimentDialog}
+          onSubmit={handleCreateExperiment}
+        />
+      ) : null}
+
+      {experimentDialog?.kind === "clone" ? (
+        <CloneExperimentModal
+          error={experimentActionError}
+          isBusy={experimentActionBusy}
+          onCancel={closeExperimentDialog}
+          onSubmit={handleCloneExperiment}
+          sourceTitle={experimentDialog.experiment.title}
+        />
+      ) : null}
+
+      {experimentDialog?.kind === "delete" ? (
+        <DeleteExperimentModal
+          error={experimentActionError}
+          experimentTitle={experimentDialog.experiment.title}
+          isBusy={experimentActionBusy}
+          onCancel={closeExperimentDialog}
+          onConfirm={handleDeleteExperiment}
+        />
+      ) : null}
+
+      {pendingNavigation !== null &&
+      pendingSourceOverwrite === null &&
+      pendingValidatorsOverwrite === null ? (
         <div className="modal-backdrop" role="presentation">
           <section
             aria-labelledby="settings-navigation-title"
@@ -2206,18 +3030,121 @@ function App() {
               <button
                 className="secondary-action danger-action"
                 disabled={navigationSaving}
-                onClick={handleDiscardSettingsAndContinue}
+                onClick={() => void handleDiscardSettingsAndContinue()}
                 type="button"
               >
                 Discard changes
               </button>
+              {pendingNavigationKind === "source" ? (
+                <button
+                  className="secondary-action danger-action"
+                  disabled={pendingNavigationSaveDisabled}
+                  onClick={() => requestSourceOverwrite(pendingNavigation)}
+                  type="button"
+                >
+                  Overwrite and continue
+                </button>
+              ) : null}
+              {pendingNavigationKind === "validators" ? (
+                <button
+                  className="secondary-action danger-action"
+                  disabled={pendingNavigationSaveDisabled}
+                  onClick={() => requestValidatorsOverwrite(pendingNavigation)}
+                  type="button"
+                >
+                  Overwrite and continue
+                </button>
+              ) : null}
               <button
                 className="primary-action"
                 disabled={pendingNavigationSaveDisabled}
                 onClick={() => void handleSaveSettingsAndContinue()}
                 type="button"
               >
-                {navigationSaving ? "Saving..." : "Save and continue"}
+                {navigationSaving
+                  ? "Saving..."
+                  : pendingNavigationKind === "source" ||
+                      pendingNavigationKind === "validators"
+                    ? "Save as next and continue"
+                    : "Save and continue"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {pendingSourceOverwrite !== null ? (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            aria-labelledby="source-overwrite-title"
+            aria-modal="true"
+            className="settings-navigation-modal"
+            role="dialog"
+          >
+            <div>
+              <h2 id="source-overwrite-title">Overwrite current version?</h2>
+              <p>
+                This will replace the prompt and model for the active version and
+                delete its generated runs, validations, reviews, proposals, and
+                comparisons.
+              </p>
+            </div>
+            <div className="modal-actions">
+              <button
+                className="secondary-action"
+                disabled={workflowBusy}
+                onClick={handleCancelSourceOverwrite}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="secondary-action danger-action"
+                disabled={workflowBusy}
+                onClick={() => void handleConfirmSourceOverwrite()}
+                type="button"
+              >
+                {workflowBusy ? "Overwriting..." : "Overwrite current version"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {pendingValidatorsOverwrite !== null ? (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            aria-labelledby="validators-overwrite-title"
+            aria-modal="true"
+            className="settings-navigation-modal"
+            role="dialog"
+          >
+            <div>
+              <h2 id="validators-overwrite-title">
+                Overwrite current validators?
+              </h2>
+              <p>
+                This replaces validators for the current version and clears
+                validation, review, proposal, and comparison artifacts. Existing
+                runs are kept.
+              </p>
+            </div>
+            <div className="modal-actions">
+              <button
+                className="secondary-action"
+                disabled={workflowBusy}
+                onClick={handleCancelValidatorsOverwrite}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="secondary-action danger-action"
+                disabled={workflowBusy}
+                onClick={() => void handleConfirmValidatorsOverwrite()}
+                type="button"
+              >
+                {workflowBusy ? "Overwriting..." : "Overwrite current version"}
               </button>
             </div>
           </section>

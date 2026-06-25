@@ -13,24 +13,6 @@ export interface PydanticOutputConfig {
 
 export type OutputConfig = TextOutputConfig | PydanticOutputConfig;
 
-export interface FlatFileTreeStore {
-  kind: "flat_file_tree";
-  values: Record<string, unknown>;
-}
-
-export interface StoreScopeBinding {
-  kind: "store_scope";
-  store: string;
-  path: string;
-}
-
-export interface ValueBinding {
-  kind: "value";
-  value: unknown;
-}
-
-export type PromptBinding = StoreScopeBinding | ValueBinding;
-
 export interface Experiment {
   schema_version: "prompt_lab.experiment/v1";
   id: string;
@@ -51,16 +33,47 @@ export interface Experiment {
     repeat_count: number;
     llm_cache: "disabled";
     case_order: "case-major";
+    excluded_case_ids: string[];
   };
 }
 
-export interface Case {
-  schema_version: "prompt_lab.case/v2";
-  id: string;
+export interface ExperimentCreateRequest {
   title: string;
-  source?: Record<string, unknown> | null;
-  stores: Record<string, FlatFileTreeStore>;
-  bindings: Record<string, PromptBinding>;
+  output_type: OutputType;
+  model_entrypoint?: string | null;
+}
+
+export interface ExperimentCloneRequest {
+  title: string;
+}
+
+export interface ExperimentDeleteResponse {
+  experiment_id: string;
+}
+
+export interface Case {
+  id: string;
+  payload: Record<string, unknown>;
+  enabled: boolean;
+}
+
+export interface CaseUploadRequest {
+  case_id: string;
+  payload: Record<string, unknown>;
+}
+
+export interface CaseRunInclusionRequest {
+  enabled: boolean;
+}
+
+export interface CaseSetUpdateRequest {
+  cases: CaseUploadRequest[];
+  excluded_case_ids: string[];
+}
+
+export interface CaseSetUpdateResponse {
+  experiment: Experiment;
+  cases: Case[];
 }
 
 export interface RunArtifact {
@@ -114,6 +127,24 @@ export interface VersionOverview {
   rubric: string;
   cases: Case[];
   validators: ValidatorDefinition[];
+}
+
+export type VersionSourceSaveMode = "create_next" | "overwrite_current";
+
+export interface VersionSourceDraft {
+  prompt: string;
+  model_py?: string | null;
+}
+
+export interface VersionSourceUpdateRequest extends VersionSourceDraft {
+  mode: VersionSourceSaveMode;
+}
+
+export interface VersionSourceUpdateResponse {
+  version: string;
+  source_version: string;
+  mode: VersionSourceSaveMode;
+  version_dir: string;
 }
 
 export interface VersionSummary {
@@ -240,6 +271,24 @@ export interface AutomaticValidatorDefinition extends BaseValidatorDefinition {
 export type ValidatorDefinition =
   | LlmQuestionnaireValidatorDefinition
   | AutomaticValidatorDefinition;
+
+export type VersionValidatorsSaveMode = "create_next" | "overwrite_current";
+
+export interface VersionValidatorsDraft {
+  validators: ValidatorDefinition[];
+}
+
+export interface VersionValidatorsUpdateRequest
+  extends VersionValidatorsDraft {
+  mode: VersionValidatorsSaveMode;
+}
+
+export interface VersionValidatorsUpdateResponse {
+  version: string;
+  source_version: string;
+  mode: VersionValidatorsSaveMode;
+  version_dir: string;
+}
 
 export interface ValidationBatch {
   schema_version: "prompt_lab.validation_batch/v1";

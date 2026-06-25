@@ -23,14 +23,21 @@ test("keeps old query experiment links working", () => {
     parseExperimentRoute(
       new URL("http://localhost:5173/?experiment=split-scenes")
     ),
-    { experimentId: "split-scenes", tab: "overview" }
+    { experimentId: "split-scenes", tab: "prompt" }
   );
 });
 
-test("defaults invalid tabs to overview", () => {
+test("defaults invalid tabs to prompt", () => {
   assert.deepEqual(
     parseExperimentRoute(new URL("http://localhost:5173/split-scenes/unknown")),
-    { experimentId: "split-scenes", tab: "overview" }
+    { experimentId: "split-scenes", tab: "prompt" }
+  );
+});
+
+test("parses prompt tab routes", () => {
+  assert.deepEqual(
+    parseExperimentRoute(new URL("http://localhost:5173/demo/prompt")),
+    { experimentId: "demo", tab: "prompt" }
   );
 });
 
@@ -62,8 +69,9 @@ test("recognizes global settings route", () => {
 
 test("exports the supported workbench tabs", () => {
   assert.deepEqual(workbenchTabs, [
-    "overview",
+    "prompt",
     "settings",
+    "validators",
     "cases",
     "runs",
     "validation",

@@ -22,6 +22,11 @@ export type CodeViewerProps = {
   value: string;
 };
 
+export type CodeEditorProps = CodeViewerProps & {
+  disabled?: boolean;
+  onChange: (value: string) => void;
+};
+
 export type DiffViewerProps = {
   label: string;
   language: "markdown-jinja" | "python";
@@ -90,33 +95,59 @@ function languageExtensions(language: CodeLanguage): Extension[] {
   return [markdown({ addKeymap: false }), jinjaTokenHighlighting];
 }
 
-function readOnlyExtensions(language: CodeLanguage): Extension[] {
-  return [
+function editorExtensions(props: {
+  editable: boolean;
+  language: CodeLanguage;
+  onChange?: (value: string) => void;
+}): Extension[] {
+  const extensions: Extension[] = [
     basicSetup,
-    ...languageExtensions(language),
+    ...languageExtensions(props.language),
     EditorView.lineWrapping,
-    EditorView.editable.of(false),
-    EditorState.readOnly.of(true)
+    EditorView.editable.of(props.editable),
+    EditorState.readOnly.of(!props.editable)
   ];
+  if (props.onChange !== undefined) {
+    extensions.push(
+      EditorView.updateListener.of((update) => {
+        if (update.docChanged) {
+          props.onChange?.(update.state.doc.toString());
+        }
+      })
+    );
+  }
+  return extensions;
+}
+
+function readOnlyExtensions(language: CodeLanguage): Extension[] {
+  return editorExtensions({ editable: false, language });
 }
 
 function renderFallback(props: {
+  editable?: boolean;
   label: string;
   language: CodeLanguage;
   value: string;
   original?: string;
 }) {
-  const { label, language, value, original } = props;
+  const { editable = false, label, language, value, original } = props;
 
   return React.createElement(
     "section",
     {
       "aria-label": label,
-      className: "code-viewer code-viewer-fallback",
+      className: editable
+        ? "code-viewer code-editor code-viewer-fallback"
+        : "code-viewer code-viewer-fallback",
       "data-language": language
     },
     React.createElement("div", { className: "code-viewer-label" }, label),
-    original === undefined
+    editable
+      ? React.createElement("textarea", {
+          className: "code-viewer-fallback-content code-editor-fallback-input",
+          defaultValue: value
+        })
+      : original === undefined
       ? React.createElement(
           "pre",
           { className: "code-viewer-fallback-content" },
@@ -136,6 +167,73 @@ function renderFallback(props: {
             React.createElement("code", null, value)
           )
         )
+  );
+}
+
+export function CodeEditor(props: CodeEditorProps) {
+  const { disabled = false, label, language, onChange, value } = props;
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const onChangeRef = useRef(onChange);
+  const viewRef = useRef<EditorView | null>(null);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  useEffect(() => {
+    if (!editorRef.current) {
+      return undefined;
+    }
+
+    const view = new EditorView({
+      parent: editorRef.current,
+      state: EditorState.create({
+        doc: value,
+        extensions: editorExtensions({
+          editable: !disabled,
+          language,
+          onChange: (nextValue) => onChangeRef.current(nextValue)
+        })
+      })
+    });
+    viewRef.current = view;
+
+    return () => {
+      viewRef.current = null;
+      view.destroy();
+    };
+  }, [disabled, language]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view === null) {
+      return;
+    }
+    const currentValue = view.state.doc.toString();
+    if (currentValue === value) {
+      return;
+    }
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: value }
+    });
+  }, [value]);
+
+  if (!canUseDOM()) {
+    return renderFallback({ editable: true, label, language, value });
+  }
+
+  return React.createElement(
+    "section",
+    {
+      "aria-label": label,
+      className: "code-viewer code-editor",
+      "data-language": language
+    },
+    React.createElement("div", { className: "code-viewer-label" }, label),
+    React.createElement("div", {
+      className: "code-viewer-editor",
+      ref: editorRef
+    })
   );
 }
 

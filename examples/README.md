@@ -3,10 +3,9 @@
 These examples are generated from Carmilla Story Parser eval fixtures and
 exported as complete neutral Prompt Lab experiments.
 
-Case files use `prompt_lab.case/v2`: serialized `stores` plus top-level
-`bindings` that become the prompt/validation context. The committed prompts use
-the `jinjax` template engine copied from Carmilla's portable `shared.jinjax`
-package.
+Case files are plain JSON context objects passed directly to prompt rendering
+and validation. The committed prompts use the `jinjax` template engine copied
+from Carmilla's portable `shared.jinjax` package.
 
 Each example keeps workflow state cases in the experiment-level `cases/`
 directory. Version directories contain only version-specific prompt/model files
@@ -35,7 +34,7 @@ Examples:
 
 Use `demo-string` and `demo-json` for manual browser testing and UI regression
 checks. They are intentionally small, deterministic, and include enough
-committed runtime artifacts to exercise Overview, Settings, Cases, Runs,
+committed runtime artifacts to exercise Prompt, Settings, Validators, Cases, Runs,
 Validation, Review, Proposal, and Compare without spending real LLM tokens.
 Each demo fixture keeps at least two cases and two repeats per case so UI tests
 exercise the common case/repeat matrix instead of a single-output happy path.
@@ -61,12 +60,12 @@ generation. Comparison uses deterministic validation results and does not call
 an LLM. These values use the
 `<server>/<model>` format, where `<server>` must be configured in `.servers.jsonc`.
 
-Each example can include a top-level `validators/` directory. Validator
-definition files use `prompt_lab.validator/v1` and are seeded into runtime
-experiments with the rest of the starter template. LLM questionnaire validators
-assign `grade: 1..5 | null` to explicit checks over configured input scope.
-Automatic validators run local rules such as word counts or JSON-path counts
-and currently map binary rule outcomes to grade `5` or `1`.
+Each example version can include a `versions/<version>/validators/` directory.
+Validator definition files use `prompt_lab.validator/v1` and are seeded into
+runtime experiments with the rest of the starter template. LLM questionnaire
+validators assign `grade: 1..5 | null` to explicit checks over configured input
+scope. Automatic validators run local rules such as word counts or JSON-path
+counts and currently map binary rule outcomes to grade `5` or `1`.
 
 The running app does not write into `examples/`. At backend startup, examples are
 copied into `experiments/` only when the runtime workspace is missing or has no

@@ -20,14 +20,6 @@ function compactJson(value: unknown): string {
   }
 }
 
-function formatJson(value: unknown): string {
-  try {
-    return JSON.stringify(sanitizeJsonPreviewValue(value), null, 2) ?? "undefined";
-  } catch {
-    return String(value);
-  }
-}
-
 function isInspectable(value: unknown): value is Record<string, unknown> | unknown[] {
   return value !== null && typeof value === "object";
 }
@@ -114,19 +106,17 @@ function previewValue(value: unknown): string {
 }
 
 export function ValuePreview({ value }: ValuePreviewProps) {
+  const inspectable = isInspectable(value);
+
   return (
     <div className="value-preview">
-      <p>{previewValue(value)}</p>
-      {isInspectable(value) ? (
+      {inspectable ? null : <p>{previewValue(value)}</p>}
+      {inspectable ? (
         <details className="value-tree" open>
           <summary>Explore keys</summary>
           <JsonTree value={value} />
         </details>
       ) : null}
-      <details>
-        <summary>Raw JSON</summary>
-        <pre>{formatJson(value)}</pre>
-      </details>
     </div>
   );
 }
