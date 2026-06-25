@@ -877,16 +877,21 @@ def test_api_rejects_case_payload_mutations_and_updates_run_inclusion() -> None:
             True,
         ]
 
-        upload_response = client.post(
-            "/api/experiments/demo/cases",
-            json={"case_id": "c", "payload": {"value": "charlie"}},
-        )
+        upload_responses = [
+            client.post("/api/experiments/demo/cases"),
+            client.post("/api/experiments/demo/cases", json={}),
+            client.post(
+                "/api/experiments/demo/cases",
+                json={"case_id": "c", "payload": {"value": "charlie"}},
+            ),
+        ]
 
-        assert upload_response.status_code == 410
-        assert upload_response.json()["detail"] == (
-            "Case payloads are managed through Case Suites"
-        )
-        assert not (runtime_experiment / "cases").exists()
+        for upload_response in upload_responses:
+            assert upload_response.status_code == 410
+            assert upload_response.json()["detail"] == (
+                "Case payloads are managed through Case Suites"
+            )
+            assert not (runtime_experiment / "cases").exists()
 
         inclusion_response = client.patch(
             "/api/experiments/demo/cases/b/run-inclusion",
@@ -948,23 +953,28 @@ def test_api_rejects_case_set_payload_update_without_clearing_runs() -> None:
         )
         write_json(stale_run, {"stale": True})
 
-        response = client.put(
-            "/api/experiments/demo/cases",
-            json={
-                "cases": [
-                    {"case_id": "b", "payload": {"value": "bravo updated"}},
-                    {"case_id": "c", "payload": {"value": "charlie"}},
-                ],
-                "excluded_case_ids": ["c"],
-            },
-        )
+        responses = [
+            client.put("/api/experiments/demo/cases"),
+            client.put("/api/experiments/demo/cases", json={}),
+            client.put(
+                "/api/experiments/demo/cases",
+                json={
+                    "cases": [
+                        {"case_id": "b", "payload": {"value": "bravo updated"}},
+                        {"case_id": "c", "payload": {"value": "charlie"}},
+                    ],
+                    "excluded_case_ids": ["c"],
+                },
+            ),
+        ]
 
-        assert response.status_code == 410
-        assert response.json()["detail"] == (
-            "Case payloads are managed through Case Suites"
-        )
-        assert not (runtime_experiment / "cases").exists()
-        assert stale_run.is_file()
+        for response in responses:
+            assert response.status_code == 410
+            assert response.json()["detail"] == (
+                "Case payloads are managed through Case Suites"
+            )
+            assert not (runtime_experiment / "cases").exists()
+            assert stale_run.is_file()
 
 
 def test_api_gets_pydantic_version_overview_model_source() -> None:

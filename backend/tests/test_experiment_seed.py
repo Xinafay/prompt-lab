@@ -282,18 +282,71 @@ def test_seed_does_not_materialize_suite_cases_under_experiments() -> None:
         assert (root / "case_suites" / "demo-suite" / "cases" / "case-a.json").is_file()
 
 
-def test_seed_does_not_overwrite_existing_case_suites() -> None:
+def test_seed_copies_missing_case_suites_without_overwriting_existing_suites() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
-        write_case_suite(root, "template-suite")
-        runtime_dir = root / "case_suites" / "local-suite"
+        write_case_suite(root, "existing-suite")
+        write_case_suite(root, "missing-suite")
+        runtime_dir = root / "case_suites" / "existing-suite"
         runtime_dir.mkdir(parents=True)
         (runtime_dir / "suite.json").write_text(
             json.dumps(
                 {
                     "schema_version": "prompt_lab.case_suite/v1",
-                    "id": "local-suite",
+                    "id": "existing-suite",
                     "title": "Local Suite",
+                    "description": "Do not overwrite local edits.",
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        local_case = runtime_dir / "cases" / "local-case.json"
+        local_case.parent.mkdir()
+        local_case.write_text(
+            json.dumps({"value": "local"}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        result = seed_experiments_from_examples(
+            experiments_root=root / "experiments",
+            case_suites_root=root / "case_suites",
+            examples_root=root / "examples",
+        )
+
+        assert result.seeded_case_suites is True
+        assert result.copied_case_suite_ids == ["missing-suite"]
+        assert json.loads(
+            (runtime_dir / "suite.json").read_text(encoding="utf-8")
+        ) == {
+            "schema_version": "prompt_lab.case_suite/v1",
+            "id": "existing-suite",
+            "title": "Local Suite",
+            "description": "Do not overwrite local edits.",
+        }
+        assert json.loads(local_case.read_text(encoding="utf-8")) == {
+            "value": "local"
+        }
+        assert (root / "case_suites" / "missing-suite" / "suite.json").is_file()
+        assert (
+            root / "case_suites" / "missing-suite" / "cases" / "case-a.json"
+        ).is_file()
+
+
+def test_seed_copies_referenced_suite_when_unrelated_runtime_suite_exists() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "experiments").mkdir()
+        write_example(root)
+        write_case_suite(root, "demo-suite")
+        runtime_dir = root / "case_suites" / "unrelated-suite"
+        runtime_dir.mkdir(parents=True)
+        (runtime_dir / "suite.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "prompt_lab.case_suite/v1",
+                    "id": "unrelated-suite",
+                    "title": "Unrelated Suite",
                     "description": "",
                 },
                 ensure_ascii=False,
@@ -307,9 +360,19 @@ def test_seed_does_not_overwrite_existing_case_suites() -> None:
             examples_root=root / "examples",
         )
 
-        assert result.seeded_case_suites is False
-        assert result.copied_case_suite_ids == []
-        assert not (root / "case_suites" / "template-suite").exists()
+        assert result.seeded is True
+        assert result.copied_experiment_ids == ["demo"]
+        assert result.seeded_case_suites is True
+        assert result.copied_case_suite_ids == ["demo-suite"]
+        runtime_manifest = json.loads(
+            (root / "experiments" / "demo" / "experiment.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert runtime_manifest["case_suite_id"] == "demo-suite"
+        assert (root / "case_suites" / "demo-suite" / "suite.json").is_file()
+        assert (root / "case_suites" / "demo-suite" / "cases" / "case-a.json").is_file()
+        assert (root / "case_suites" / "unrelated-suite" / "suite.json").is_file()
 
 
 def test_repository_demo_examples_seed_for_ui_testing() -> None:
@@ -400,7 +463,8 @@ def main() -> int:
         test_seed_fails_on_conflicting_existing_directory_without_manifest,
         test_seed_copies_case_suites_independently,
         test_seed_does_not_materialize_suite_cases_under_experiments,
-        test_seed_does_not_overwrite_existing_case_suites,
+        test_seed_copies_missing_case_suites_without_overwriting_existing_suites,
+        test_seed_copies_referenced_suite_when_unrelated_runtime_suite_exists,
         test_repository_demo_examples_seed_for_ui_testing,
     ]
     for test in tests:

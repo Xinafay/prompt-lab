@@ -1655,20 +1655,16 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         }
 
     @app.post("/api/experiments/{experiment_id}/cases")
-    def upload_case(
-        experiment_id: str, request: CaseUploadRequest
-    ) -> dict[str, object]:
-        del experiment_id, request
+    def upload_case(experiment_id: str) -> dict[str, object]:
+        del experiment_id
         raise HTTPException(
             status_code=410,
             detail="Case payloads are managed through Case Suites",
         )
 
     @app.put("/api/experiments/{experiment_id}/cases")
-    def update_cases(
-        experiment_id: str, request: CaseSetUpdateRequest
-    ) -> dict[str, object]:
-        del experiment_id, request
+    def update_cases(experiment_id: str) -> dict[str, object]:
+        del experiment_id
         raise HTTPException(
             status_code=410,
             detail="Case payloads are managed through Case Suites",
