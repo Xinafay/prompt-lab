@@ -98,6 +98,20 @@ class RunVersionRequest(BaseModel):
     dry_run: bool = False
 
 
+class ExperimentCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1)
+    output_type: Literal["text", "pydantic"]
+    model_entrypoint: str | None = Field(default=None, min_length=1)
+
+
+class ExperimentCloneRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1)
+
+
 class CaseUploadRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1508,6 +1522,60 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     @app.get("/api/experiments")
     def list_experiments() -> list[dict[str, object]]:
         return [item.model_dump(mode="json") for item in store.list_experiments()]
+
+    @app.post("/api/experiments")
+    def create_experiment(request: ExperimentCreateRequest) -> dict[str, object]:
+        title = request.title.strip()
+        if title == "":
+            raise HTTPException(
+                status_code=400,
+                detail="Experiment title is required",
+            )
+        if request.output_type == "pydantic" and (
+            request.model_entrypoint is None or request.model_entrypoint.strip() == ""
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Model entrypoint is required for pydantic experiments",
+            )
+        settings = load_settings(resolved_config.settings_path)
+        try:
+            experiment = store.create_experiment(
+                title=title,
+                output_type=request.output_type,
+                model_entrypoint=request.model_entrypoint,
+                settings=settings,
+            )
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return experiment.model_dump(mode="json")
+
+    @app.post("/api/experiments/{experiment_id}/clone")
+    def clone_experiment(
+        experiment_id: str,
+        request: ExperimentCloneRequest,
+    ) -> dict[str, object]:
+        title = request.title.strip()
+        if title == "":
+            raise HTTPException(
+                status_code=400,
+                detail="Experiment title is required",
+            )
+        try:
+            experiment = store.clone_experiment(
+                source_experiment_id=experiment_id,
+                title=title,
+            )
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return experiment.model_dump(mode="json")
+
+    @app.delete("/api/experiments/{experiment_id}")
+    def delete_experiment(experiment_id: str) -> dict[str, object]:
+        store.delete_experiment(experiment_id)
+        return {"experiment_id": experiment_id}
 
     @app.get("/api/settings")
     def get_settings() -> dict[str, object]:

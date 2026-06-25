@@ -317,6 +317,146 @@ def test_api_updates_global_settings() -> None:
         assert saved == payload
 
 
+def test_api_creates_text_experiment_from_title() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        save_settings(
+            root / "config" / "settings.json",
+            PromptLabSettings(
+                schema_version="prompt_lab.settings/v1",
+                default_generator_model="local/generator",
+                default_validator_model="local/validator",
+                default_judge_model="local/judge",
+                default_repeat_count=2,
+            ),
+        )
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).post(
+            "/api/experiments",
+            json={"title": "API Created", "output_type": "text"},
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["id"] == "api-created"
+        assert payload["title"] == "API Created"
+        assert payload["output"] == {"type": "text"}
+        assert payload["models"]["generator_model"] == "local/generator"
+        assert (
+            root / "experiments" / "api-created" / "versions" / "v001" / "prompt.md"
+        ).is_file()
+
+
+def test_api_creates_pydantic_experiment() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        save_settings(root / "config" / "settings.json", PromptLabSettings())
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).post(
+            "/api/experiments",
+            json={
+                "title": "API Structured",
+                "output_type": "pydantic",
+                "model_entrypoint": "model.Output",
+            },
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["id"] == "api-structured"
+        assert payload["output"]["type"] == "pydantic"
+        assert payload["output"]["model_file"] == "model.py"
+        assert payload["output"]["model_entrypoint"] == "model.Output"
+        assert (
+            root
+            / "experiments"
+            / "api-structured"
+            / "versions"
+            / "v001"
+            / "model.py"
+        ).is_file()
+
+
+def test_api_rejects_empty_experiment_title() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        save_settings(root / "config" / "settings.json", PromptLabSettings())
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).post(
+            "/api/experiments",
+            json={"title": "   ", "output_type": "text"},
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Experiment title is required"
+
+
+def test_api_clones_experiment() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        version_dir = write_runtime_preview_experiment(root)
+        (version_dir / "validators").mkdir()
+        write_json(
+            version_dir / "validators" / "quality.json",
+            {
+                "schema_version": "prompt_lab.validator/v1",
+                "validator_id": "quality",
+                "type": "llm_questionnaire",
+                "title": "Quality",
+                "checks": [
+                    {
+                        "check_id": "ok",
+                        "title": "OK",
+                        "question": "OK?",
+                    }
+                ],
+            },
+        )
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).post(
+            "/api/experiments/demo/clone",
+            json={"title": "Demo Copy"},
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["id"] == "demo-copy"
+        assert payload["title"] == "Demo Copy"
+        assert (
+            root
+            / "experiments"
+            / "demo-copy"
+            / "cases"
+            / "case-a.json"
+        ).is_file()
+        assert (
+            root
+            / "experiments"
+            / "demo-copy"
+            / "versions"
+            / "v001"
+            / "validators"
+            / "quality.json"
+        ).is_file()
+
+
+def test_api_deletes_experiment() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_runtime_preview_experiment(root)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).delete("/api/experiments/demo")
+
+        assert response.status_code == 200
+        assert response.json() == {"experiment_id": "demo"}
+        assert not (root / "experiments" / "demo").exists()
+
+
 def test_api_updates_experiment_manifest_under_experiments() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
