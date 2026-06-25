@@ -10,6 +10,7 @@ import {
   deleteExperiment,
   generateProposal,
   getActiveJob,
+  getCaseSuites,
   getExperimentVersions,
   getGlobalSettings,
   getJob,
@@ -63,6 +64,7 @@ import { WorkbenchTabs } from "./components/WorkbenchTabs";
 import { WorkflowToolbar } from "./components/WorkflowToolbar";
 import type {
   Case,
+  CaseSuite,
   CompareMatrixResponse,
   CreatedVersionResponse,
   Experiment,
@@ -203,6 +205,7 @@ function App() {
   );
   const [selectedExperiment, setSelectedExperiment] =
     useState<Experiment | null>(null);
+  const [caseSuites, setCaseSuites] = useState<CaseSuite[]>([]);
   const [detailState, setDetailState] = useState<DetailState>({ status: "idle" });
   const [globalSettingsState, setGlobalSettingsState] =
     useState<GlobalSettingsState>({ status: "loading" });
@@ -983,6 +986,31 @@ function App() {
     }
 
     void loadExperiments();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCaseSuites() {
+      try {
+        const suites = await getCaseSuites();
+        if (!cancelled) {
+          setCaseSuites(suites);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setWorkflowMessage(
+            error instanceof Error ? error.message : "Could not load case suites."
+          );
+        }
+      }
+    }
+
+    void loadCaseSuites();
 
     return () => {
       cancelled = true;
@@ -2375,14 +2403,17 @@ function App() {
   }
 
   async function refreshExperimentsAfterSettingsSave(savedExperiment: Experiment) {
-    const [experiments, overview, runs, latestValidation, versions] = await Promise.all([
-      apiGet<Experiment[]>("/api/experiments"),
-      getVersionOverview(savedExperiment.id, savedExperiment.active_version),
-      getVersionRuns(savedExperiment.id, savedExperiment.active_version),
-      getLatestValidationState(savedExperiment.id, savedExperiment.active_version),
-      getExperimentVersions(savedExperiment.id)
-    ]);
+    const [experiments, overview, runs, latestValidation, versions, suites] =
+      await Promise.all([
+        apiGet<Experiment[]>("/api/experiments"),
+        getVersionOverview(savedExperiment.id, savedExperiment.active_version),
+        getVersionRuns(savedExperiment.id, savedExperiment.active_version),
+        getLatestValidationState(savedExperiment.id, savedExperiment.active_version),
+        getExperimentVersions(savedExperiment.id),
+        getCaseSuites()
+      ]);
     setState({ status: "loaded", experiments });
+    setCaseSuites(suites);
     setSelectedExperiment(savedExperiment);
     selectedKeyRef.current = `${savedExperiment.id}:${savedExperiment.active_version}`;
     setDetailState({ status: "loaded", overview, runs });
@@ -2860,6 +2891,7 @@ function App() {
 
                     {activeTab === "settings" ? (
                       <ExperimentSettings
+                        caseSuites={caseSuites}
                         experiment={detailState.overview.experiment}
                         isBusy={settingsBusy}
                         message={settingsMessage}
