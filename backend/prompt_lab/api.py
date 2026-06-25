@@ -101,15 +101,15 @@ class RunVersionRequest(BaseModel):
 class ExperimentCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    title: str = Field(min_length=1)
+    title: str
     output_type: Literal["text", "pydantic"]
-    model_entrypoint: str | None = Field(default=None, min_length=1)
+    model_entrypoint: str | None = None
 
 
 class ExperimentCloneRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    title: str = Field(min_length=1)
+    title: str
 
 
 class CaseUploadRequest(BaseModel):
@@ -1531,8 +1531,13 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
                 status_code=400,
                 detail="Experiment title is required",
             )
+        normalized_model_entrypoint = (
+            request.model_entrypoint.strip()
+            if request.model_entrypoint is not None
+            else None
+        )
         if request.output_type == "pydantic" and (
-            request.model_entrypoint is None or request.model_entrypoint.strip() == ""
+            normalized_model_entrypoint is None or normalized_model_entrypoint == ""
         ):
             raise HTTPException(
                 status_code=400,
@@ -1543,7 +1548,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             experiment = store.create_experiment(
                 title=title,
                 output_type=request.output_type,
-                model_entrypoint=request.model_entrypoint,
+                model_entrypoint=normalized_model_entrypoint,
                 settings=settings,
             )
         except FileExistsError as exc:

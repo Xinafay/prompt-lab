@@ -341,7 +341,11 @@ def test_api_creates_text_experiment_from_title() -> None:
         payload = response.json()
         assert payload["id"] == "api-created"
         assert payload["title"] == "API Created"
-        assert payload["output"] == {"type": "text"}
+        assert payload["output"] == {
+            "type": "text",
+            "model_file": None,
+            "model_entrypoint": None,
+        }
         assert payload["models"]["generator_model"] == "local/generator"
         assert (
             root / "experiments" / "api-created" / "versions" / "v001" / "prompt.md"
@@ -455,6 +459,129 @@ def test_api_deletes_experiment() -> None:
         assert response.status_code == 200
         assert response.json() == {"experiment_id": "demo"}
         assert not (root / "experiments" / "demo").exists()
+
+
+def test_api_rejects_missing_or_blank_model_entrypoint_for_pydantic() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        save_settings(root / "config" / "settings.json", PromptLabSettings())
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).post(
+            "/api/experiments",
+            json={
+                "title": "No Entrypoint",
+                "output_type": "pydantic",
+            },
+        )
+
+        assert response.status_code == 400
+        assert (
+            response.json()["detail"]
+            == "Model entrypoint is required for pydantic experiments"
+        )
+
+        response = TestClient(app).post(
+            "/api/experiments",
+            json={
+                "title": "Blank Entrypoint",
+                "output_type": "pydantic",
+                "model_entrypoint": "",
+            },
+        )
+
+        assert response.status_code == 400
+        assert (
+            response.json()["detail"]
+            == "Model entrypoint is required for pydantic experiments"
+        )
+
+        response = TestClient(app).post(
+            "/api/experiments",
+            json={
+                "title": "Spaces Entrypoint",
+                "output_type": "pydantic",
+                "model_entrypoint": "   ",
+            },
+        )
+
+        assert response.status_code == 400
+        assert (
+            response.json()["detail"]
+            == "Model entrypoint is required for pydantic experiments"
+        )
+
+
+def test_api_rejects_missing_create_experiment_source() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        save_settings(root / "config" / "settings.json", PromptLabSettings())
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).post(
+            "/api/experiments/missing/clone",
+            json={"title": "Missing source"},
+        )
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Experiment not found"
+
+
+def test_api_rejects_deleting_missing_experiment() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+
+        response = TestClient(app).delete("/api/experiments/missing")
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Experiment not found"
+
+
+def test_api_create_experiment_returns_409_on_file_exists_error() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        save_settings(root / "config" / "settings.json", PromptLabSettings())
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        original_create_experiment = api_module.PromptLabStore.create_experiment
+
+        def conflict_create(*_args: object, **_kwargs: object) -> object:
+            raise FileExistsError("Experiment already exists")
+
+        api_module.PromptLabStore.create_experiment = conflict_create
+        try:
+            response = TestClient(app).post(
+                "/api/experiments",
+                json={"title": "Duplicate", "output_type": "text"},
+            )
+
+            assert response.status_code == 409
+            assert response.json()["detail"] == "Experiment already exists"
+        finally:
+            api_module.PromptLabStore.create_experiment = original_create_experiment
+
+
+def test_api_clone_experiment_returns_409_on_file_exists_error() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_runtime_preview_experiment(root)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        original_clone_experiment = api_module.PromptLabStore.clone_experiment
+
+        def conflict_clone(*_args: object, **_kwargs: object) -> object:
+            raise FileExistsError("Experiment already exists")
+
+        api_module.PromptLabStore.clone_experiment = conflict_clone
+        try:
+            response = TestClient(app).post(
+                "/api/experiments/demo/clone",
+                json={"title": "Demo Copy"},
+            )
+
+            assert response.status_code == 409
+            assert response.json()["detail"] == "Experiment already exists"
+        finally:
+            api_module.PromptLabStore.clone_experiment = original_clone_experiment
 
 
 def test_api_updates_experiment_manifest_under_experiments() -> None:
@@ -1800,6 +1927,16 @@ def main() -> int:
         test_api_lists_experiments,
         test_api_returns_global_settings,
         test_api_updates_global_settings,
+        test_api_creates_text_experiment_from_title,
+        test_api_creates_pydantic_experiment,
+        test_api_rejects_empty_experiment_title,
+        test_api_clones_experiment,
+        test_api_deletes_experiment,
+        test_api_rejects_missing_or_blank_model_entrypoint_for_pydantic,
+        test_api_rejects_missing_create_experiment_source,
+        test_api_rejects_deleting_missing_experiment,
+        test_api_create_experiment_returns_409_on_file_exists_error,
+        test_api_clone_experiment_returns_409_on_file_exists_error,
         test_api_updates_experiment_manifest_under_experiments,
         test_api_rejects_experiment_update_id_mismatch,
         test_api_rejects_experiment_update_missing_active_version,
