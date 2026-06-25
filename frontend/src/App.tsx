@@ -225,6 +225,14 @@ export function caseInclusionMatchesCases(
   );
 }
 
+function cloneCases(cases: Case[]): Case[] {
+  return JSON.parse(JSON.stringify(cases)) as Case[];
+}
+
+function caseSuiteCasesMatch(left: Case[], right: Case[]): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 function App() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [appView, setAppView] = useState<AppView>(() =>
@@ -239,6 +247,10 @@ function App() {
     null
   );
   const [caseSuiteCases, setCaseSuiteCases] = useState<Case[]>([]);
+  const [caseSuiteCasesBaseline, setCaseSuiteCasesBaseline] = useState<Case[]>(
+    []
+  );
+  const [caseSuiteCasesDirty, setCaseSuiteCasesDirty] = useState(false);
   const [caseSuiteBusy, setCaseSuiteBusy] = useState(false);
   const [caseSuiteMessage, setCaseSuiteMessage] = useState<string | null>(null);
   const [detailState, setDetailState] = useState<DetailState>({ status: "idle" });
@@ -702,6 +714,14 @@ function App() {
     selectCaseSuites();
   }
 
+  function handleSelectCaseSuite(suiteId: string) {
+    if (caseSuiteCasesDirty) {
+      setCaseSuiteMessage("Save or reset case changes before switching suites.");
+      return;
+    }
+    setSelectedCaseSuiteId(suiteId);
+  }
+
   function requestTabChange(tab: WorkbenchTab) {
     if (tab === activeTab) {
       return;
@@ -1105,6 +1125,8 @@ function App() {
   useEffect(() => {
     if (selectedCaseSuiteId === null) {
       setCaseSuiteCases([]);
+      setCaseSuiteCasesBaseline([]);
+      setCaseSuiteCasesDirty(false);
       return;
     }
 
@@ -1115,12 +1137,16 @@ function App() {
       try {
         const loadedCases = await getCaseSuiteCases(suiteId);
         if (!cancelled) {
-          setCaseSuiteCases(loadedCases);
+          setCaseSuiteCases(cloneCases(loadedCases));
+          setCaseSuiteCasesBaseline(cloneCases(loadedCases));
+          setCaseSuiteCasesDirty(false);
           setCaseSuiteMessage(null);
         }
       } catch (error) {
         if (!cancelled) {
           setCaseSuiteCases([]);
+          setCaseSuiteCasesBaseline([]);
+          setCaseSuiteCasesDirty(false);
           setCaseSuiteMessage(
             error instanceof Error ? error.message : "Could not load suite cases."
           );
@@ -1731,10 +1757,23 @@ function App() {
 
   function handleCaseSuiteCasesChange(nextCases: Case[]) {
     setCaseSuiteCases(nextCases);
+    setCaseSuiteCasesDirty(
+      !caseSuiteCasesMatch(nextCases, caseSuiteCasesBaseline)
+    );
     setCaseSuiteMessage(null);
   }
 
+  function handleResetCaseSuiteCases() {
+    setCaseSuiteCases(cloneCases(caseSuiteCasesBaseline));
+    setCaseSuiteCasesDirty(false);
+    setCaseSuiteMessage("Case suite case changes reset.");
+  }
+
   async function handleCreateCaseSuite(request: CaseSuiteCreateRequest) {
+    if (caseSuiteCasesDirty) {
+      setCaseSuiteMessage("Save or reset case changes before creating suites.");
+      return;
+    }
     setCaseSuiteBusy(true);
     setCaseSuiteMessage("Creating case suite...");
     try {
@@ -1753,6 +1792,10 @@ function App() {
     suiteId: string,
     request: CaseSuiteUpdateRequest
   ) {
+    if (caseSuiteCasesDirty) {
+      setCaseSuiteMessage("Save or reset case changes before updating suites.");
+      return;
+    }
     setCaseSuiteBusy(true);
     setCaseSuiteMessage("Saving case suite...");
     try {
@@ -1768,6 +1811,10 @@ function App() {
   }
 
   async function handleDeleteCaseSuite(suiteId: string) {
+    if (caseSuiteCasesDirty) {
+      setCaseSuiteMessage("Save or reset case changes before deleting suites.");
+      return;
+    }
     setCaseSuiteBusy(true);
     setCaseSuiteMessage("Deleting case suite...");
     try {
@@ -1820,7 +1867,9 @@ function App() {
           payload: artifactCase.payload
         }))
       });
-      setCaseSuiteCases(response.cases);
+      setCaseSuiteCases(cloneCases(response.cases));
+      setCaseSuiteCasesBaseline(cloneCases(response.cases));
+      setCaseSuiteCasesDirty(false);
       await refreshCaseSuites(selectedCaseSuiteId);
       await refreshCurrentExperimentAfterCaseSuiteSave(
         response.affected_experiment_ids
@@ -2970,13 +3019,15 @@ function App() {
               {appView === "caseSuites" ? (
                 <CaseSuiteManager
                   cases={caseSuiteCases}
+                  caseSuiteCasesDirty={caseSuiteCasesDirty}
                   isBusy={caseSuiteBusy}
                   message={caseSuiteMessage}
                   onCasesChange={handleCaseSuiteCasesChange}
                   onCreateSuite={handleCreateCaseSuite}
                   onDeleteSuite={handleDeleteCaseSuite}
+                  onResetCases={handleResetCaseSuiteCases}
                   onSaveCases={handleSaveCaseSuiteCases}
-                  onSelectSuite={setSelectedCaseSuiteId}
+                  onSelectSuite={handleSelectCaseSuite}
                   onUpdateSuite={handleUpdateCaseSuite}
                   selectedSuiteId={selectedCaseSuiteId}
                   suites={caseSuites}

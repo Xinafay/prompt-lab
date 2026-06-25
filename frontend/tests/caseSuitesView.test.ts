@@ -51,11 +51,13 @@ function renderManager(props: Partial<React.ComponentProps<typeof CaseSuiteManag
       suites,
       selectedSuiteId: "suite-regression",
       cases,
+      caseSuiteCasesDirty: false,
       isBusy: false,
       message: null,
       onCasesChange: () => undefined,
       onCreateSuite: async () => undefined,
       onDeleteSuite: async () => undefined,
+      onResetCases: () => undefined,
       onSaveCases: async () => undefined,
       onSelectSuite: () => undefined,
       onUpdateSuite: async () => undefined,
@@ -125,6 +127,45 @@ test("production app wires a dedicated case suites view", () => {
   assert.match(source, /saveCaseSuiteCases/);
   assert.match(source, /getCaseSuiteCases/);
   assert.match(source, /Case Suite cases saved\./);
+});
+
+test("case suite manager blocks saving while payload JSON is invalid", () => {
+  const source = readFileSync(
+    new URL("../src/components/CaseSuiteManager.tsx", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(source, /const hasCasePayloadError = payloadError !== null;/);
+  assert.match(source, /if \(hasCasePayloadError\) \{[\s\S]*setError\(payloadError\);[\s\S]*return;[\s\S]*\}/);
+  assert.match(
+    source,
+    /disabled=\{[\s\S]*?isBusy \|\|[\s\S]*?selectedSuite === null \|\|[\s\S]*?hasCasePayloadError/
+  );
+});
+
+test("production app tracks dirty case suite drafts before switching suites", () => {
+  const source = readFileSync(
+    new URL("../src/App.tsx", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(source, /const \[caseSuiteCasesDirty, setCaseSuiteCasesDirty\]/);
+  assert.match(source, /function handleResetCaseSuiteCases/);
+  assert.match(source, /caseSuiteCasesDirty=\{caseSuiteCasesDirty\}/);
+  assert.match(source, /onResetCases=\{handleResetCaseSuiteCases\}/);
+});
+
+test("case suite manager disables suite mutations while case changes are dirty", () => {
+  const source = readFileSync(
+    new URL("../src/components/CaseSuiteManager.tsx", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(source, /caseSuiteCasesDirty: boolean;/);
+  assert.match(source, /const suiteMutationDisabled = isBusy \|\| caseSuiteCasesDirty;/);
+  assert.match(source, /disabled=\{suiteMutationDisabled\}/);
+  assert.match(source, /Save or reset case changes before switching\s*suites\./);
+  assert.match(source, /Reset case changes/);
 });
 
 test("case suite manager stacks below the shared mobile breakpoint", () => {

@@ -13,6 +13,7 @@ interface CaseSuiteManagerProps {
   cases: Case[];
   isBusy: boolean;
   message: string | null;
+  caseSuiteCasesDirty: boolean;
   onSelectSuite: (suiteId: string) => void;
   onCreateSuite: (request: CaseSuiteCreateRequest) => void | Promise<void>;
   onUpdateSuite: (
@@ -21,6 +22,7 @@ interface CaseSuiteManagerProps {
   ) => void | Promise<void>;
   onDeleteSuite: (suiteId: string) => void | Promise<void>;
   onCasesChange: (cases: Case[]) => void;
+  onResetCases: () => void;
   onSaveCases: () => void | Promise<void>;
 }
 
@@ -49,11 +51,13 @@ export function CaseSuiteManager({
   suites,
   selectedSuiteId,
   cases,
+  caseSuiteCasesDirty,
   isBusy,
   message,
   onCasesChange,
   onCreateSuite,
   onDeleteSuite,
+  onResetCases,
   onSaveCases,
   onSelectSuite,
   onUpdateSuite
@@ -79,19 +83,25 @@ export function CaseSuiteManager({
     selectedCase === null ? "" : formatPayload(selectedCase.payload)
   );
   const [error, setError] = useState<string | null>(null);
+  const [payloadError, setPayloadError] = useState<string | null>(null);
   const referencedBy = selectedSuite?.experiment_ids ?? [];
-  const deleteDisabled = selectedSuite === null || referencedBy.length > 0 || isBusy;
+  const hasCasePayloadError = payloadError !== null;
+  const suiteMutationDisabled = isBusy || caseSuiteCasesDirty;
+  const deleteDisabled =
+    selectedSuite === null || referencedBy.length > 0 || suiteMutationDisabled;
 
   useEffect(() => {
     setSuiteTitle(selectedSuite?.title ?? "");
     setSuiteDescription(selectedSuite?.description ?? "");
     setError(null);
+    setPayloadError(null);
   }, [selectedSuite]);
 
   useEffect(() => {
     if (cases.length === 0) {
       setSelectedCaseId("");
       setPayloadText("");
+      setPayloadError(null);
       return;
     }
     const nextSelected =
@@ -99,6 +109,7 @@ export function CaseSuiteManager({
       cases[0];
     setSelectedCaseId(nextSelected.id);
     setPayloadText(formatPayload(nextSelected.payload));
+    setPayloadError(null);
   }, [cases, selectedCaseId]);
 
   async function handleCreateSuite(event: FormEvent<HTMLFormElement>) {
@@ -155,6 +166,7 @@ export function CaseSuiteManager({
     if (selectedCase === null) return;
     try {
       const payload = parseJsonObject(nextText);
+      setPayloadError(null);
       setError(null);
       onCasesChange(
         cases.map((artifactCase) =>
@@ -164,7 +176,10 @@ export function CaseSuiteManager({
         )
       );
     } catch (parseError) {
-      setError(parseError instanceof Error ? parseError.message : "Invalid JSON.");
+      const message =
+        parseError instanceof Error ? parseError.message : "Invalid JSON.";
+      setPayloadError(message);
+      setError(message);
     }
   }
 
@@ -198,10 +213,15 @@ export function CaseSuiteManager({
     );
     onCasesChange(nextCases);
     setSelectedCaseId(nextCases[0]?.id ?? "");
+    setPayloadError(null);
     setError(null);
   }
 
   async function handleSaveCases() {
+    if (hasCasePayloadError) {
+      setError(payloadError);
+      return;
+    }
     setError(null);
     try {
       await onSaveCases();
@@ -231,7 +251,7 @@ export function CaseSuiteManager({
                     ? "case-suite-list-item is-selected"
                     : "case-suite-list-item"
                 }
-                disabled={isBusy}
+                disabled={suiteMutationDisabled}
                 key={suite.id}
                 onClick={() => onSelectSuite(suite.id)}
                 type="button"
@@ -252,7 +272,7 @@ export function CaseSuiteManager({
           <label>
             <span>Title</span>
             <input
-              disabled={isBusy}
+              disabled={suiteMutationDisabled}
               onChange={(event) => setCreateTitle(event.target.value)}
               value={createTitle}
             />
@@ -260,13 +280,17 @@ export function CaseSuiteManager({
           <label>
             <span>Description</span>
             <textarea
-              disabled={isBusy}
+              disabled={suiteMutationDisabled}
               onChange={(event) => setCreateDescription(event.target.value)}
               rows={3}
               value={createDescription}
             />
           </label>
-          <button className="secondary-action" disabled={isBusy} type="submit">
+          <button
+            className="secondary-action"
+            disabled={suiteMutationDisabled}
+            type="submit"
+          >
             Create suite
           </button>
         </form>
@@ -275,6 +299,12 @@ export function CaseSuiteManager({
       <div className="case-suite-detail">
         {message !== null ? <div className="settings-message">{message}</div> : null}
         {error !== null ? <div className="settings-error">{error}</div> : null}
+        {caseSuiteCasesDirty ? (
+          <div className="settings-message">
+            Unsaved suite case changes. Save or reset case changes before switching
+            suites.
+          </div>
+        ) : null}
 
         {selectedSuite === null ? (
           <div className="case-browser-empty">Select a case suite.</div>
@@ -289,7 +319,7 @@ export function CaseSuiteManager({
                 <div className="case-suite-actions">
                   <button
                     className="secondary-action"
-                    disabled={isBusy}
+                    disabled={suiteMutationDisabled}
                     type="submit"
                   >
                     Save suite
@@ -314,7 +344,7 @@ export function CaseSuiteManager({
                 <label>
                   <span>Title</span>
                   <input
-                    disabled={isBusy}
+                    disabled={suiteMutationDisabled}
                     onChange={(event) => setSuiteTitle(event.target.value)}
                     value={suiteTitle}
                   />
@@ -322,7 +352,7 @@ export function CaseSuiteManager({
                 <label>
                   <span>Description</span>
                   <textarea
-                    disabled={isBusy}
+                    disabled={suiteMutationDisabled}
                     onChange={(event) => setSuiteDescription(event.target.value)}
                     rows={3}
                     value={suiteDescription}
@@ -404,11 +434,24 @@ export function CaseSuiteManager({
                   />
                   <button
                     className="primary-action"
-                    disabled={isBusy || selectedSuite === null}
+                    disabled={
+                      isBusy ||
+                      selectedSuite === null ||
+                      hasCasePayloadError ||
+                      !caseSuiteCasesDirty
+                    }
                     onClick={() => void handleSaveCases()}
                     type="button"
                   >
                     Save suite cases
+                  </button>
+                  <button
+                    className="secondary-action"
+                    disabled={isBusy || !caseSuiteCasesDirty}
+                    onClick={onResetCases}
+                    type="button"
+                  >
+                    Reset case changes
                   </button>
                 </div>
               </div>
