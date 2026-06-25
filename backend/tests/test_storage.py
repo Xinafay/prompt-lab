@@ -10,7 +10,7 @@ from pydantic import ValidationError
 import prompt_lab.storage as storage_module
 from prompt_lab.errors import NotFoundError
 from prompt_lab.settings import PromptLabSettings
-from prompt_lab.models.artifacts import ExperimentArtifact
+from prompt_lab.models.artifacts import CaseArtifact, CaseSuiteArtifact, ExperimentArtifact
 from prompt_lab.models.validators import (
     AutomaticValidatorDefinition,
     ValidationBatchArtifact,
@@ -102,6 +102,290 @@ def test_store_load_cases_rejects_missing_case_suite_assignment() -> None:
             assert str(exc) == "Case Suite not assigned"
         else:
             raise AssertionError("Expected missing case suite assignment to fail")
+
+
+def test_store_lists_case_suites_sorted_by_id() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_case_suite_manifest(root / "case_suites" / "z-suite" / "suite.json", suite_id="z-suite")
+        write_case_suite_manifest(root / "case_suites" / "a-suite" / "suite.json", suite_id="a-suite")
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        suites = store.list_case_suites()
+
+        assert [suite.id for suite in suites] == ["a-suite", "z-suite"]
+        assert isinstance(suites[0], CaseSuiteArtifact)
+        assert suites[0].schema_version == "prompt_lab.case_suite/v1"
+
+
+def test_store_returns_empty_case_suite_list_when_root_missing() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        assert store.list_case_suites() == []
+
+
+def test_store_creates_case_suite_with_unique_slug() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_case_suite_manifest(
+            root / "case_suites" / "demo-suite" / "suite.json",
+            suite_id="demo-suite",
+        )
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        created = store.create_case_suite(title="Demo Suite", description="Reusable cases")
+
+        assert created.id == "demo-suite-2"
+        assert created.title == "Demo Suite"
+        assert created.description == "Reusable cases"
+        assert (root / "case_suites" / "demo-suite-2" / "suite.json").is_file()
+        assert (root / "case_suites" / "demo-suite-2" / "cases").is_dir()
+
+
+def test_store_create_case_suite_rejects_whitespace_title() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        try:
+            store.create_case_suite(title="   ")
+        except ValueError as exc:
+            assert str(exc) == "Case Suite title cannot be blank"
+        else:
+            raise AssertionError("Expected whitespace case suite title to be rejected")
+
+        assert not (root / "case_suites").exists()
+
+
+def test_store_deleting_referenced_case_suite_is_rejected() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_case_suite_manifest(root / "case_suites" / "demo-suite" / "suite.json")
+        experiment = root / "experiments" / "demo"
+        (experiment / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(
+            experiment / "experiment.json",
+            case_suite_id="demo-suite",
+        )
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        try:
+            store.delete_case_suite("demo-suite")
+        except ValueError as exc:
+            assert str(exc) == "Case Suite is used by one or more experiments"
+        else:
+            raise AssertionError("Expected referenced case suite deletion to be rejected")
+
+        assert (root / "case_suites" / "demo-suite").is_dir()
+
+
+def test_store_delete_case_suite_rejects_top_level_symlink() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        real_suite = root / "case_suites" / "real-suite"
+        write_case_suite_manifest(
+            real_suite / "suite.json",
+            suite_id="real-suite",
+        )
+        link = root / "case_suites" / "demo-suite"
+        try:
+            link.symlink_to(real_suite, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            return
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        try:
+            store.delete_case_suite("demo-suite")
+        except NotFoundError:
+            pass
+        else:
+            raise AssertionError("Expected top-level case suite symlink to be rejected")
+
+        assert real_suite.is_dir()
+        assert link.is_symlink()
+
+
+def test_store_write_case_to_suite_respects_overwrite_flag() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_case_suite_manifest(root / "case_suites" / "demo-suite" / "suite.json")
+        write_case_suite_case(root, payload={"text": "old"})
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        try:
+            store.write_case_to_suite("demo-suite", "case-a", {"text": "new"})
+        except FileExistsError as exc:
+            assert str(exc) == "Case already exists"
+        else:
+            raise AssertionError("Expected duplicate suite case write to fail")
+
+        overwritten = store.write_case_to_suite(
+            "demo-suite",
+            "case-a",
+            {"text": "new"},
+            overwrite=True,
+        )
+
+        assert overwritten == CaseArtifact(id="case-a", payload={"text": "new"})
+        assert json.loads(
+            (root / "case_suites" / "demo-suite" / "cases" / "case-a.json").read_text(
+                encoding="utf-8"
+            )
+        ) == {"text": "new"}
+
+
+def test_store_replace_suite_cases_removes_omitted_cases_and_writes_payloads() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_case_suite_manifest(root / "case_suites" / "demo-suite" / "suite.json")
+        write_case_suite_case(root, case_id="case-a", payload={"text": "old"})
+        write_case_suite_case(root, case_id="case-b", payload={"text": "remove"})
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        loaded = store.replace_suite_cases(
+            "demo-suite",
+            [
+                CaseArtifact(id="case-a", payload={"text": "updated"}),
+                CaseArtifact(id="case-c", payload={"text": "created"}),
+            ],
+        )
+
+        cases_dir = root / "case_suites" / "demo-suite" / "cases"
+        assert [case.id for case in loaded] == ["case-a", "case-c"]
+        assert json.loads((cases_dir / "case-a.json").read_text(encoding="utf-8")) == {
+            "text": "updated"
+        }
+        assert json.loads((cases_dir / "case-c.json").read_text(encoding="utf-8")) == {
+            "text": "created"
+        }
+        assert not (cases_dir / "case-b.json").exists()
+
+
+def test_store_delete_case_from_suite_removes_case_and_rejects_missing_case() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_case_suite_manifest(root / "case_suites" / "demo-suite" / "suite.json")
+        write_case_suite_case(root)
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        store.delete_case_from_suite("demo-suite", "case-a")
+
+        assert not (root / "case_suites" / "demo-suite" / "cases" / "case-a.json").exists()
+        try:
+            store.delete_case_from_suite("demo-suite", "case-a")
+        except NotFoundError as exc:
+            assert str(exc) == "Case not found"
+        else:
+            raise AssertionError("Expected missing suite case delete to fail")
+
+
+def test_store_experiments_using_case_suite_returns_matching_experiments() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        for experiment_id, suite_id in (
+            ("alpha", "demo-suite"),
+            ("beta", "other-suite"),
+            ("gamma", "demo-suite"),
+        ):
+            experiment = root / "experiments" / experiment_id
+            (experiment / "versions" / "v001").mkdir(parents=True)
+            write_experiment_manifest(
+                experiment / "experiment.json",
+                experiment_id=experiment_id,
+                case_suite_id=suite_id,
+            )
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        experiments = store.experiments_using_case_suite("demo-suite")
+
+        assert [experiment.id for experiment in experiments] == ["alpha", "gamma"]
+
+
+def test_store_invalidate_case_suite_consumers_removes_generated_artifact_dirs() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        for experiment_id, suite_id in (
+            ("alpha", "demo-suite"),
+            ("beta", "other-suite"),
+            ("gamma", "demo-suite"),
+        ):
+            experiment = root / "experiments" / experiment_id
+            for version in ("v001", "v002"):
+                version_dir = experiment / "versions" / version
+                version_dir.mkdir(parents=True)
+                for name in ("runs", "validations", "reviews", "comparisons", "validators"):
+                    (version_dir / name).mkdir(parents=True)
+            write_experiment_manifest(
+                experiment / "experiment.json",
+                experiment_id=experiment_id,
+                active_version="v002",
+                case_suite_id=suite_id,
+            )
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        affected_ids = store.invalidate_case_suite_consumers("demo-suite")
+
+        assert affected_ids == ["alpha", "gamma"]
+        for experiment_id in ("alpha", "gamma"):
+            for version in ("v001", "v002"):
+                version_dir = root / "experiments" / experiment_id / "versions" / version
+                for name in ("runs", "validations", "reviews", "comparisons"):
+                    assert not (version_dir / name).exists()
+                assert (version_dir / "validators").is_dir()
+        assert (root / "experiments" / "beta" / "versions" / "v001" / "runs").is_dir()
+
+
+def test_store_rejects_case_suite_path_escapes_without_leaking_root_paths() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_case_suite_manifest(root / "case_suites" / "demo-suite" / "suite.json")
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        for suite_id, case_id in (("../secret", "case-a"), ("demo-suite", "../secret")):
+            try:
+                store.case_suite_case_path(suite_id, case_id)
+            except NotFoundError as exc:
+                assert str(root) not in str(exc)
+            else:
+                raise AssertionError("Expected case suite path escape to be rejected")
 
 
 def test_store_rejects_read_path_escape() -> None:
@@ -490,7 +774,16 @@ def write_case_suite(
     suite_dir = root / "case_suites" / suite_id
     cases_dir = suite_dir / "cases"
     cases_dir.mkdir(parents=True)
-    (suite_dir / "suite.json").write_text(
+    write_case_suite_manifest(suite_dir / "suite.json", suite_id=suite_id)
+    for case_id, payload in cases.items():
+        write_case_suite_case(root, suite_id=suite_id, case_id=case_id, payload=payload)
+
+
+def write_case_suite_manifest(
+    path: Path, *, suite_id: str = "demo-suite"
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
         json.dumps(
             {
                 "schema_version": "prompt_lab.case_suite/v1",
@@ -502,11 +795,21 @@ def write_case_suite(
         ),
         encoding="utf-8",
     )
-    for case_id, payload in cases.items():
-        (cases_dir / f"{case_id}.json").write_text(
-            json.dumps(payload, ensure_ascii=False),
-            encoding="utf-8",
-        )
+
+
+def write_case_suite_case(
+    root: Path,
+    *,
+    suite_id: str = "demo-suite",
+    case_id: str = "case-a",
+    payload: dict[str, Any] | None = None,
+) -> None:
+    cases_dir = root / "case_suites" / suite_id / "cases"
+    cases_dir.mkdir(parents=True, exist_ok=True)
+    (cases_dir / f"{case_id}.json").write_text(
+        json.dumps(payload or {"text": "hello"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
 
 def test_store_saves_experiment_manifest_under_experiments_root() -> None:
@@ -1121,6 +1424,18 @@ def main() -> int:
         test_store_ignores_old_runtime_experiment_directories,
         test_store_loads_cases_through_experiment_case_suite_id,
         test_store_load_cases_rejects_missing_case_suite_assignment,
+        test_store_lists_case_suites_sorted_by_id,
+        test_store_returns_empty_case_suite_list_when_root_missing,
+        test_store_creates_case_suite_with_unique_slug,
+        test_store_create_case_suite_rejects_whitespace_title,
+        test_store_deleting_referenced_case_suite_is_rejected,
+        test_store_delete_case_suite_rejects_top_level_symlink,
+        test_store_write_case_to_suite_respects_overwrite_flag,
+        test_store_replace_suite_cases_removes_omitted_cases_and_writes_payloads,
+        test_store_delete_case_from_suite_removes_case_and_rejects_missing_case,
+        test_store_experiments_using_case_suite_returns_matching_experiments,
+        test_store_invalidate_case_suite_consumers_removes_generated_artifact_dirs,
+        test_store_rejects_case_suite_path_escapes_without_leaking_root_paths,
         test_store_rejects_read_path_escape,
         test_store_rejects_write_path_escape,
         test_store_rejects_experiment_id_path_escape,

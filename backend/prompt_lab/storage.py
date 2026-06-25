@@ -10,7 +10,7 @@ from pydantic import TypeAdapter
 
 from prompt_lab.errors import NotFoundError
 from prompt_lab.settings import PromptLabSettings
-from prompt_lab.models.artifacts import CaseArtifact, ExperimentArtifact
+from prompt_lab.models.artifacts import CaseArtifact, CaseSuiteArtifact, ExperimentArtifact
 from prompt_lab.models.validators import (
     ValidationBatchArtifact,
     ValidationResultArtifact,
@@ -85,6 +85,16 @@ class PromptLabStore:
             manifests[artifact.id] = artifact
         return [manifests[key] for key in sorted(manifests)]
 
+    def list_case_suites(self) -> list[CaseSuiteArtifact]:
+        """Return runtime case suites from `case_suites/`, sorted by id."""
+        if not self.case_suites_root.exists():
+            return []
+        manifests: dict[str, CaseSuiteArtifact] = {}
+        for manifest_path in sorted(self.case_suites_root.glob("*/suite.json")):
+            artifact = CaseSuiteArtifact.model_validate(_read_json(manifest_path))
+            manifests[artifact.id] = artifact
+        return [manifests[key] for key in sorted(manifests)]
+
     def experiment_dir(self, experiment_id: str) -> Path:
         """Resolve an experiment directory under the runtime experiments root."""
         _validate_storage_id(experiment_id, "Experiment")
@@ -111,6 +121,10 @@ class PromptLabStore:
             return candidate
         raise NotFoundError("Case Suite not found")
 
+    def load_case_suite(self, suite_id: str) -> CaseSuiteArtifact:
+        path = self.case_suite_dir(suite_id) / "suite.json"
+        return CaseSuiteArtifact.model_validate(_read_json(path))
+
     def _available_experiment_id(self, title: str) -> str:
         base = _slugify_title(title)
         resolved_root = self.experiments_root.resolve()
@@ -128,6 +142,64 @@ class PromptLabStore:
                 return candidate
             candidate = f"{base}-{suffix}"
             suffix += 1
+
+    def _available_case_suite_id(self, title: str) -> str:
+        base = _slugify_title(title)
+        resolved_root = self.case_suites_root.resolve()
+        self.case_suites_root.mkdir(parents=True, exist_ok=True)
+        candidate = base
+        suffix = 2
+        while True:
+            _validate_storage_id(candidate, "Case Suite")
+            candidate_dir = (resolved_root / candidate).resolve()
+            if candidate_dir != resolved_root and not candidate_dir.is_relative_to(
+                resolved_root
+            ):
+                raise NotFoundError("Case Suite not found")
+            if not candidate_dir.exists():
+                return candidate
+            candidate = f"{base}-{suffix}"
+            suffix += 1
+
+    def create_case_suite(
+        self, *, title: str, description: str = ""
+    ) -> CaseSuiteArtifact:
+        if title.strip() == "":
+            raise ValueError("Case Suite title cannot be blank")
+        suite_id = self._available_case_suite_id(title)
+        suite_dir = self.case_suites_root.resolve() / suite_id
+        artifact = CaseSuiteArtifact.model_validate(
+            {
+                "schema_version": "prompt_lab.case_suite/v1",
+                "id": suite_id,
+                "title": title,
+                "description": description,
+            }
+        )
+        try:
+            (suite_dir / "cases").mkdir(parents=True, exist_ok=False)
+        except FileExistsError:
+            raise FileExistsError("Case Suite already exists")
+        _write_json(suite_dir / "suite.json", artifact.model_dump(mode="json"))
+        return artifact
+
+    def save_case_suite(
+        self, suite_id: str, artifact: CaseSuiteArtifact
+    ) -> CaseSuiteArtifact:
+        if artifact.id != suite_id:
+            raise NotFoundError("Case Suite not found")
+        suite_dir = self.case_suite_dir(suite_id)
+        _write_json(suite_dir / "suite.json", artifact.model_dump(mode="json"))
+        return artifact
+
+    def delete_case_suite(self, suite_id: str) -> None:
+        _validate_storage_id(suite_id, "Case Suite")
+        if self.experiments_using_case_suite(suite_id):
+            raise ValueError("Case Suite is used by one or more experiments")
+        if (self.case_suites_root / suite_id).is_symlink():
+            raise NotFoundError("Case Suite not found")
+        suite_dir = self.case_suite_dir(suite_id)
+        shutil.rmtree(suite_dir)
 
     def create_experiment(
         self,
@@ -293,6 +365,79 @@ class PromptLabStore:
                 )
             )
         return cases
+
+    def case_suite_case_path(self, suite_id: str, case_id: str) -> Path:
+        _validate_storage_id(case_id, "Case")
+        cases_dir = self.case_suite_dir(suite_id) / "cases"
+        resolved_cases_dir = cases_dir.resolve()
+        candidate = (resolved_cases_dir / f"{case_id}.json").resolve()
+        if candidate != resolved_cases_dir and not candidate.is_relative_to(
+            resolved_cases_dir
+        ):
+            raise NotFoundError("Case not found")
+        return candidate
+
+    def write_case_to_suite(
+        self,
+        suite_id: str,
+        case_id: str,
+        payload: dict[str, Any],
+        *,
+        overwrite: bool = False,
+    ) -> CaseArtifact:
+        path = self.case_suite_case_path(suite_id, case_id)
+        if path.exists() and not overwrite:
+            raise FileExistsError("Case already exists")
+        _write_json(path, payload)
+        return CaseArtifact.model_validate({"id": case_id, "payload": payload})
+
+    def delete_case_from_suite(self, suite_id: str, case_id: str) -> None:
+        path = self.case_suite_case_path(suite_id, case_id)
+        if not path.is_file():
+            raise NotFoundError("Case not found")
+        path.unlink()
+
+    def replace_suite_cases(
+        self, suite_id: str, cases: list[CaseArtifact]
+    ) -> list[CaseArtifact]:
+        suite_dir = self.case_suite_dir(suite_id)
+        cases_dir = suite_dir / "cases"
+        case_paths = {
+            artifact_case.id: self.case_suite_case_path(suite_id, artifact_case.id)
+            for artifact_case in cases
+        }
+        cases_dir.mkdir(parents=True, exist_ok=True)
+        case_ids = set(case_paths)
+        for path in cases_dir.glob("*.json"):
+            if path.stem not in case_ids:
+                path.unlink()
+        for artifact_case in cases:
+            _write_json(case_paths[artifact_case.id], artifact_case.payload)
+        return self.load_cases_for_suite(suite_id)
+
+    def experiments_using_case_suite(
+        self, suite_id: str
+    ) -> list[ExperimentArtifact]:
+        _validate_storage_id(suite_id, "Case Suite")
+        return [
+            experiment
+            for experiment in self.list_experiments()
+            if experiment.case_suite_id == suite_id
+        ]
+
+    def invalidate_experiment_generated_artifacts(self, experiment_id: str) -> None:
+        for version in self.list_versions(experiment_id):
+            version_dir = self.version_dir(experiment_id, version)
+            for name in ["runs", "validations", "reviews", "comparisons"]:
+                path = version_dir / name
+                if path.exists():
+                    shutil.rmtree(path)
+
+    def invalidate_case_suite_consumers(self, suite_id: str) -> list[str]:
+        experiments = self.experiments_using_case_suite(suite_id)
+        for experiment in experiments:
+            self.invalidate_experiment_generated_artifacts(experiment.id)
+        return [experiment.id for experiment in experiments]
 
     def case_path(self, experiment_id: str, case_id: str) -> Path:
         _validate_storage_id(case_id, "Case")
