@@ -327,28 +327,62 @@ def test_repository_demo_examples_seed_for_ui_testing() -> None:
         assert "demo-string" in experiment_ids
         assert "demo-json" in experiment_ids
 
-        assert (
-            root
-            / "case_suites"
-            / "demo-string-replies"
-            / "cases"
-            / "billing-reply.json"
-        ).is_file()
-        assert (
-            root
-            / "case_suites"
-            / "demo-string-replies"
-            / "cases"
-            / "support-reply.json"
-        ).is_file()
-        assert (
-            root / "case_suites" / "demo-json-briefs" / "cases" / "product-brief.json"
-        ).is_file()
-        assert (
-            root / "case_suites" / "demo-json-briefs" / "cases" / "service-brief.json"
-        ).is_file()
-        assert not (root / "experiments" / "demo-string" / "cases").exists()
-        assert not (root / "experiments" / "demo-json" / "cases").exists()
+        expected_suites = {
+            "demo-string": "demo-string-replies",
+            "demo-json": "demo-json-briefs",
+        }
+        for experiment_id, suite_id in expected_suites.items():
+            experiment_dir = root / "experiments" / experiment_id
+            experiment_manifest = json.loads(
+                (experiment_dir / "experiment.json").read_text(encoding="utf-8")
+            )
+            assert experiment_manifest["case_suite_id"] == suite_id
+
+            suite_cases_dir = root / "case_suites" / suite_id / "cases"
+            suite_case_ids = {
+                path.stem for path in suite_cases_dir.glob("*.json") if path.is_file()
+            }
+            run_batch_dir = (
+                experiment_dir / "versions" / "v002" / "runs" / "run-000002"
+            )
+            run_case_ids = {
+                path.name for path in run_batch_dir.iterdir() if path.is_dir()
+            }
+            validation_dir = (
+                experiment_dir
+                / "versions"
+                / "v002"
+                / "validations"
+                / "validation-000002"
+            )
+            validation_case_ids = {
+                path.name
+                for path in validation_dir.iterdir()
+                if path.is_dir() and path.name != "validators_snapshot"
+            }
+
+            assert suite_case_ids == run_case_ids
+            assert validation_case_ids >= suite_case_ids
+            assert not (experiment_dir / "cases").exists()
+
+            runs = client.get(
+                f"/api/experiments/{experiment_id}/versions/v002/runs"
+            )
+            assert runs.status_code == 200
+            assert runs.json()["run_batch_id"] == "run-000002"
+            assert {run["case_id"] for run in runs.json()["runs"]} == run_case_ids
+
+            validation = client.get(
+                f"/api/experiments/{experiment_id}/versions/v002/validations/latest"
+            )
+            assert validation.status_code == 200
+            assert validation.json()["validation_batch"]["validation_batch_id"] == (
+                "validation-000002"
+            )
+            assert len(validation.json()["validators"]) == 2
+            assert {
+                result["case_id"] for result in validation.json()["results"]
+            } >= suite_case_ids
 
 
 def main() -> int:
