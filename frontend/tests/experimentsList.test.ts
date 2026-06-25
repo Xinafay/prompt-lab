@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -67,4 +68,16 @@ test("experiments list only shows clone and delete for selected experiment", () 
   assert.match(html, /New/);
   assert.doesNotMatch(html, /Clone/);
   assert.doesNotMatch(html, /Delete/);
+});
+
+test("app wires experiment management API calls and modals", () => {
+  const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+
+  assert.match(source, /createExperiment/);
+  assert.match(source, /cloneExperiment/);
+  assert.match(source, /deleteExperiment/);
+  assert.match(source, /NewExperimentModal/);
+  assert.match(source, /CloneExperimentModal/);
+  assert.match(source, /DeleteExperimentModal/);
+  assert.match(source, /routeAfterExperimentMutation/);
 });

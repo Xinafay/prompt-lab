@@ -1805,6 +1805,16 @@ select {
   line-height: 1.45;
 }
 
+.experiment-management-modal {
+  width: min(560px, 100%);
+}
+
+.experiment-management-modal .settings-field,
+.experiment-management-modal .settings-error,
+.experiment-management-modal .modal-actions {
+  min-width: 0;
+}
+
 .modal-actions {
   display: flex;
   flex-wrap: wrap;

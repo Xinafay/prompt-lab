@@ -3,8 +3,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   apiGet,
   cancelJob,
+  cloneExperiment,
   compareVersions,
+  createExperiment,
   createProposalVersion,
+  deleteExperiment,
   generateProposal,
   getActiveJob,
   getExperimentVersions,
@@ -35,6 +38,11 @@ import {
 } from "./api";
 import { CaseBrowser } from "./components/CaseBrowser";
 import { ComparisonView } from "./components/ComparisonView";
+import {
+  CloneExperimentModal,
+  DeleteExperimentModal,
+  NewExperimentModal
+} from "./components/ExperimentManagementModals";
 import { ExperimentSettings } from "./components/ExperimentSettings";
 import { ExperimentsList } from "./components/ExperimentsList";
 import { GlobalSettings } from "./components/GlobalSettings";
@@ -58,6 +66,8 @@ import type {
   CompareMatrixResponse,
   CreatedVersionResponse,
   Experiment,
+  ExperimentCloneRequest,
+  ExperimentCreateRequest,
   FindingDecisionValue,
   GlobalSettings as GlobalSettingsModel,
   JobEvent,
@@ -119,8 +129,14 @@ type UnsavedNavigationKind =
   | "validation"
   | "review";
 
+type ExperimentManagementDialog =
+  | { kind: "new" }
+  | { kind: "clone"; experiment: Experiment }
+  | { kind: "delete"; experiment: Experiment };
+
 type PendingNavigationTarget =
   | { kind: "experiment"; experiment: Experiment | null }
+  | { kind: "experimentDialog"; dialog: ExperimentManagementDialog }
   | { kind: "globalSettings" }
   | { kind: "route"; route: ReturnType<typeof currentExperimentRoute> }
   | { kind: "tab"; tab: WorkbenchTab }
@@ -223,6 +239,12 @@ function App() {
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<Experiment | null>(null);
+  const [experimentDialog, setExperimentDialog] =
+    useState<ExperimentManagementDialog | null>(null);
+  const [experimentActionBusy, setExperimentActionBusy] = useState(false);
+  const [experimentActionError, setExperimentActionError] = useState<string | null>(
+    null
+  );
   const [sourceEditing, setSourceEditing] = useState(false);
   const [sourceDraft, setSourceDraft] = useState<VersionSourceDraft | null>(null);
   const [sourceViewMode, setSourceViewMode] = useState<SourceViewMode>("edit");
@@ -569,6 +591,10 @@ function App() {
       selectExperiment(navigation.experiment, { historyMode: "push" });
       return;
     }
+    if (navigation.kind === "experimentDialog") {
+      openExperimentDialog(navigation.dialog);
+      return;
+    }
     if (navigation.kind === "globalSettings") {
       selectGlobalSettings({ historyMode: "push" });
       return;
@@ -624,6 +650,74 @@ function App() {
       return;
     }
     activateTab(tab, "push");
+  }
+
+  function openExperimentDialog(dialog: ExperimentManagementDialog) {
+    setExperimentActionError(null);
+    setExperimentDialog(dialog);
+  }
+
+  function requestExperimentDialog(dialog: ExperimentManagementDialog) {
+    const navigation = buildPendingNavigation({
+      kind: "experimentDialog",
+      dialog
+    });
+    if (navigation !== null) {
+      setNavigationError(null);
+      setPendingNavigation(navigation);
+      return;
+    }
+    openExperimentDialog(dialog);
+  }
+
+  async function routeAfterExperimentMutation(
+    experiment: Experiment,
+    tab: WorkbenchTab
+  ) {
+    const experiments = await apiGet<Experiment[]>("/api/experiments");
+    setState({ status: "loaded", experiments });
+    selectExperiment(experiment, {
+      historyMode: "replace",
+      tab
+    });
+  }
+
+  async function refreshAfterExperimentDelete(deletedExperimentId: string) {
+    const experiments = await apiGet<Experiment[]>("/api/experiments");
+    setState({ status: "loaded", experiments });
+    const deletedIndex =
+      state.status === "loaded"
+        ? state.experiments.findIndex(
+            (experiment) => experiment.id === deletedExperimentId
+          )
+        : -1;
+    const nextExperiment =
+      experiments[deletedIndex] ??
+      experiments[deletedIndex - 1] ??
+      experiments[0] ??
+      null;
+    selectExperiment(nextExperiment, {
+      historyMode: "replace",
+      tab: "prompt"
+    });
+  }
+
+  function requestNewExperiment() {
+    requestExperimentDialog({ kind: "new" });
+  }
+
+  function requestCloneExperiment(experiment: Experiment) {
+    requestExperimentDialog({ kind: "clone", experiment });
+  }
+
+  function requestDeleteExperiment(experiment: Experiment) {
+    requestExperimentDialog({ kind: "delete", experiment });
+  }
+
+  function closeExperimentDialog() {
+    if (experimentActionBusy) return;
+    setExperimentDialog(null);
+    setExperimentActionError(null);
   }
 
   function handleStayOnSettings() {
@@ -2222,6 +2316,64 @@ function App() {
     setWorkflowMessage(null);
   }
 
+  async function handleCreateExperiment(request: ExperimentCreateRequest) {
+    setExperimentActionBusy(true);
+    setExperimentActionError(null);
+    try {
+      const created = await createExperiment(request);
+      setExperimentDialog(null);
+      await routeAfterExperimentMutation(created, "prompt");
+      setWorkflowMessage(`Created ${created.title}.`);
+    } catch (error) {
+      setExperimentActionError(
+        error instanceof Error ? error.message : "Unknown error"
+      );
+      throw error;
+    } finally {
+      setExperimentActionBusy(false);
+    }
+  }
+
+  async function handleCloneExperiment(request: ExperimentCloneRequest) {
+    if (experimentDialog?.kind !== "clone") return;
+    const sourceExperiment = experimentDialog.experiment;
+    setExperimentActionBusy(true);
+    setExperimentActionError(null);
+    try {
+      const cloned = await cloneExperiment(sourceExperiment.id, request);
+      setExperimentDialog(null);
+      await routeAfterExperimentMutation(cloned, "settings");
+      setSettingsMessage(`Cloned ${sourceExperiment.title}.`);
+    } catch (error) {
+      setExperimentActionError(
+        error instanceof Error ? error.message : "Unknown error"
+      );
+      throw error;
+    } finally {
+      setExperimentActionBusy(false);
+    }
+  }
+
+  async function handleDeleteExperiment() {
+    if (experimentDialog?.kind !== "delete") return;
+    const deletedExperiment = experimentDialog.experiment;
+    setExperimentActionBusy(true);
+    setExperimentActionError(null);
+    try {
+      await deleteExperiment(deletedExperiment.id);
+      setExperimentDialog(null);
+      await refreshAfterExperimentDelete(deletedExperiment.id);
+      setWorkflowMessage(`Deleted ${deletedExperiment.title}.`);
+    } catch (error) {
+      setExperimentActionError(
+        error instanceof Error ? error.message : "Unknown error"
+      );
+      throw error;
+    } finally {
+      setExperimentActionBusy(false);
+    }
+  }
+
   async function refreshExperimentsAfterSettingsSave(savedExperiment: Experiment) {
     const [experiments, overview, runs, latestValidation, versions] = await Promise.all([
       apiGet<Experiment[]>("/api/experiments"),
@@ -2485,6 +2637,9 @@ function App() {
           <div className="tool-layout">
             <ExperimentsList
               experiments={state.experiments}
+              onClone={requestCloneExperiment}
+              onCreate={requestNewExperiment}
+              onDelete={requestDeleteExperiment}
               onSelect={requestExperimentSelection}
               selectedExperimentId={
                 appView === "experiment" ? selectedExperiment?.id ?? null : null
@@ -2814,6 +2969,35 @@ function App() {
           onAccept={handleAcceptPromptPreview}
           onReject={handleRejectPromptPreview}
           preview={promptPreview}
+        />
+      ) : null}
+
+      {experimentDialog?.kind === "new" ? (
+        <NewExperimentModal
+          error={experimentActionError}
+          isBusy={experimentActionBusy}
+          onCancel={closeExperimentDialog}
+          onSubmit={handleCreateExperiment}
+        />
+      ) : null}
+
+      {experimentDialog?.kind === "clone" ? (
+        <CloneExperimentModal
+          error={experimentActionError}
+          isBusy={experimentActionBusy}
+          onCancel={closeExperimentDialog}
+          onSubmit={handleCloneExperiment}
+          sourceTitle={experimentDialog.experiment.title}
+        />
+      ) : null}
+
+      {experimentDialog?.kind === "delete" ? (
+        <DeleteExperimentModal
+          error={experimentActionError}
+          experimentTitle={experimentDialog.experiment.title}
+          isBusy={experimentActionBusy}
+          onCancel={closeExperimentDialog}
+          onConfirm={handleDeleteExperiment}
         />
       ) : null}
 
