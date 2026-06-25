@@ -175,6 +175,9 @@ class PromptLabStore:
     ) -> ExperimentArtifact:
         if title.strip() == "":
             raise ValueError("Experiment title cannot be blank")
+        _validate_storage_id(source_experiment_id, "Experiment")
+        if (self.experiments_root / source_experiment_id).is_symlink():
+            raise NotFoundError("Experiment not found")
         source_dir = self.experiment_dir(source_experiment_id)
         for path in source_dir.rglob("*"):
             if path.is_symlink():
@@ -182,17 +185,26 @@ class PromptLabStore:
         source_artifact = self.load_experiment(source_experiment_id)
         experiment_id = self._available_experiment_id(title)
         destination = self.experiments_root.resolve() / experiment_id
-        try:
-            shutil.copytree(source_dir, destination)
-        except FileExistsError:
-            raise FileExistsError("Experiment already exists")
         cloned = source_artifact.model_copy(
             update={
                 "id": experiment_id,
                 "title": title,
             }
         )
-        _write_json(destination / "experiment.json", cloned.model_dump(mode="json"))
+        try:
+            shutil.copytree(source_dir, destination)
+        except FileExistsError:
+            raise FileExistsError("Experiment already exists")
+        except Exception:
+            if destination.exists():
+                shutil.rmtree(destination)
+            raise
+        try:
+            _write_json(destination / "experiment.json", cloned.model_dump(mode="json"))
+        except Exception:
+            if destination.exists():
+                shutil.rmtree(destination)
+            raise
         return cloned
 
     def delete_experiment(self, experiment_id: str) -> None:

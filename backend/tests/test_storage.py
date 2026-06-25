@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 
 from pydantic import ValidationError
 
+import prompt_lab.storage as storage_module
 from prompt_lab.errors import NotFoundError
 from prompt_lab.settings import PromptLabSettings
 from prompt_lab.models.artifacts import ExperimentArtifact
@@ -930,6 +932,80 @@ def test_store_clone_rejects_manifest_symlink_before_reading() -> None:
             secret_manifest.chmod(0o600)
 
 
+def test_store_clone_rejects_top_level_source_symlink() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        real_source = root / "experiments" / "real-demo"
+        (real_source / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(
+            real_source / "experiment.json",
+            experiment_id="real-demo",
+        )
+        try:
+            (root / "experiments" / "demo").symlink_to(
+                real_source,
+                target_is_directory=True,
+            )
+        except (OSError, NotImplementedError):
+            return
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        try:
+            store.clone_experiment(
+                source_experiment_id="demo",
+                title="Demo Clone",
+            )
+        except NotFoundError:
+            pass
+        else:
+            raise AssertionError("Expected top-level source symlink to be rejected")
+
+        assert not (root / "experiments" / "demo-clone").exists()
+
+
+def test_store_clone_rolls_back_destination_when_manifest_write_fails() -> None:
+    class DeliberateWriteError(Exception):
+        pass
+
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source = root / "experiments" / "demo"
+        (source / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(source / "experiment.json")
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+        destination_manifest = (
+            root / "experiments" / "demo-clone" / "experiment.json"
+        )
+        original_write_json = storage_module._write_json
+
+        def failing_write_json(path: Path, value: dict[str, Any]) -> None:
+            if path.resolve() == destination_manifest.resolve():
+                raise DeliberateWriteError("deliberate clone manifest write failure")
+            original_write_json(path, value)
+
+        storage_module._write_json = failing_write_json
+        try:
+            try:
+                store.clone_experiment(
+                    source_experiment_id="demo",
+                    title="Demo Clone",
+                )
+            except DeliberateWriteError:
+                pass
+            else:
+                raise AssertionError("Expected clone manifest rewrite to fail")
+
+            assert not (root / "experiments" / "demo-clone").exists()
+        finally:
+            storage_module._write_json = original_write_json
+
+
 def test_store_delete_experiment_removes_directory() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -1000,6 +1076,8 @@ def main() -> int:
         test_store_clone_removes_destination_when_source_manifest_is_invalid,
         test_store_clone_rejects_source_symlink_before_copying,
         test_store_clone_rejects_manifest_symlink_before_reading,
+        test_store_clone_rejects_top_level_source_symlink,
+        test_store_clone_rolls_back_destination_when_manifest_write_fails,
         test_store_delete_experiment_removes_directory,
         test_store_delete_experiment_rejects_path_escape,
     ]
