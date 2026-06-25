@@ -102,6 +102,10 @@ select {
   min-height: 720px;
 }
 
+.tool-layout-full {
+  grid-template-columns: 1fr;
+}
+
 .experiments-panel {
   position: sticky;
   top: 12px;

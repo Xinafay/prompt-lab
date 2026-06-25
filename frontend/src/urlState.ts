@@ -17,6 +17,9 @@ export const workbenchTabs = [
 
 export type WorkbenchTab = (typeof workbenchTabs)[number];
 
+export const caseSuiteTabs = ["cases", "settings"] as const;
+export type CaseSuiteTab = (typeof caseSuiteTabs)[number];
+
 export interface ExperimentRoute {
   experimentId: string | null;
   tab: WorkbenchTab;
@@ -24,12 +27,18 @@ export interface ExperimentRoute {
 
 export interface CaseSuitesRoute {
   suiteId: string | null;
+  tab: CaseSuiteTab;
 }
 
 const DEFAULT_TAB: WorkbenchTab = "prompt";
+const DEFAULT_CASE_SUITE_TAB: CaseSuiteTab = "cases";
 
 function isWorkbenchTab(value: string | undefined): value is WorkbenchTab {
   return workbenchTabs.includes(value as WorkbenchTab);
+}
+
+function isCaseSuiteTab(value: string | undefined): value is CaseSuiteTab {
+  return caseSuiteTabs.includes(value as CaseSuiteTab);
 }
 
 function decodePathSegment(segment: string | undefined): string | null {
@@ -79,18 +88,24 @@ export function parseCaseSuitesRoute(url: URL): CaseSuitesRoute {
     .split("/")
     .map((segment) => segment.trim())
     .filter((segment) => segment !== "");
-  return { suiteId: decodePathSegment(segments[1]) };
+  const tab = isCaseSuiteTab(segments[2])
+    ? segments[2]
+    : DEFAULT_CASE_SUITE_TAB;
+  return { suiteId: decodePathSegment(segments[1]), tab };
 }
 
 export function buildGlobalSettingsPath(): string {
   return `/${GLOBAL_SETTINGS_SEGMENT}`;
 }
 
-export function buildCaseSuitesPath(suiteId: string | null = null): string {
+export function buildCaseSuitesPath(
+  suiteId: string | null = null,
+  tab: CaseSuiteTab = DEFAULT_CASE_SUITE_TAB
+): string {
   if (suiteId === null) {
     return `/${CASE_SUITES_SEGMENT}`;
   }
-  return `/${CASE_SUITES_SEGMENT}/${encodeURIComponent(suiteId)}`;
+  return `/${CASE_SUITES_SEGMENT}/${encodeURIComponent(suiteId)}/${tab}`;
 }
 
 export function buildExperimentPath(

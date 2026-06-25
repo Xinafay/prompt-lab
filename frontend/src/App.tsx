@@ -106,6 +106,7 @@ import {
   isGlobalSettingsRoute,
   parseCaseSuitesRoute,
   parseExperimentRoute,
+  type CaseSuiteTab,
   type WorkbenchTab
 } from "./urlState";
 import {
@@ -155,7 +156,7 @@ type CaseSuiteDialog = { kind: "new" } | { kind: "addCase" };
 type PendingNavigationTarget =
   | { kind: "experiment"; experiment: Experiment | null }
   | { kind: "experimentDialog"; dialog: ExperimentManagementDialog }
-  | { kind: "caseSuites"; suiteId?: string | null }
+  | { kind: "caseSuites"; suiteId?: string | null; tab?: CaseSuiteTab }
   | { kind: "globalSettings" }
   | { kind: "route"; route: ReturnType<typeof currentExperimentRoute> }
   | { kind: "tab"; tab: WorkbenchTab }
@@ -275,6 +276,11 @@ function App() {
         ? currentCaseSuitesRoute().suiteId
         : null
   );
+  const [activeCaseSuiteTab, setActiveCaseSuiteTab] = useState<CaseSuiteTab>(() =>
+    isCaseSuitesRoute(new URL(window.location.href))
+      ? currentCaseSuitesRoute().tab
+      : "cases"
+  );
   const [caseSuiteCases, setCaseSuiteCases] = useState<Case[]>([]);
   const [caseSuiteCasesBaseline, setCaseSuiteCasesBaseline] = useState<Case[]>(
     []
@@ -393,10 +399,11 @@ function App() {
 
   function writeCaseSuitesRoute(
     suiteId: string | null,
+    tab: CaseSuiteTab,
     historyMode: HistoryMode
   ) {
     const url = new URL(window.location.href);
-    url.pathname = buildCaseSuitesPath(suiteId);
+    url.pathname = buildCaseSuitesPath(suiteId, tab);
     url.search = "";
     const method = historyMode === "push" ? "pushState" : "replaceState";
     window.history[method](window.history.state, "", url);
@@ -408,7 +415,7 @@ function App() {
       return;
     }
     if (appView === "caseSuites") {
-      writeCaseSuitesRoute(selectedCaseSuiteId, historyMode);
+      writeCaseSuitesRoute(selectedCaseSuiteId, activeCaseSuiteTab, historyMode);
       return;
     }
     if (selectedExperiment !== null) {
@@ -537,10 +544,13 @@ function App() {
   function selectCaseSuites(options?: {
     historyMode?: HistoryMode;
     suiteId?: string | null;
+    tab?: CaseSuiteTab;
     updateUrl?: boolean;
   }) {
     const nextSuiteId = options?.suiteId ?? selectedCaseSuiteId;
+    const nextTab = options?.tab ?? activeCaseSuiteTab;
     setAppView("caseSuites");
+    setActiveCaseSuiteTab(nextTab);
     if (options !== undefined && "suiteId" in options) {
       setSelectedCaseSuiteId(options.suiteId ?? null);
     }
@@ -549,7 +559,7 @@ function App() {
     setNavigationSaving(false);
     setCaseSuiteMessage(null);
     if (options?.updateUrl !== false) {
-      writeCaseSuitesRoute(nextSuiteId, options?.historyMode ?? "replace");
+      writeCaseSuitesRoute(nextSuiteId, nextTab, options?.historyMode ?? "replace");
     }
   }
 
@@ -719,7 +729,11 @@ function App() {
       return;
     }
     if (navigation.kind === "caseSuites") {
-      selectCaseSuites({ historyMode: "push", suiteId: navigation.suiteId });
+      selectCaseSuites({
+        historyMode: "push",
+        suiteId: navigation.suiteId,
+        tab: navigation.tab ?? "cases"
+      });
       return;
     }
     if (navigation.kind === "route") {
@@ -778,14 +792,19 @@ function App() {
     }
     const navigation = buildPendingNavigation({
       kind: "caseSuites",
-      suiteId: selectedCaseSuiteId
+      suiteId: selectedCaseSuiteId,
+      tab: "cases"
     });
     if (navigation !== null) {
       setNavigationError(null);
       setPendingNavigation(navigation);
       return;
     }
-    selectCaseSuites({ historyMode: "push", suiteId: selectedCaseSuiteId });
+    selectCaseSuites({
+      historyMode: "push",
+      suiteId: selectedCaseSuiteId,
+      tab: "cases"
+    });
   }
 
   function handleSelectCaseSuite(suiteId: string) {
@@ -795,7 +814,22 @@ function App() {
       return;
     }
     setSelectedCaseSuiteId(suiteId);
-    writeCaseSuitesRoute(suiteId, "push");
+    writeCaseSuitesRoute(suiteId, activeCaseSuiteTab, "push");
+  }
+
+  function handleCaseSuiteTabSelection(tab: CaseSuiteTab) {
+    if (selectedCaseSuiteId === null) return;
+    const currentTab = currentCaseSuitesRoute().tab;
+    if (tab === currentTab) return;
+    if (currentTab === "cases") {
+      const blockedMessage = getSuiteSelectionBlockedMessage(caseSuiteCasesDirty);
+      if (blockedMessage !== null) {
+        setCaseSuiteMessage(blockedMessage);
+        return;
+      }
+    }
+    setActiveCaseSuiteTab(tab);
+    writeCaseSuitesRoute(selectedCaseSuiteId, tab, "push");
   }
 
   function requestNewCaseSuite() {
@@ -1137,9 +1171,11 @@ function App() {
             if (isGlobalSettingsRoute(url)) {
               selectGlobalSettings({ historyMode: "replace" });
             } else if (isCaseSuitesRoute(url)) {
+              const requestedCaseSuitesRoute = parseCaseSuitesRoute(url);
               selectCaseSuites({
                 historyMode: "replace",
-                suiteId: parseCaseSuitesRoute(url).suiteId,
+                suiteId: requestedCaseSuitesRoute.suiteId,
+                tab: requestedCaseSuitesRoute.tab,
                 updateUrl: false
               });
             } else {
@@ -1183,7 +1219,7 @@ function App() {
     setCaseSuites(suites);
     setSelectedCaseSuiteId(nextSuiteId);
     if (appView === "caseSuites") {
-      writeCaseSuitesRoute(nextSuiteId, "replace");
+      writeCaseSuitesRoute(nextSuiteId, activeCaseSuiteTab, "replace");
     }
     return suites;
   }
@@ -1196,9 +1232,10 @@ function App() {
         const suites = await getCaseSuites();
         if (!cancelled) {
           const url = new URL(window.location.href);
-          const requestedSuiteId = isCaseSuitesRoute(url)
-            ? parseCaseSuitesRoute(url).suiteId
+          const requestedCaseSuitesRoute = isCaseSuitesRoute(url)
+            ? parseCaseSuitesRoute(url)
             : null;
+          const requestedSuiteId = requestedCaseSuitesRoute?.suiteId ?? null;
           const nextSuiteId = resolveCaseSuiteId(
             suites,
             requestedSuiteId,
@@ -1207,7 +1244,9 @@ function App() {
           setCaseSuites(suites);
           setSelectedCaseSuiteId(nextSuiteId);
           if (isCaseSuitesRoute(url)) {
-            writeCaseSuitesRoute(nextSuiteId, "replace");
+            const nextTab = requestedCaseSuitesRoute?.tab ?? activeCaseSuiteTab;
+            setActiveCaseSuiteTab(nextTab);
+            writeCaseSuitesRoute(nextSuiteId, nextTab, "replace");
           }
         }
       } catch (error) {
@@ -1304,13 +1343,17 @@ function App() {
     function handlePopState() {
       const url = new URL(window.location.href);
       const requestedRoute = currentExperimentRoute();
+      const requestedCaseSuitesRoute = isCaseSuitesRoute(url)
+        ? parseCaseSuitesRoute(url)
+        : null;
       const navigation = buildPendingNavigation(
         isGlobalSettingsRoute(url)
           ? { kind: "globalSettings" }
-          : isCaseSuitesRoute(url)
+          : requestedCaseSuitesRoute !== null
             ? {
                 kind: "caseSuites",
-                suiteId: parseCaseSuitesRoute(url).suiteId
+                suiteId: requestedCaseSuitesRoute.suiteId,
+                tab: requestedCaseSuitesRoute.tab
               }
           : { kind: "route", route: requestedRoute }
       );
@@ -1324,9 +1367,10 @@ function App() {
         selectGlobalSettings({ historyMode: "replace" });
         return;
       }
-      if (isCaseSuitesRoute(url)) {
+      if (requestedCaseSuitesRoute !== null) {
         selectCaseSuites({
-          suiteId: parseCaseSuitesRoute(url).suiteId,
+          suiteId: requestedCaseSuitesRoute.suiteId,
+          tab: requestedCaseSuitesRoute.tab,
           updateUrl: false
         });
         return;
@@ -3114,7 +3158,13 @@ function App() {
         ) : null}
 
         {state.status === "loaded" ? (
-          <div className="tool-layout">
+          <div
+            className={
+              appView === "globalSettings"
+                ? "tool-layout tool-layout-full"
+                : "tool-layout"
+            }
+          >
             {appView === "caseSuites" ? (
               <CaseSuitesList
                 isBusy={caseSuiteBusy}
@@ -3124,7 +3174,9 @@ function App() {
                 selectedSuiteId={selectedCaseSuiteId}
                 suites={caseSuites}
               />
-            ) : (
+            ) : null}
+
+            {appView === "experiment" ? (
               <ExperimentsList
                 experiments={state.experiments}
                 onClone={requestCloneExperiment}
@@ -3135,7 +3187,7 @@ function App() {
                   appView === "experiment" ? selectedExperiment?.id ?? null : null
                 }
               />
-            )}
+            ) : null}
 
             <div className="detail-panel">
               {appView === "globalSettings" ? (
@@ -3160,20 +3212,54 @@ function App() {
               ) : null}
 
               {appView === "caseSuites" ? (
-                <CaseSuiteManager
-                  cases={caseSuiteCases}
-                  caseSuiteCasesDirty={caseSuiteCasesDirty}
-                  isBusy={caseSuiteBusy}
-                  message={caseSuiteMessage}
-                  onAddCase={requestAddCaseToSuite}
-                  onCasesChange={handleCaseSuiteCasesChange}
-                  onDeleteSuite={handleDeleteCaseSuite}
-                  onResetCases={handleResetCaseSuiteCases}
-                  onSaveCases={handleSaveCaseSuiteCases}
-                  onUpdateSuite={handleUpdateCaseSuite}
-                  selectedSuiteId={selectedCaseSuiteId}
-                  suites={caseSuites}
-                />
+                <>
+                  <div
+                    className="workbench-tabs"
+                    role="tablist"
+                    aria-label="Case Suite sections"
+                  >
+                    <button
+                      aria-selected={activeCaseSuiteTab === "cases"}
+                      className={
+                        activeCaseSuiteTab === "cases"
+                          ? "workbench-tab is-active"
+                          : "workbench-tab"
+                      }
+                      onClick={() => handleCaseSuiteTabSelection("cases")}
+                      role="tab"
+                      type="button"
+                    >
+                      Cases
+                    </button>
+                    <button
+                      aria-selected={activeCaseSuiteTab === "settings"}
+                      className={
+                        activeCaseSuiteTab === "settings"
+                          ? "workbench-tab is-active"
+                          : "workbench-tab"
+                      }
+                      onClick={() => handleCaseSuiteTabSelection("settings")}
+                      role="tab"
+                      type="button"
+                    >
+                      Settings
+                    </button>
+                  </div>
+                  <CaseSuiteManager
+                    cases={caseSuiteCases}
+                    caseSuiteCasesDirty={caseSuiteCasesDirty}
+                    isBusy={caseSuiteBusy}
+                    message={caseSuiteMessage}
+                    onAddCase={requestAddCaseToSuite}
+                    onCasesChange={handleCaseSuiteCasesChange}
+                    onDeleteSuite={handleDeleteCaseSuite}
+                    onResetCases={handleResetCaseSuiteCases}
+                    onSaveCases={handleSaveCaseSuiteCases}
+                    onUpdateSuite={handleUpdateCaseSuite}
+                    selectedSuiteId={selectedCaseSuiteId}
+                    suites={caseSuites}
+                  />
+                </>
               ) : null}
 
               {appView === "experiment" && state.experiments.length === 0 ? (
