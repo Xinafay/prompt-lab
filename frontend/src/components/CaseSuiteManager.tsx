@@ -90,25 +90,25 @@ export function CaseSuiteManager({
             : null;
   const resetCasesDisabled = isBusy || !caseSuiteCasesDirty;
   const resetCasesDisabledReason = isBusy
-    ? "Wait for the suite case save to finish."
+    ? "Wait for the current suite action to finish."
     : "Change suite cases before resetting.";
   const saveCasesDisabledReason =
     selectedSuite === null
       ? "Select a case suite before saving cases."
       : isBusy
-        ? "Wait for the suite case save to finish."
+        ? "Wait for the current suite action to finish."
         : !caseSuiteCasesDirty
           ? "Change suite cases before saving."
           : null;
   const resetSettingsDisabled = isBusy || !suiteDraftDirty;
   const resetSettingsDisabledReason = isBusy
-    ? "Wait for the settings save to finish."
+    ? "Wait for the current suite action to finish."
     : "Change suite settings before resetting.";
   const saveSettingsDisabledReason =
     selectedSuite === null
       ? "Select a case suite before saving settings."
       : isBusy
-        ? "Wait for the settings save to finish."
+        ? "Wait for the current suite action to finish."
         : !suiteDraftDirty
           ? "Change suite settings before saving."
           : null;
@@ -119,6 +119,13 @@ export function CaseSuiteManager({
     setEditingCase(null);
     setError(null);
   }, [selectedSuite]);
+
+  useEffect(() => {
+    if (activeTab !== "cases") {
+      setEditingCase(null);
+    }
+    setError(null);
+  }, [activeTab]);
 
   useEffect(() => {
     if (

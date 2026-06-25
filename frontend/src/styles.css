@@ -3229,7 +3229,9 @@ select {
   }
 
   .settings-section-actions button,
-  .settings-section-danger button {
+  .settings-section-danger button,
+  .settings-section-actions .disabled-tooltip-wrapper,
+  .settings-section-danger .disabled-tooltip-wrapper {
     grid-column: 1;
     grid-row: auto;
     justify-self: flex-start;
