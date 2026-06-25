@@ -69,53 +69,79 @@ test("demo cases tab shows suite-backed cases and opens case suites", async ({
   await expect(jsonCases).toContainText("service-brief");
 
   await page.getByRole("button", { name: "Case Suites" }).click();
-  await expect(page).toHaveURL(/\/case-suites\/demo-json-briefs$/);
+  await expect(page).toHaveURL(/\/case-suites\/demo-json-briefs\/cases$/);
   await expect(
     page.getByRole("navigation", { name: "Case Suites" })
   ).toBeVisible();
-  await expect(
-    page.getByRole("region", { name: "Case Suite details" })
-  ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Case Suites" })).toBeVisible();
-  const suiteList = page.getByRole("navigation", { name: "Case Suites" });
-  await expect(
-    suiteList.getByRole("button", { name: /Demo JSON briefs/ })
-  ).toBeVisible();
-  await expect(
-    suiteList.getByRole("button", { name: /Demo string replies/ })
-  ).toBeVisible();
-  const suiteDetails = page.getByRole("region", { name: "Case Suite details" });
-  await expect(suiteDetails.getByRole("table", { name: "Payload" })).toBeVisible();
-  await expect(suiteDetails.getByRole("button", { name: "Edit" }).first()).toBeVisible();
-  await expect(
-    suiteDetails.getByRole("button", { name: "Delete" }).first()
-  ).toBeVisible();
-  await expect(suiteDetails).not.toContainText("Delete selected case");
+  await expect(page.getByRole("tab", { name: "Cases" })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
+  await expect(page.getByRole("tab", { name: "Settings" })).toBeVisible();
 
-  await suiteDetails.getByRole("button", { name: "Edit" }).first().click();
+  const suiteWorkspace = page.getByRole("region", {
+    name: "Case Suite workspace"
+  });
+  await expect(suiteWorkspace).toBeVisible();
+  await expect(
+    suiteWorkspace.getByRole("heading", { name: "Suite cases" })
+  ).not.toBeVisible();
+  await expect(suiteWorkspace.getByRole("region", { name: "Cases" })).toBeVisible();
+  await expect(
+    suiteWorkspace.getByRole("button", { name: "Edit payload" })
+  ).toBeVisible();
+  await expect(
+    suiteWorkspace.getByRole("button", { name: "Delete case" })
+  ).toBeVisible();
+  await expect(
+    suiteWorkspace.getByRole("button", { name: "Delete suite" })
+  ).not.toBeVisible();
+
+  await suiteWorkspace.getByRole("button", { name: "Edit payload" }).click();
   await expect(
     page.getByRole("dialog", { name: "Edit case payload" })
   ).toBeVisible();
   await expect(page.getByRole("region", { name: "Payload JSON" })).toBeVisible();
   await page.getByRole("button", { name: "Cancel" }).click();
 
-  await suiteDetails.getByRole("button", { name: "Add case" }).click();
+  await suiteWorkspace.getByRole("button", { name: "Add case" }).click();
   await expect(page.getByRole("dialog", { name: "Add case" })).toBeVisible();
   await expect(page.getByText("Choose JSON file")).toBeVisible();
   await expect(page.getByText("No file selected")).toBeVisible();
   await page.getByRole("button", { name: "Cancel" }).click();
 
+  await page.getByRole("tab", { name: "Settings" }).click();
+  await expect(page).toHaveURL(/\/case-suites\/demo-json-briefs\/settings$/);
+  await expect(
+    page.getByRole("heading", { name: "Case Suite settings" })
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Delete suite" })
+  ).toBeVisible();
+  await expect(page.getByRole("region", { name: "Cases" })).not.toBeVisible();
+
   await page.reload();
   await expect(
-    page.getByRole("navigation", { name: "Case Suites" })
-  ).toBeVisible();
+    page
+  ).toHaveURL(/\/case-suites\/demo-json-briefs\/settings$/);
   await expect(
-    page.getByRole("region", { name: "Case Suite details" })
-  ).toContainText("Demo JSON briefs");
+    page.getByRole("heading", { name: "Case Suite settings" })
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "Experiments" }).click();
   await expect(page).toHaveURL(/\/experiments\/demo-json\/prompt$/);
   await expect(page.getByRole("navigation", { name: "Experiments" })).toBeVisible();
+});
+
+test("global settings uses a full-width settings workspace", async ({ page }) => {
+  await page.goto("/global-settings");
+
+  await expect(page.getByRole("heading", { name: "Global settings" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Experiments" })).not.toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Case Suites" })).not.toBeVisible();
+  await expect(page.getByRole("button", { name: "New" })).not.toBeVisible();
+  await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 });
 
 test("demo string prompt and validators tabs show source sections", async ({ page }) => {
@@ -351,6 +377,35 @@ test("demo json validators can overwrite current version", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Validate active run" })).toBeVisible();
 });
 
+test("experiment clone and delete actions live in settings", async ({ page }) => {
+  await page.goto("/experiments/demo-json/prompt");
+
+  const experimentRail = page.getByRole("navigation", { name: "Experiments" });
+  await expect(
+    experimentRail.getByRole("button", { name: "Clone" })
+  ).not.toBeVisible();
+  await expect(
+    experimentRail.getByRole("button", { name: "Delete" })
+  ).not.toBeVisible();
+
+  await page.getByRole("tab", { name: "Settings" }).click();
+  await expect(page).toHaveURL(/\/experiments\/demo-json\/settings$/);
+  await expect(page.getByRole("button", { name: "Clone experiment" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete experiment" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Clone experiment" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Clone experiment" })
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).click();
+
+  await page.getByRole("button", { name: "Delete experiment" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Delete experiment" })
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).click();
+});
+
 test("experiment management creates clones and deletes experiments", async ({
   page
 }) => {
@@ -384,10 +439,7 @@ test("experiment management creates clones and deletes experiments", async ({
   );
 
   await page.goto("/demo-json/settings");
-  await page
-    .getByRole("navigation", { name: "Experiments" })
-    .getByRole("button", { name: "Clone", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Clone experiment" }).click();
   const cloneDialog = page.getByRole("dialog", { name: "Clone experiment" });
   await cloneDialog.getByLabel("Title").fill(`Managed Clone ${unique}`);
   await cloneDialog.getByRole("button", { name: "Clone experiment" }).click();
@@ -404,10 +456,7 @@ test("experiment management creates clones and deletes experiments", async ({
     "Report"
   );
 
-  await page
-    .getByRole("navigation", { name: "Experiments" })
-    .getByRole("button", { name: "Delete", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Delete experiment" }).click();
   const deleteDialog = page.getByRole("dialog", { name: "Delete experiment" });
   await expect(deleteDialog).toContainText(
     "runs, validations, reviews, proposals, and comparisons"
