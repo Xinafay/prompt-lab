@@ -161,7 +161,7 @@ function currentExperimentRoute() {
 }
 
 const SHOW_DRY_RUN_CONTROLS =
-  import.meta.env.VITE_PROMPT_LAB_SHOW_DRY_RUN === "1";
+  import.meta.env?.VITE_PROMPT_LAB_SHOW_DRY_RUN === "1";
 
 function workflowCompletionMessage(kind: string): string {
   if (kind === "run_version") return "Active run completed.";
@@ -193,6 +193,26 @@ function sourceDraftsMatch(
   return (
     left.prompt === right.prompt &&
     (left.model_py ?? null) === (right.model_py ?? null)
+  );
+}
+
+export function caseInclusionMatchesCases(
+  nextCases: Case[],
+  committedCases: Case[]
+): boolean {
+  if (nextCases.length !== committedCases.length) {
+    return false;
+  }
+  const enabledByCaseId = new Map(
+    committedCases.map((artifactCase) => [
+      artifactCase.id,
+      artifactCase.enabled
+    ])
+  );
+  return nextCases.every(
+    (artifactCase) =>
+      enabledByCaseId.has(artifactCase.id) &&
+      enabledByCaseId.get(artifactCase.id) === artifactCase.enabled
   );
 }
 
@@ -1534,19 +1554,9 @@ function App() {
     if (detailState.status !== "loaded") {
       return false;
     }
-    if (nextCases.length !== detailState.overview.cases.length) {
-      return false;
-    }
-    const enabledByCaseId = new Map(
-      detailState.overview.cases.map((artifactCase) => [
-        artifactCase.id,
-        artifactCase.enabled
-      ])
-    );
-    return nextCases.every(
-      (artifactCase) =>
-        enabledByCaseId.has(artifactCase.id) &&
-        enabledByCaseId.get(artifactCase.id) === artifactCase.enabled
+    return caseInclusionMatchesCases(
+      nextCases,
+      detailState.overview.cases
     );
   }
 

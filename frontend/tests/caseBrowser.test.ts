@@ -4,6 +4,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { caseInclusionMatchesCases } from "../src/App.tsx";
 import { CaseBrowser } from "../src/components/CaseBrowser.tsx";
 
 function functionSource(source: string, name: string): string {
@@ -137,19 +138,76 @@ test("production workbench only marks case inclusion dirty when it differs", () 
   );
 });
 
-test("production workbench disables run controls for unsaved case inclusion", () => {
+test("case inclusion matcher compares committed enabled states by case id", () => {
+  const committedCases = [
+    { id: "alpha", enabled: true, payload: { value: "one" } },
+    { id: "bravo", enabled: false, payload: { value: "two" } }
+  ];
+
+  assert.equal(
+    caseInclusionMatchesCases(
+      [
+        { id: "bravo", enabled: false, payload: { value: "changed" } },
+        { id: "alpha", enabled: true, payload: { value: "changed" } }
+      ],
+      committedCases
+    ),
+    true
+  );
+  assert.equal(
+    caseInclusionMatchesCases(
+      [
+        { id: "alpha", enabled: false, payload: { value: "one" } },
+        { id: "bravo", enabled: false, payload: { value: "two" } }
+      ],
+      committedCases
+    ),
+    false
+  );
+  assert.equal(
+    caseInclusionMatchesCases(
+      [{ id: "alpha", enabled: true, payload: { value: "one" } }],
+      committedCases
+    ),
+    false
+  );
+  assert.equal(
+    caseInclusionMatchesCases(
+      [
+        { id: "alpha", enabled: true, payload: { value: "one" } },
+        { id: "bravo", enabled: false, payload: { value: "two" } },
+        { id: "charlie", enabled: true, payload: { value: "three" } }
+      ],
+      committedCases
+    ),
+    false
+  );
+});
+
+test("production workbench disables run and preview controls for unsaved case inclusion", () => {
   const source = readFileSync(
     new URL("../src/App.tsx", import.meta.url),
     "utf8"
   );
+  const runDisabledMatches = source.match(/disabled=\{runActionDisabled\}/g) ?? [];
+  const runDisabledReasonMatches =
+    source.match(/disabledReason=\{runActionDisabledReason\}/g) ?? [];
 
   assert.match(source, /const runActionDisabled = workflowLocked \|\| casesDirty;/);
   assert.match(
     source,
     /const runActionDisabledReason = workflowLocked[\s\S]*Save case inclusion before running or previewing/
   );
-  assert.match(source, /disabled=\{runActionDisabled\}/);
-  assert.match(source, /disabledReason=\{runActionDisabledReason\}/);
+  assert.equal(runDisabledMatches.length, 2);
+  assert.equal(runDisabledReasonMatches.length, 2);
+  assert.match(
+    source,
+    /secondaryAction=[\s\S]*?activeTab === "runs"[\s\S]*?disabled=\{runActionDisabled\}[\s\S]*?disabledReason=\{runActionDisabledReason\}[\s\S]*?onClick=\{handlePreviewRunPrompts\}/
+  );
+  assert.match(
+    source,
+    /primaryAction=[\s\S]*?activeTab === "runs"[\s\S]*?disabled=\{runActionDisabled\}[\s\S]*?disabledReason=\{runActionDisabledReason\}[\s\S]*?onClick=\{handleRunVersion\}/
+  );
 });
 
 test("case browser stacks before the full mobile app breakpoint", () => {
