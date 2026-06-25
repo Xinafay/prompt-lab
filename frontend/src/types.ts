@@ -37,6 +37,20 @@ export interface Experiment {
   };
 }
 
+export interface ExperimentCreateRequest {
+  title: string;
+  output_type: OutputType;
+  model_entrypoint?: string | null;
+}
+
+export interface ExperimentCloneRequest {
+  title: string;
+}
+
+export interface ExperimentDeleteResponse {
+  experiment_id: string;
+}
+
 export interface Case {
   id: string;
   payload: Record<string, unknown>;

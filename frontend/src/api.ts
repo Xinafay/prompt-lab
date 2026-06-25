@@ -7,6 +7,9 @@ import type {
   CompareMatrixResponse,
   CreatedVersionResponse,
   Experiment,
+  ExperimentCloneRequest,
+  ExperimentCreateRequest,
+  ExperimentDeleteResponse,
   FindingDecisionSet,
   GlobalSettings,
   JobEvent,
@@ -99,6 +102,30 @@ export function updateExperiment(
   return apiPut<Experiment>(
     `/api/experiments/${encodeURIComponent(experimentId)}`,
     experiment
+  );
+}
+
+export function createExperiment(
+  request: ExperimentCreateRequest
+): Promise<Experiment> {
+  return apiPost<Experiment>("/api/experiments", request);
+}
+
+export function cloneExperiment(
+  experimentId: string,
+  request: ExperimentCloneRequest
+): Promise<Experiment> {
+  return apiPost<Experiment>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/clone`,
+    request
+  );
+}
+
+export function deleteExperiment(
+  experimentId: string
+): Promise<ExperimentDeleteResponse> {
+  return apiDelete<ExperimentDeleteResponse>(
+    `/api/experiments/${encodeURIComponent(experimentId)}`
   );
 }
 
