@@ -176,15 +176,13 @@ class PromptLabStore:
         if title.strip() == "":
             raise ValueError("Experiment title cannot be blank")
         source_dir = self.experiment_dir(source_experiment_id)
+        source_artifact = self.load_experiment(source_experiment_id)
         experiment_id = self._available_experiment_id(title)
         destination = self.experiments_root.resolve() / experiment_id
         try:
             shutil.copytree(source_dir, destination)
         except FileExistsError:
             raise FileExistsError("Experiment already exists")
-        source_artifact = ExperimentArtifact.model_validate(
-            _read_json(destination / "experiment.json")
-        )
         cloned = source_artifact.model_copy(
             update={
                 "id": experiment_id,
