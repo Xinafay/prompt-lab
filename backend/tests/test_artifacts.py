@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from prompt_lab.models.artifacts import (
     CaseArtifact,
+    CaseSuiteArtifact,
     ExperimentArtifact,
     OutputConfig,
     RunArtifact,
@@ -103,6 +104,48 @@ def test_text_experiment_artifact_validates() -> None:
     assert defaults.repeat_count == 3
     assert defaults.llm_cache == "disabled"
     assert defaults.case_order == "case-major"
+
+
+def test_case_suite_artifact_accepts_minimal_manifest() -> None:
+    artifact = CaseSuiteArtifact.model_validate(
+        {
+            "schema_version": "prompt_lab.case_suite/v1",
+            "id": "story-chapters",
+            "title": "Story chapters",
+            "description": "Shared story input cases.",
+        }
+    )
+
+    assert artifact.id == "story-chapters"
+    assert artifact.title == "Story chapters"
+    assert artifact.description == "Shared story input cases."
+
+
+def test_experiment_artifact_accepts_case_suite_id() -> None:
+    artifact = ExperimentArtifact.model_validate(
+        {
+            "schema_version": "prompt_lab.experiment/v1",
+            "id": "demo",
+            "title": "Demo",
+            "description": "",
+            "case_suite_id": "demo-suite",
+            "active_version": "v001",
+            "output": {"type": "text"},
+            "template": {"engine": "jinjax", "path": "prompt.md"},
+            "models": {
+                "generator_model": "local/a",
+                "validator_model": "openai/b",
+                "judge_model": "openai/b",
+            },
+            "run_defaults": {
+                "repeat_count": 1,
+                "llm_cache": "disabled",
+                "case_order": "case-major",
+            },
+        }
+    )
+
+    assert artifact.case_suite_id == "demo-suite"
 
 
 def test_output_config_rejects_invalid_mode_fields() -> None:
@@ -310,6 +353,8 @@ def main() -> int:
     tests = [
         test_pydantic_experiment_artifact_validates,
         test_text_experiment_artifact_validates,
+        test_case_suite_artifact_accepts_minimal_manifest,
+        test_experiment_artifact_accepts_case_suite_id,
         test_output_config_rejects_invalid_mode_fields,
         test_run_defaults_rejects_invalid_values_and_extras,
         test_case_artifact_validates_plain_payload,

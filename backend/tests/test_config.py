@@ -19,6 +19,15 @@ def test_default_config_uses_repo_local_paths() -> None:
         assert config.settings_path == resolved_root / "config" / "settings.json"
 
 
+def test_config_defaults_case_suites_root() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+
+        config = PromptLabConfig.from_env(project_root=root)
+
+        assert config.case_suites_root == root.resolve() / "case_suites"
+
+
 def test_config_accepts_experiments_root_override() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -34,6 +43,23 @@ def test_config_accepts_experiments_root_override() -> None:
                 os.environ["PROMPT_LAB_EXPERIMENTS_ROOT"] = previous
 
         assert config.experiments_root == experiments.resolve()
+
+
+def test_config_accepts_case_suites_root_override() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        case_suites = root / "custom-case-suites"
+        previous = os.environ.get("PROMPT_LAB_CASE_SUITES_ROOT")
+        os.environ["PROMPT_LAB_CASE_SUITES_ROOT"] = str(case_suites)
+        try:
+            config = PromptLabConfig.from_env(project_root=root)
+        finally:
+            if previous is None:
+                os.environ.pop("PROMPT_LAB_CASE_SUITES_ROOT", None)
+            else:
+                os.environ["PROMPT_LAB_CASE_SUITES_ROOT"] = previous
+
+        assert config.case_suites_root == case_suites.resolve()
 
 
 def test_config_accepts_examples_root_override() -> None:
@@ -83,7 +109,9 @@ def test_config_resolves_relative_paths_against_current_working_directory() -> N
 def main() -> int:
     tests = [
         test_default_config_uses_repo_local_paths,
+        test_config_defaults_case_suites_root,
         test_config_accepts_experiments_root_override,
+        test_config_accepts_case_suites_root_override,
         test_config_accepts_examples_root_override,
         test_config_resolves_relative_paths_against_current_working_directory,
     ]

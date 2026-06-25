@@ -59,6 +59,17 @@ class RunDefaults(BaseModel):
     excluded_case_ids: list[str] = Field(default_factory=list)
 
 
+class CaseSuiteArtifact(BaseModel):
+    """Case Suite manifest stored as `suite.json`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["prompt_lab.case_suite/v1"]
+    id: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    description: str = ""
+
+
 class ExperimentArtifact(BaseModel):
     """Experiment manifest stored as `experiment.json`."""
 
@@ -68,6 +79,7 @@ class ExperimentArtifact(BaseModel):
     id: str = Field(min_length=1)
     title: str = Field(min_length=1)
     description: str = ""
+    case_suite_id: str | None = Field(default=None, min_length=1)
     active_version: str = Field(min_length=1)
     output: OutputConfig
     template: TemplateConfig
