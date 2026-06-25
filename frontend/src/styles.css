@@ -920,18 +920,6 @@ select {
   gap: 16px;
 }
 
-.validators-editor-actions,
-.validators-editor-add-actions,
-.validators-editor-detail-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.validators-editor-actions {
-  justify-content: flex-end;
-}
-
 .validator-editor,
 .validator-json-field {
   display: grid;

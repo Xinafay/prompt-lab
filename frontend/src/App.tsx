@@ -62,6 +62,7 @@ import { ProposalView } from "./components/ProposalView";
 import { ReviewView } from "./components/ReviewView";
 import { RunsView } from "./components/RunsView";
 import { TooltipButton } from "./components/TooltipButton";
+import { validateValidatorDraft } from "./components/ValidatorEditor";
 import {
   buildValidationInclusionUpdate,
   ValidationView
@@ -345,6 +346,7 @@ function App() {
   const [validatorsDraft, setValidatorsDraft] =
     useState<VersionValidatorsDraft | null>(null);
   const [validatorsDirty, setValidatorsDirty] = useState(false);
+  const [validatorsResetNonce, setValidatorsResetNonce] = useState(0);
   const [pendingValidatorsOverwrite, setPendingValidatorsOverwrite] =
     useState<PendingValidatorsOverwrite | null>(null);
   const [casesDraft, setCasesDraft] = useState<Case[] | null>(null);
@@ -1802,6 +1804,7 @@ function App() {
 
   function handleValidatorsReset() {
     clearValidatorEditor();
+    setValidatorsResetNonce((value) => value + 1);
     setWorkflowMessage(null);
   }
 
@@ -2928,6 +2931,9 @@ function App() {
   }
 
   function handleResetExperimentSettings() {
+    setSettingsDirty(false);
+    setSettingsDraft(null);
+    setSettingsResetNonce((value) => value + 1);
     setSettingsMessage(null);
   }
 
@@ -3060,6 +3066,36 @@ function App() {
     sameVersion: baselineVersion === candidateVersion,
     versionCount: knownVersions.length
   });
+  const validatorsDraftValidationErrors = useMemo(
+    () =>
+      validatorsDraft === null
+        ? []
+        : validateValidatorDraft(validatorsDraft.validators),
+    [validatorsDraft]
+  );
+  const validatorsVersionSaveDisabled =
+    workflowLocked ||
+    validatorsDraft === null ||
+    validatorsDraftValidationErrors.length > 0;
+  const validatorsVersionSaveDisabledReason = workflowLocked
+    ? "Wait for the current workflow action to finish."
+    : validatorsDraft === null
+      ? "Change validators before saving."
+      : validatorsDraftValidationErrors.length > 0
+        ? "Fix validator errors before saving."
+        : null;
+  const validatorsResetDisabled = workflowLocked || validatorsDraft === null;
+  const validatorsResetDisabledReason = workflowLocked
+    ? "Wait for the current workflow action to finish."
+    : "Change validators before resetting.";
+  const settingsSaveDisabled = settingsBusy || !settingsDirty;
+  const settingsSaveDisabledReason = settingsBusy
+    ? "Wait for the settings save to finish."
+    : "Change settings before saving.";
+  const settingsResetDisabled = settingsBusy || !settingsDirty;
+  const settingsResetDisabledReason = settingsBusy
+    ? "Wait for the settings save to finish."
+    : "Change settings before resetting.";
   const pendingNavigationKind = pendingNavigation?.unsavedKind ?? null;
   const pendingNavigationDialog = pendingNavigationCopy(pendingNavigationKind);
   const pendingNavigationSaveDisabled =
@@ -3116,6 +3152,14 @@ function App() {
         >
           Save
         </TooltipButton>
+      </div>
+    ) : activeTab === "settings" && settingsDirty ? (
+      <div className="workflow-unsaved-action">
+        <span>Unsaved settings changes.</span>
+      </div>
+    ) : activeTab === "validators" && validatorsDirty ? (
+      <div className="workflow-unsaved-action">
+        <span>Unsaved validator changes.</span>
       </div>
     ) : null;
 
@@ -3283,7 +3327,38 @@ function App() {
                     workflowMode={workflowMode}
                     unsavedChangesAction={workflowUnsavedChangesAction}
                     secondaryAction={
-                      activeTab === "runs" ? (
+                      activeTab === "settings" ? (
+                        <TooltipButton
+                          className="secondary-action"
+                          disabled={settingsResetDisabled}
+                          disabledReason={settingsResetDisabledReason}
+                          onClick={handleResetExperimentSettings}
+                          type="button"
+                        >
+                          Reset
+                        </TooltipButton>
+                      ) : activeTab === "validators" ? (
+                        <>
+                          <TooltipButton
+                            className="secondary-action"
+                            disabled={validatorsResetDisabled}
+                            disabledReason={validatorsResetDisabledReason}
+                            onClick={handleValidatorsReset}
+                            type="button"
+                          >
+                            Reset
+                          </TooltipButton>
+                          <TooltipButton
+                            className="secondary-action danger-action"
+                            disabled={validatorsVersionSaveDisabled}
+                            disabledReason={validatorsVersionSaveDisabledReason}
+                            onClick={() => requestValidatorsOverwrite()}
+                            type="button"
+                          >
+                            Overwrite current version
+                          </TooltipButton>
+                        </>
+                      ) : activeTab === "runs" ? (
                         <TooltipButton
                           className="secondary-action"
                           disabled={runActionDisabled}
@@ -3337,7 +3412,29 @@ function App() {
                       ) : null
                     }
                     primaryAction={
-                      activeTab === "review" ? (
+                      activeTab === "settings" ? (
+                        <TooltipButton
+                          className="primary-action"
+                          disabled={settingsSaveDisabled}
+                          disabledReason={settingsSaveDisabledReason}
+                          form="experiment-settings-form"
+                          type="submit"
+                        >
+                          {settingsBusy ? "Saving..." : "Save"}
+                        </TooltipButton>
+                      ) : activeTab === "validators" ? (
+                        <TooltipButton
+                          className="primary-action"
+                          disabled={validatorsVersionSaveDisabled}
+                          disabledReason={validatorsVersionSaveDisabledReason}
+                          onClick={() =>
+                            void handleSaveVersionValidators("create_next")
+                          }
+                          type="button"
+                        >
+                          {workflowLocked ? "Saving..." : "Save as next version"}
+                        </TooltipButton>
+                      ) : activeTab === "review" ? (
                         <TooltipButton
                           className="primary-action"
                           disabled={judgeAction.disabled}
@@ -3447,7 +3544,6 @@ function App() {
                         onDelete={requestDeleteExperiment}
                         onDirtyChange={setSettingsDirty}
                         onDraftChange={setSettingsDraft}
-                        onReset={handleResetExperimentSettings}
                         onSave={handleSaveExperimentSettings}
                       />
                     ) : null}
@@ -3457,13 +3553,7 @@ function App() {
                         isBusy={workflowLocked}
                         message={workflowMessage}
                         onDraftChange={handleValidatorsDraftChange}
-                        onOverwriteCurrent={() =>
-                          requestValidatorsOverwrite()
-                        }
-                        onReset={handleValidatorsReset}
-                        onSaveAsNext={() =>
-                          void handleSaveVersionValidators("create_next")
-                        }
+                        resetNonce={validatorsResetNonce}
                         validators={detailState.overview.validators ?? []}
                       />
                     ) : null}

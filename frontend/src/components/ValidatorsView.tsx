@@ -24,9 +24,7 @@ interface ValidatorsViewProps {
   isBusy?: boolean;
   message?: string | null;
   onDraftChange?: (draft: VersionValidatorsDraft | null) => void;
-  onOverwriteCurrent?: () => void;
-  onReset?: () => void;
-  onSaveAsNext?: () => void;
+  resetNonce?: number;
   validators: ValidatorDefinition[];
 }
 
@@ -425,9 +423,7 @@ export function ValidatorsView({
   isBusy = false,
   message = null,
   onDraftChange = () => undefined,
-  onOverwriteCurrent = () => undefined,
-  onReset = () => undefined,
-  onSaveAsNext = () => undefined,
+  resetNonce = 0,
   validators
 }: ValidatorsViewProps) {
   const [draft, setDraft] = useState<ValidatorDefinition[]>(() =>
@@ -441,7 +437,7 @@ export function ValidatorsView({
   useEffect(() => {
     setDraft(cloneValidators(validators));
     setModalState(null);
-  }, [validators]);
+  }, [validators, resetNonce]);
 
   function nextDraftWithModalValidator(
     state: ValidatorModalState
@@ -659,32 +655,6 @@ export function ValidatorsView({
           <h2>Validators</h2>
           <p>Edit validators stored with this version.</p>
         </div>
-        <div className="validators-editor-actions">
-          <button
-            className="secondary-action"
-            disabled={actionState.resetDisabled}
-            onClick={resetDraft}
-            type="button"
-          >
-            Reset
-          </button>
-          <button
-            className="secondary-action danger-action"
-            disabled={actionState.saveDisabled}
-            onClick={onOverwriteCurrent}
-            type="button"
-          >
-            Overwrite current version
-          </button>
-          <button
-            className="primary-action"
-            disabled={actionState.saveDisabled}
-            onClick={onSaveAsNext}
-            type="button"
-          >
-            {isBusy ? "Saving..." : "Save as next version"}
-          </button>
-        </div>
       </div>
 
       {message !== null ? <div className="settings-message">{message}</div> : null}
@@ -761,10 +731,4 @@ export function ValidatorsView({
       ) : null}
     </section>
   );
-
-  function resetDraft() {
-    setDraft(cloneValidators(validators));
-    setModalState(null);
-    onReset();
-  }
 }

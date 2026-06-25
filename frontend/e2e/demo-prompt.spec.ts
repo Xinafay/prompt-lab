@@ -285,7 +285,7 @@ test("demo json validators can be saved as next version", async ({ page }) => {
   await editor.getByLabel("Title").first().fill(editedTitle);
   await dialog.getByRole("button", { name: "Save changes" }).click();
 
-  await validators.getByRole("button", { name: "Save as next version" }).click();
+  await page.getByRole("button", { name: "Save as next version" }).click();
 
   await expect(
     validators.getByText(/^Created v\d+ and switched to it\.$/)
@@ -346,7 +346,7 @@ test("demo json validators can overwrite current version", async ({ page }) => {
   await editDialog.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByRole("dialog")).not.toBeVisible();
 
-  await validators.getByRole("button", { name: "Overwrite current version" }).click();
+  await page.getByRole("button", { name: "Overwrite current version" }).click();
   const dialog = page.getByRole("dialog", {
     name: "Overwrite current validators?"
   });

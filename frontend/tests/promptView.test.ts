@@ -256,19 +256,14 @@ test("production workbench delegates prompt and validators tabs", () => {
     source,
     /<ValidatorsView\s+isBusy=\{workflowLocked\}\s+message=\{workflowMessage\}\s+onDraftChange=\{handleValidatorsDraftChange\}/
   );
-  assert.match(
-    source,
-    /onOverwriteCurrent=\{\(\) =>\s+requestValidatorsOverwrite\(\)\s+\}/
-  );
-  assert.match(source, /onReset=\{handleValidatorsReset\}/);
-  assert.match(
-    source,
-    /onSaveAsNext=\{\(\) =>\s+void handleSaveVersionValidators\("create_next"\)\s+\}/
-  );
+  assert.match(source, /resetNonce=\{validatorsResetNonce\}/);
   assert.match(
     source,
     /validators=\{detailState\.overview\.validators \?\? \[\]\}/
   );
+  assert.match(source, /activeTab === "validators"/);
+  assert.match(source, /Overwrite current version/);
+  assert.match(source, /handleSaveVersionValidators\("create_next"\)/);
   assert.match(source, /isRunning=\{workflowLocked\}/);
   assert.match(source, /onRunVersion=\{handleRunVersion\}/);
   assert.doesNotMatch(

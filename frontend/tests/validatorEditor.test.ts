@@ -613,9 +613,6 @@ test("ValidatorsView renders validator cards instead of the editor by default", 
       isBusy: false,
       message: null,
       onDraftChange: () => undefined,
-      onOverwriteCurrent: () => undefined,
-      onReset: () => undefined,
-      onSaveAsNext: () => undefined,
       validators: [validator]
     })
   );
@@ -625,8 +622,8 @@ test("ValidatorsView renders validator cards instead of the editor by default", 
   assert.match(html, /Edit/);
   assert.match(html, /Duplicate/);
   assert.match(html, /Delete/);
-  assert.match(html, /Overwrite current version/);
-  assert.match(html, /Save as next version/);
+  assert.doesNotMatch(html, /Overwrite current version/);
+  assert.doesNotMatch(html, /Save as next version/);
   assert.doesNotMatch(html, /aria-label="Validator editor"/);
   assert.doesNotMatch(html, /Validator JSON/);
 });

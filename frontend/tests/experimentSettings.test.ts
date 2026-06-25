@@ -90,12 +90,21 @@ test("experiment settings renders selected case suite selector", () => {
   assert.match(html, /suite-regression/);
 });
 
-test("experiment settings exposes dirty save state copy", () => {
+test("experiment settings exposes a toolbar-submittable form", () => {
   const source = readFileSync(
     new URL("../src/components/ExperimentSettings.tsx", import.meta.url),
     "utf8"
   );
 
-  assert.match(source, /settings-unsaved-action/);
+  assert.match(source, /id="experiment-settings-form"/);
+  assert.doesNotMatch(source, /settings-unsaved-action/);
+});
+
+test("production workbench places experiment settings actions in the toolbar", () => {
+  const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+
+  assert.match(source, /activeTab === "settings"/);
   assert.match(source, /Unsaved settings changes\./);
+  assert.match(source, /form="experiment-settings-form"/);
+  assert.doesNotMatch(source, /onReset=\{handleResetExperimentSettings\}/);
 });

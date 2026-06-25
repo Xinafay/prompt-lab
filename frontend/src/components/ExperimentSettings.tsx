@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import type { CaseSuite, Experiment } from "../types";
-import { TooltipButton } from "./TooltipButton";
 
 interface ExperimentSettingsProps {
   caseSuites: CaseSuite[];
@@ -12,7 +11,6 @@ interface ExperimentSettingsProps {
   onDelete: (experiment: Experiment) => void;
   onDirtyChange: (isDirty: boolean) => void;
   onDraftChange: (draft: Experiment | null) => void;
-  onReset: () => void;
   onSave: (experiment: Experiment) => Promise<void>;
 }
 
@@ -46,7 +44,6 @@ export function ExperimentSettings({
   onDelete,
   onDirtyChange,
   onDraftChange,
-  onReset,
   onSave
 }: ExperimentSettingsProps) {
   const [draft, setDraft] = useState<Experiment>(() => cloneExperiment(experiment));
@@ -79,6 +76,7 @@ export function ExperimentSettings({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isBusy) return;
     setError(null);
     try {
       await onSave(preparedDraft);
@@ -88,47 +86,15 @@ export function ExperimentSettings({
   }
 
   return (
-    <form className="settings-form" onSubmit={handleSubmit}>
+    <form
+      className="settings-form"
+      id="experiment-settings-form"
+      onSubmit={handleSubmit}
+    >
       <div className="settings-header">
         <div>
           <h2>Experiment settings</h2>
           <p>Edit the manifest stored in the runtime experiments workspace.</p>
-        </div>
-        <div className="settings-actions">
-          {isDirty ? (
-            <span className="settings-unsaved-action">Unsaved settings changes.</span>
-          ) : null}
-          <TooltipButton
-            className="secondary-action"
-            disabled={isBusy || !isDirty}
-            disabledReason={
-              isBusy
-                ? "Wait for the settings save to finish."
-                : "Change a setting before resetting the form."
-            }
-            onClick={() => {
-              setDraft(cloneExperiment(experiment));
-              setError(null);
-              onDirtyChange(false);
-              onDraftChange(null);
-              onReset();
-            }}
-            type="button"
-          >
-            Reset
-          </TooltipButton>
-          <TooltipButton
-            className="primary-action"
-            disabled={isBusy || !isDirty}
-            disabledReason={
-              isBusy
-                ? "Wait for the settings save to finish."
-                : "Change a setting before saving."
-            }
-            type="submit"
-          >
-            {isBusy ? "Saving..." : "Save"}
-          </TooltipButton>
         </div>
       </div>
 
