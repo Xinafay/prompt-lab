@@ -1658,55 +1658,29 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     def upload_case(
         experiment_id: str, request: CaseUploadRequest
     ) -> dict[str, object]:
-        _validate_case_id_path_segment(request.case_id)
-        experiment = store.load_experiment(experiment_id)
-        try:
-            artifact_case = store.write_case(
-                experiment_id, request.case_id, request.payload
-            )
-        except FileExistsError as exc:
-            raise HTTPException(status_code=409, detail="Case already exists") from exc
-        return _case_response(artifact_case, experiment)
+        del experiment_id, request
+        raise HTTPException(
+            status_code=410,
+            detail="Case payloads are managed through Case Suites",
+        )
 
     @app.put("/api/experiments/{experiment_id}/cases")
     def update_cases(
         experiment_id: str, request: CaseSetUpdateRequest
     ) -> dict[str, object]:
-        _validate_case_set_update(request)
-        experiment = store.load_experiment(experiment_id)
-        experiment.run_defaults.excluded_case_ids = sorted(
-            set(request.excluded_case_ids)
+        del experiment_id, request
+        raise HTTPException(
+            status_code=410,
+            detail="Case payloads are managed through Case Suites",
         )
-        store.save_experiment(experiment_id, experiment)
-        cases = store.replace_cases(
-            experiment_id,
-            [
-                CaseArtifact.model_validate(
-                    {
-                        "id": item.case_id,
-                        "payload": item.payload,
-                    }
-                )
-                for item in request.cases
-            ],
-        )
-        return {
-            "experiment": experiment.model_dump(mode="json"),
-            "cases": _case_responses(cases, experiment),
-        }
 
     @app.delete("/api/experiments/{experiment_id}/cases/{case_id}")
     def delete_case(experiment_id: str, case_id: str) -> dict[str, object]:
-        _validate_case_id_path_segment(case_id)
-        experiment = store.load_experiment(experiment_id)
-        store.delete_case(experiment_id, case_id)
-        excluded_case_ids = [
-            item for item in experiment.run_defaults.excluded_case_ids if item != case_id
-        ]
-        if excluded_case_ids != experiment.run_defaults.excluded_case_ids:
-            experiment.run_defaults.excluded_case_ids = excluded_case_ids
-            store.save_experiment(experiment_id, experiment)
-        return {"case_id": case_id}
+        del experiment_id, case_id
+        raise HTTPException(
+            status_code=410,
+            detail="Case payloads are managed through Case Suites",
+        )
 
     @app.patch("/api/experiments/{experiment_id}/cases/{case_id}/run-inclusion")
     def update_case_run_inclusion(

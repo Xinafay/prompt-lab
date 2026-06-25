@@ -18,9 +18,12 @@ from test_judge import valid_case_payload, valid_run_payload, write_json
 
 
 def demo_experiment_payload(
-    *, experiment_id: str = "demo", active_version: str = "v001"
+    *,
+    experiment_id: str = "demo",
+    active_version: str = "v001",
+    case_suite_id: str | None = "demo-suite",
 ) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "schema_version": "prompt_lab.experiment/v1",
         "id": experiment_id,
         "title": "Demo",
@@ -39,6 +42,9 @@ def demo_experiment_payload(
             "case_order": "case-major",
         },
     }
+    if case_suite_id is not None:
+        payload["case_suite_id"] = case_suite_id
+    return payload
 
 
 def demo_case_payload(
@@ -53,7 +59,7 @@ def demo_case_payload(
 
 
 def write_demo_experiment_manifest(root: Path) -> None:
-    example = root / "examples" / "demo"
+    example = root / "examples" / "experiments" / "demo"
     (example / "versions" / "v001").mkdir(parents=True)
     (example / "experiment.json").write_text(
         json.dumps(demo_experiment_payload(), ensure_ascii=False),
@@ -61,10 +67,55 @@ def write_demo_experiment_manifest(root: Path) -> None:
     )
 
 
+def write_case_suite(
+    root: Path,
+    *,
+    suite_id: str = "demo-suite",
+    cases: dict[str, dict[str, object]] | None = None,
+) -> Path:
+    suite_dir = root / "case_suites" / suite_id
+    cases_dir = suite_dir / "cases"
+    cases_dir.mkdir(parents=True, exist_ok=True)
+    write_json(
+        suite_dir / "suite.json",
+        {
+            "schema_version": "prompt_lab.case_suite/v1",
+            "id": suite_id,
+            "title": suite_id.replace("-", " ").title(),
+            "description": "",
+        },
+    )
+    for case_id, payload in (cases or {}).items():
+        write_json(cases_dir / f"{case_id}.json", payload)
+    return suite_dir
+
+
+def write_example_case_suite(
+    root: Path,
+    *,
+    suite_id: str = "demo-suite",
+    cases: dict[str, dict[str, object]] | None = None,
+) -> Path:
+    suite_dir = root / "examples" / "case_suites" / suite_id
+    cases_dir = suite_dir / "cases"
+    cases_dir.mkdir(parents=True, exist_ok=True)
+    write_json(
+        suite_dir / "suite.json",
+        {
+            "schema_version": "prompt_lab.case_suite/v1",
+            "id": suite_id,
+            "title": suite_id.replace("-", " ").title(),
+            "description": "",
+        },
+    )
+    for case_id, payload in (cases or {}).items():
+        write_json(cases_dir / f"{case_id}.json", payload)
+    return suite_dir
+
+
 def write_demo_pydantic_experiment(root: Path) -> None:
-    example = root / "examples" / "demo"
+    example = root / "examples" / "experiments" / "demo"
     version_dir = example / "versions" / "v001"
-    (example / "cases").mkdir(parents=True)
     version_dir.mkdir(parents=True)
     (example / "experiment.json").write_text(
         json.dumps(
@@ -87,14 +138,22 @@ def write_demo_pydantic_experiment(root: Path) -> None:
         "from pydantic import BaseModel\n\nclass DemoOutput(BaseModel):\n    answer: str\n",
         encoding="utf-8",
     )
-    (example / "cases" / "a.json").write_text(
-        json.dumps(demo_case_payload(), ensure_ascii=False),
-        encoding="utf-8",
+    write_example_case_suite(
+        root,
+        cases={"a": demo_case_payload()},
     )
 
 
 def write_quality_validator(root: Path, *, validator_id: str = "quality") -> None:
-    validator_dir = root / "examples" / "demo" / "versions" / "v001" / "validators"
+    validator_dir = (
+        root
+        / "examples"
+        / "experiments"
+        / "demo"
+        / "versions"
+        / "v001"
+        / "validators"
+    )
     validator_dir.mkdir(parents=True, exist_ok=True)
     (validator_dir / "quality.json").write_text(
         json.dumps(
@@ -120,8 +179,6 @@ def write_quality_validator(root: Path, *, validator_id: str = "quality") -> Non
 def write_runtime_preview_experiment(root: Path, *, repeat_count: int = 2) -> Path:
     experiment_dir = root / "experiments" / "demo"
     version_dir = experiment_dir / "versions" / "v001"
-    cases_dir = experiment_dir / "cases"
-    cases_dir.mkdir(parents=True)
     version_dir.mkdir(parents=True)
     write_json(
         experiment_dir / "experiment.json",
@@ -130,6 +187,7 @@ def write_runtime_preview_experiment(root: Path, *, repeat_count: int = 2) -> Pa
             "id": "demo",
             "title": "Demo",
             "description": "",
+            "case_suite_id": "demo-suite",
             "active_version": "v001",
             "output": {"type": "text"},
             "template": {"engine": "jinjax", "path": "prompt.md"},
@@ -146,11 +204,13 @@ def write_runtime_preview_experiment(root: Path, *, repeat_count: int = 2) -> Pa
         },
     )
     (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
-    for case_id, value in [("case-a", "alpha"), ("case-b", "bravo")]:
-        write_json(
-            cases_dir / f"{case_id}.json",
-            {"value": value},
-        )
+    write_case_suite(
+        root,
+        cases={
+            "case-a": {"value": "alpha"},
+            "case-b": {"value": "bravo"},
+        },
+    )
     return version_dir
 
 
@@ -254,7 +314,7 @@ def write_preview_validators(root: Path) -> None:
 def test_api_lists_experiments() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
-        example = root / "examples" / "demo"
+        example = root / "examples" / "experiments" / "demo"
         (example / "versions" / "v001").mkdir(parents=True)
         (example / "experiment.json").write_text(
             '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
@@ -445,13 +505,8 @@ def test_api_clones_experiment() -> None:
         payload = response.json()
         assert payload["id"] == "demo-copy"
         assert payload["title"] == "Demo Copy"
-        assert (
-            root
-            / "experiments"
-            / "demo-copy"
-            / "cases"
-            / "case-a.json"
-        ).is_file()
+        assert payload["case_suite_id"] == "demo-suite"
+        assert not (root / "experiments" / "demo-copy" / "cases").exists()
         assert (
             root
             / "experiments"
@@ -655,7 +710,7 @@ def test_api_updates_experiment_manifest_under_experiments() -> None:
         assert saved["models"]["generator_model"] == "local/updated"
         assert saved["run_defaults"]["repeat_count"] == 4
         example_saved = json.loads(
-            (root / "examples" / "demo" / "experiment.json").read_text(
+            (root / "examples" / "experiments" / "demo" / "experiment.json").read_text(
                 encoding="utf-8"
             )
         )
@@ -697,27 +752,21 @@ def test_api_rejects_experiment_update_missing_active_version() -> None:
 def test_api_seeds_examples_into_experiments_on_startup() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
-        example = root / "examples" / "demo"
+        example = root / "examples" / "experiments" / "demo"
         version = example / "versions" / "v001"
         version.mkdir(parents=True)
-        (example / "experiment.json").write_text(
-            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
-            encoding="utf-8",
-        )
+        write_json(example / "experiment.json", demo_experiment_payload())
         (version / "prompt.md").write_text("Hello {{ name }}", encoding="utf-8")
-        cases = example / "cases"
-        cases.mkdir()
-        (cases / "case-a.json").write_text(
-            json.dumps(
-                demo_case_payload(
+        write_example_case_suite(
+            root,
+            cases={
+                "case-a": demo_case_payload(
                     case_id="case-a",
                     title="Case A",
                     binding_name="name",
                     value="Ada",
-                ),
-                ensure_ascii=False,
-            ),
-            encoding="utf-8",
+                )
+            },
         )
 
         app = create_app(PromptLabConfig.from_env(project_root=root))
@@ -729,14 +778,16 @@ def test_api_seeds_examples_into_experiments_on_startup() -> None:
         assert (
             root / "experiments" / "demo" / "versions" / "v001" / "prompt.md"
         ).is_file()
+        assert (root / "case_suites" / "demo-suite" / "cases" / "case-a.json").is_file()
+        assert not (root / "experiments" / "demo" / "cases").exists()
 
 
 def test_api_ignores_old_example_directories_when_seeding() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
         for directory, title in (
-            (root / "examples" / "demo", "Demo"),
-            (root / "examples" / "demo_old", "Old Demo"),
+            (root / "examples" / "experiments" / "demo", "Demo"),
+            (root / "examples" / "experiments" / "demo_old", "Old Demo"),
         ):
             (directory / "versions" / "v001").mkdir(parents=True)
             payload = demo_experiment_payload()
@@ -761,21 +812,16 @@ def test_api_ignores_old_example_directories_when_seeding() -> None:
 def test_api_gets_version_overview() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
-        example = root / "examples" / "demo"
+        example = root / "examples" / "experiments" / "demo"
         version_dir = example / "versions" / "v001"
-        (example / "cases").mkdir(parents=True)
         version_dir.mkdir(parents=True, exist_ok=True)
-        (example / "experiment.json").write_text(
-            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"Demo experiment","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
-            encoding="utf-8",
-        )
+        payload = demo_experiment_payload()
+        payload["description"] = "Demo experiment"
+        write_json(example / "experiment.json", payload)
         (example / "rubric.md").write_text("Prefer concise answers.", encoding="utf-8")
         write_quality_validator(root)
         (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
-        (example / "cases" / "a.json").write_text(
-            json.dumps(demo_case_payload(), ensure_ascii=False),
-            encoding="utf-8",
-        )
+        write_example_case_suite(root, cases={"a": demo_case_payload()})
         app = create_app(PromptLabConfig.from_env(project_root=root))
 
         response = TestClient(app).get("/api/experiments/demo/versions/v001")
@@ -793,18 +839,21 @@ def test_api_gets_version_overview() -> None:
         assert body["validators"][0]["checks"][0]["check_id"] == "has-answer"
 
 
-def test_api_manages_case_files_and_run_inclusion() -> None:
+def test_api_rejects_case_payload_mutations_and_updates_run_inclusion() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
-        example = root / "examples" / "demo"
+        example = root / "examples" / "experiments" / "demo"
         version_dir = example / "versions" / "v001"
-        cases_dir = example / "cases"
-        cases_dir.mkdir(parents=True)
         version_dir.mkdir(parents=True)
         write_json(example / "experiment.json", demo_experiment_payload())
         (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
-        write_json(cases_dir / "a.json", demo_case_payload(value="alpha"))
-        write_json(cases_dir / "b.json", demo_case_payload(value="bravo"))
+        write_example_case_suite(
+            root,
+            cases={
+                "a": demo_case_payload(value="alpha"),
+                "b": demo_case_payload(value="bravo"),
+            },
+        )
 
         app = create_app(PromptLabConfig.from_env(project_root=root))
         client = TestClient(app)
@@ -833,21 +882,11 @@ def test_api_manages_case_files_and_run_inclusion() -> None:
             json={"case_id": "c", "payload": {"value": "charlie"}},
         )
 
-        assert upload_response.status_code == 200
-        assert upload_response.json() == {
-            "id": "c",
-            "payload": {"value": "charlie"},
-            "enabled": True,
-        }
-        assert (runtime_experiment / "cases" / "c.json").is_file()
-
-        duplicate_response = client.post(
-            "/api/experiments/demo/cases",
-            json={"case_id": "c", "payload": {"value": "duplicate"}},
+        assert upload_response.status_code == 410
+        assert upload_response.json()["detail"] == (
+            "Case payloads are managed through Case Suites"
         )
-
-        assert duplicate_response.status_code == 409
-        assert duplicate_response.json()["detail"] == "Case already exists"
+        assert not (runtime_experiment / "cases").exists()
 
         inclusion_response = client.patch(
             "/api/experiments/demo/cases/b/run-inclusion",
@@ -868,27 +907,32 @@ def test_api_manages_case_files_and_run_inclusion() -> None:
         refreshed_cases = {
             item["id"]: item["enabled"] for item in refreshed_response.json()["cases"]
         }
-        assert refreshed_cases == {"a": True, "b": False, "c": True}
+        assert refreshed_cases == {"a": True, "b": False}
 
         delete_response = client.delete("/api/experiments/demo/cases/a")
 
-        assert delete_response.status_code == 200
-        assert delete_response.json() == {"case_id": "a"}
-        assert not (runtime_experiment / "cases" / "a.json").exists()
+        assert delete_response.status_code == 410
+        assert delete_response.json()["detail"] == (
+            "Case payloads are managed through Case Suites"
+        )
+        assert not (runtime_experiment / "cases").exists()
 
 
-def test_api_saves_case_set_without_clearing_runs() -> None:
+def test_api_rejects_case_set_payload_update_without_clearing_runs() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
-        example = root / "examples" / "demo"
+        example = root / "examples" / "experiments" / "demo"
         version_dir = example / "versions" / "v001"
-        cases_dir = example / "cases"
-        cases_dir.mkdir(parents=True)
         version_dir.mkdir(parents=True)
         write_json(example / "experiment.json", demo_experiment_payload())
         (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
-        write_json(cases_dir / "a.json", demo_case_payload(value="alpha"))
-        write_json(cases_dir / "b.json", demo_case_payload(value="bravo"))
+        write_example_case_suite(
+            root,
+            cases={
+                "a": demo_case_payload(value="alpha"),
+                "b": demo_case_payload(value="bravo"),
+            },
+        )
 
         app = create_app(PromptLabConfig.from_env(project_root=root))
         client = TestClient(app)
@@ -915,18 +959,11 @@ def test_api_saves_case_set_without_clearing_runs() -> None:
             },
         )
 
-        assert response.status_code == 200
-        body = response.json()
-        assert {item["id"]: item["enabled"] for item in body["cases"]} == {
-            "b": True,
-            "c": False,
-        }
-        assert body["experiment"]["run_defaults"]["excluded_case_ids"] == ["c"]
-        assert not (runtime_experiment / "cases" / "a.json").exists()
-        assert json.loads(
-            (runtime_experiment / "cases" / "b.json").read_text(encoding="utf-8")
-        ) == {"value": "bravo updated"}
-        assert (runtime_experiment / "cases" / "c.json").is_file()
+        assert response.status_code == 410
+        assert response.json()["detail"] == (
+            "Case payloads are managed through Case Suites"
+        )
+        assert not (runtime_experiment / "cases").exists()
         assert stale_run.is_file()
 
 
@@ -954,7 +991,7 @@ def test_api_gets_pydantic_version_overview_model_source() -> None:
 def test_api_lists_experiment_versions() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
-        example = root / "examples" / "demo"
+        example = root / "examples" / "experiments" / "demo"
         (example / "versions" / "v002").mkdir(parents=True)
         (example / "versions" / "v001").mkdir()
         (example / "experiment.json").write_text(
@@ -981,21 +1018,14 @@ def test_api_lists_experiment_versions() -> None:
 def test_api_lists_latest_run_artifacts() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
-        example = root / "examples" / "demo"
+        example = root / "examples" / "experiments" / "demo"
         version_dir = example / "versions" / "v001"
         run_dir = version_dir / "runs" / "run_version-000001" / "a"
         run_dir.mkdir(parents=True)
-        (example / "experiment.json").write_text(
-            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
-            encoding="utf-8",
-        )
+        write_json(example / "experiment.json", demo_experiment_payload())
         (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
-        (example / "cases").mkdir()
         version_dir.mkdir(parents=True, exist_ok=True)
-        (example / "cases" / "a.json").write_text(
-            json.dumps(demo_case_payload(), ensure_ascii=False),
-            encoding="utf-8",
-        )
+        write_example_case_suite(root, cases={"a": demo_case_payload()})
         (run_dir / "repeat-001.json").write_text(
             '{"schema_version":"prompt_lab.run/v1","run_id":"r1","run_batch_id":"run_version-000001","version":"v001","case_id":"a","repeat_index":1,"generator_model":"local/a","status":"ok","rendered_prompt":"Say hello","raw_output":"ok","output_type":"text","output_text":"ok","usage":{}}',
             encoding="utf-8",
@@ -1014,7 +1044,7 @@ def test_api_lists_latest_run_artifacts() -> None:
 def test_api_lists_empty_runs_when_version_has_no_batches() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
-        example = root / "examples" / "demo"
+        example = root / "examples" / "experiments" / "demo"
         version_dir = example / "versions" / "v001"
         version_dir.mkdir(parents=True)
         (example / "experiment.json").write_text(
@@ -1052,19 +1082,12 @@ def test_api_starts_run_job() -> None:
     try:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
-            example = root / "examples" / "demo"
+            example = root / "examples" / "experiments" / "demo"
             version_dir = example / "versions" / "v001"
-            (example / "cases").mkdir(parents=True)
             version_dir.mkdir(parents=True, exist_ok=True)
-            (example / "experiment.json").write_text(
-                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
-                encoding="utf-8",
-            )
+            write_json(example / "experiment.json", demo_experiment_payload())
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
-            (example / "cases" / "a.json").write_text(
-                json.dumps(demo_case_payload(), ensure_ascii=False),
-                encoding="utf-8",
-            )
+            write_example_case_suite(root, cases={"a": demo_case_payload()})
             app = create_app(PromptLabConfig.from_env(project_root=root))
 
             response = TestClient(app).post(
@@ -1127,8 +1150,6 @@ def test_api_runs_only_enabled_cases() -> None:
             root = Path(tmp)
             experiment = root / "experiments" / "demo"
             version_dir = experiment / "versions" / "v001"
-            cases_dir = experiment / "cases"
-            cases_dir.mkdir(parents=True)
             version_dir.mkdir(parents=True)
             payload = demo_experiment_payload()
             payload["run_defaults"] = {
@@ -1139,8 +1160,13 @@ def test_api_runs_only_enabled_cases() -> None:
             }
             write_json(experiment / "experiment.json", payload)
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
-            write_json(cases_dir / "a.json", demo_case_payload(value="alpha"))
-            write_json(cases_dir / "b.json", demo_case_payload(value="bravo"))
+            write_case_suite(
+                root,
+                cases={
+                    "a": demo_case_payload(value="alpha"),
+                    "b": demo_case_payload(value="bravo"),
+                },
+            )
             app = create_app(PromptLabConfig.from_env(project_root=root))
             client = TestClient(app)
 
@@ -1192,19 +1218,12 @@ def test_api_reports_active_job_and_rejects_second_run() -> None:
     try:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
-            example = root / "examples" / "demo"
+            example = root / "examples" / "experiments" / "demo"
             version_dir = example / "versions" / "v001"
-            (example / "cases").mkdir(parents=True)
             version_dir.mkdir(parents=True, exist_ok=True)
-            (example / "experiment.json").write_text(
-                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
-                encoding="utf-8",
-            )
+            write_json(example / "experiment.json", demo_experiment_payload())
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
-            (example / "cases" / "a.json").write_text(
-                json.dumps(demo_case_payload(), ensure_ascii=False),
-                encoding="utf-8",
-            )
+            write_example_case_suite(root, cases={"a": demo_case_payload()})
             app = create_app(PromptLabConfig.from_env(project_root=root))
             client = TestClient(app, raise_server_exceptions=False)
             responses: list[Any] = []
@@ -1256,19 +1275,12 @@ def test_api_starting_run_clears_existing_runtime_chain() -> None:
     try:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
-            example = root / "examples" / "demo"
+            example = root / "examples" / "experiments" / "demo"
             version_dir = example / "versions" / "v001"
-            (example / "cases").mkdir(parents=True)
             version_dir.mkdir(parents=True, exist_ok=True)
-            (example / "experiment.json").write_text(
-                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
-                encoding="utf-8",
-            )
+            write_json(example / "experiment.json", demo_experiment_payload())
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
-            (example / "cases" / "a.json").write_text(
-                json.dumps(demo_case_payload(), ensure_ascii=False),
-                encoding="utf-8",
-            )
+            write_example_case_suite(root, cases={"a": demo_case_payload()})
             app = create_app(PromptLabConfig.from_env(project_root=root))
             runtime_version_dir = root / "experiments" / "demo" / "versions" / "v001"
             for relative_path in [
@@ -1310,19 +1322,12 @@ def test_api_dry_run_text_version_avoids_live_llm() -> None:
     try:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
-            example = root / "examples" / "demo"
+            example = root / "examples" / "experiments" / "demo"
             version_dir = example / "versions" / "v001"
-            (example / "cases").mkdir(parents=True)
             version_dir.mkdir(parents=True, exist_ok=True)
-            (example / "experiment.json").write_text(
-                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
-                encoding="utf-8",
-            )
+            write_json(example / "experiment.json", demo_experiment_payload())
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
-            (example / "cases" / "a.json").write_text(
-                json.dumps(demo_case_payload(), ensure_ascii=False),
-                encoding="utf-8",
-            )
+            write_example_case_suite(root, cases={"a": demo_case_payload()})
             app = create_app(PromptLabConfig.from_env(project_root=root))
 
             response = TestClient(app).post(
@@ -1356,6 +1361,7 @@ def test_api_dry_run_text_version_avoids_live_llm() -> None:
             assert not (
                 root
                 / "examples"
+                / "experiments"
                 / "demo"
                 / "versions"
                 / "v001"
@@ -1878,15 +1884,12 @@ def test_api_rejects_empty_cases_without_calling_llm() -> None:
     try:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
-            example = root / "examples" / "demo"
+            example = root / "examples" / "experiments" / "demo"
             version_dir = example / "versions" / "v001"
-            (example / "cases").mkdir(parents=True)
             version_dir.mkdir(parents=True, exist_ok=True)
-            (example / "experiment.json").write_text(
-                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
-                encoding="utf-8",
-            )
+            write_json(example / "experiment.json", demo_experiment_payload())
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
+            write_example_case_suite(root, cases={})
             app = create_app(PromptLabConfig.from_env(project_root=root))
 
             response = TestClient(app, raise_server_exceptions=False).post(
@@ -1916,21 +1919,14 @@ def test_api_uses_case_filename_stem_instead_of_payload_id() -> None:
     try:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
-            example = root / "examples" / "demo"
+            example = root / "examples" / "experiments" / "demo"
             version_dir = example / "versions" / "v001"
-            (example / "cases").mkdir(parents=True)
             version_dir.mkdir(parents=True, exist_ok=True)
-            (example / "experiment.json").write_text(
-                '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":1,"llm_cache":"disabled","case_order":"case-major"}}',
-                encoding="utf-8",
-            )
+            write_json(example / "experiment.json", demo_experiment_payload())
             (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
-            (example / "cases" / "safe-case.json").write_text(
-                json.dumps(
-                    {"id": "../escape", "value": "hello"},
-                    ensure_ascii=False,
-                ),
-                encoding="utf-8",
+            write_example_case_suite(
+                root,
+                cases={"safe-case": {"id": "../escape", "value": "hello"}},
             )
             app = create_app(PromptLabConfig.from_env(project_root=root))
             client = TestClient(app, raise_server_exceptions=False)
@@ -1983,8 +1979,8 @@ def main() -> int:
         test_api_seeds_examples_into_experiments_on_startup,
         test_api_ignores_old_example_directories_when_seeding,
         test_api_gets_version_overview,
-        test_api_manages_case_files_and_run_inclusion,
-        test_api_saves_case_set_without_clearing_runs,
+        test_api_rejects_case_payload_mutations_and_updates_run_inclusion,
+        test_api_rejects_case_set_payload_update_without_clearing_runs,
         test_api_gets_pydantic_version_overview_model_source,
         test_api_lists_experiment_versions,
         test_api_lists_latest_run_artifacts,
