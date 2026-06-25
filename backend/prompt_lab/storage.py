@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from pathlib import Path, PureWindowsPath
 from typing import Any, Literal
 
@@ -165,6 +166,35 @@ class PromptLabStore:
         if output_type == "pydantic":
             (version_dir / "model.py").write_text("", encoding="utf-8")
         return artifact
+
+    def clone_experiment(
+        self,
+        *,
+        source_experiment_id: str,
+        title: str,
+    ) -> ExperimentArtifact:
+        source_dir = self.experiment_dir(source_experiment_id)
+        experiment_id = self._available_experiment_id(title)
+        destination = self.experiments_root.resolve() / experiment_id
+        try:
+            shutil.copytree(source_dir, destination)
+        except FileExistsError:
+            raise FileExistsError("Experiment already exists")
+        source_artifact = ExperimentArtifact.model_validate(
+            _read_json(destination / "experiment.json")
+        )
+        cloned = source_artifact.model_copy(
+            update={
+                "id": experiment_id,
+                "title": title,
+            }
+        )
+        _write_json(destination / "experiment.json", cloned.model_dump(mode="json"))
+        return cloned
+
+    def delete_experiment(self, experiment_id: str) -> None:
+        experiment_dir = self.experiment_dir(experiment_id)
+        shutil.rmtree(experiment_dir)
 
     def list_versions(self, experiment_id: str) -> list[str]:
         versions_root = self.experiment_dir(experiment_id) / "versions"

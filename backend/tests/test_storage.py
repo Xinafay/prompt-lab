@@ -742,6 +742,85 @@ def test_store_create_experiment_rejects_pydantic_missing_model_entrypoint() -> 
         assert not (root / "experiments").exists()
 
 
+def test_store_clones_experiment_directory_and_rewrites_manifest() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source = root / "experiments" / "demo"
+        version_dir = source / "versions" / "v001"
+        validators_dir = version_dir / "validators"
+        cases_dir = source / "cases"
+        validators_dir.mkdir(parents=True)
+        cases_dir.mkdir(parents=True)
+        write_experiment_manifest(source / "experiment.json")
+        (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
+        (validators_dir / "quality.json").write_text(
+            '{"schema_version":"prompt_lab.validator/v1","validator_id":"quality","type":"llm_questionnaire","title":"Quality","checks":[{"check_id":"ok","title":"OK","question":"OK?"}]}',
+            encoding="utf-8",
+        )
+        (cases_dir / "case-a.json").write_text('{"value":"alpha"}', encoding="utf-8")
+        (version_dir / "runs" / "run-001").mkdir(parents=True)
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        cloned = store.clone_experiment(
+            source_experiment_id="demo",
+            title="Demo Clone",
+        )
+
+        clone_dir = root / "experiments" / "demo-clone"
+        assert cloned.id == "demo-clone"
+        assert cloned.title == "Demo Clone"
+        assert (clone_dir / "cases" / "case-a.json").is_file()
+        assert (clone_dir / "versions" / "v001" / "prompt.md").read_text(
+            encoding="utf-8"
+        ) == "Say {{ value }}"
+        assert (clone_dir / "versions" / "v001" / "validators" / "quality.json").is_file()
+        assert (clone_dir / "versions" / "v001" / "runs" / "run-001").is_dir()
+        saved = json.loads((clone_dir / "experiment.json").read_text(encoding="utf-8"))
+        assert saved["id"] == "demo-clone"
+        assert saved["title"] == "Demo Clone"
+
+
+def test_store_delete_experiment_removes_directory() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        experiment = root / "experiments" / "demo"
+        (experiment / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(experiment / "experiment.json")
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        store.delete_experiment("demo")
+
+        assert not experiment.exists()
+
+
+def test_store_delete_experiment_rejects_path_escape() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        experiment = root / "experiments" / "demo"
+        (experiment / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(experiment / "experiment.json")
+        outside = root / "secret"
+        outside.mkdir()
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        try:
+            store.delete_experiment("../secret")
+        except NotFoundError as exc:
+            assert str(root) not in str(exc)
+        else:
+            raise AssertionError("Expected escaped delete to be rejected")
+        assert outside.is_dir()
+
+
 def main() -> int:
     tests = [
         test_store_does_not_list_examples_directly,
@@ -768,6 +847,9 @@ def main() -> int:
         test_store_create_experiment_rejects_whitespace_title,
         test_store_create_experiment_rejects_invalid_output_type,
         test_store_create_experiment_rejects_pydantic_missing_model_entrypoint,
+        test_store_clones_experiment_directory_and_rewrites_manifest,
+        test_store_delete_experiment_removes_directory,
+        test_store_delete_experiment_rejects_path_escape,
     ]
     for test in tests:
         test()
