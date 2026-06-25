@@ -1,0 +1,6 @@
+{
+  "schema_version": "prompt_lab.case_suite/v1",
+  "id": "story-chapters",
+  "title": "Story chapters",
+  "description": "Shared chapter inputs for story prompt experiments."
+}

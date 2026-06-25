@@ -1,11 +1,14 @@
 {
   "schema_version": "prompt_lab.experiment/v1",
-  "id": "demo-string",
-  "title": "Demo String",
-  "description": "Offline plain-text demo with precomputed artifacts for UI testing.",
+  "id": "demo-json",
+  "title": "Demo JSON",
+  "description": "Offline structured-output demo with precomputed runs and validation artifacts for UI testing.",
+  "case_suite_id": "demo-json-briefs",
   "active_version": "v002",
   "output": {
-    "type": "text"
+    "type": "pydantic",
+    "model_file": "model.py",
+    "model_entrypoint": "model.DemoReport"
   },
   "template": {
     "engine": "jinjax",

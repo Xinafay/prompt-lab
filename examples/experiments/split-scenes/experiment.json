@@ -3,6 +3,7 @@
   "id": "split-scenes",
   "title": "Split scenes",
   "description": "Split a chapter into contiguous structured scenes.",
+  "case_suite_id": "story-chapters",
   "active_version": "v001",
   "output": {
     "type": "pydantic",

@@ -1,0 +1,6 @@
+{
+  "schema_version": "prompt_lab.case_suite/v1",
+  "id": "demo-string-replies",
+  "title": "Demo string replies",
+  "description": "Stable reply-writing inputs for Prompt Lab UI tests."
+}

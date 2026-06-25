@@ -1427,6 +1427,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     settings = load_settings(resolved_config.settings_path)
     seed_experiments_from_examples(
         experiments_root=resolved_config.experiments_root,
+        case_suites_root=resolved_config.case_suites_root,
         examples_root=resolved_config.examples_root,
         settings=settings,
     )

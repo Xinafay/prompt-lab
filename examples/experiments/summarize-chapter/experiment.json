@@ -3,6 +3,7 @@
   "id": "summarize-chapter",
   "title": "Summarize chapter",
   "description": "Write one concise paragraph summary of a chapter with scene boundaries.",
+  "case_suite_id": "story-chapters",
   "active_version": "v001",
   "output": {
     "type": "text"

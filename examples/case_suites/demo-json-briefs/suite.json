@@ -1,0 +1,6 @@
+{
+  "schema_version": "prompt_lab.case_suite/v1",
+  "id": "demo-json-briefs",
+  "title": "Demo JSON briefs",
+  "description": "Stable structured-output brief inputs for Prompt Lab UI tests."
+}

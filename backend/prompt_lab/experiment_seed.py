@@ -12,6 +12,8 @@ from prompt_lab.settings import PromptLabSettings
 class SeedResult:
     seeded: bool
     copied_experiment_ids: list[str]
+    seeded_case_suites: bool
+    copied_case_suite_ids: list[str]
 
 
 def _has_runtime_experiment_manifests(experiments_root: Path) -> bool:
@@ -25,37 +27,87 @@ def _is_ignored_experiment_dir(path: Path) -> bool:
     return path.name.endswith("_old")
 
 
+def _has_runtime_case_suite_manifests(case_suites_root: Path) -> bool:
+    return case_suites_root.is_dir() and any(
+        path.is_file() for path in case_suites_root.glob("*/suite.json")
+    )
+
+
 def seed_experiments_from_examples(
     *,
     experiments_root: Path,
+    case_suites_root: Path,
     examples_root: Path,
     settings: PromptLabSettings | None = None,
 ) -> SeedResult:
     """Seed local runtime experiments from committed examples exactly once."""
-    if _has_runtime_experiment_manifests(experiments_root):
-        return SeedResult(seeded=False, copied_experiment_ids=[])
-
+    example_experiments_root = examples_root / "experiments"
+    example_case_suites_root = examples_root / "case_suites"
+    has_runtime_experiments = _has_runtime_experiment_manifests(experiments_root)
+    has_runtime_case_suites = _has_runtime_case_suite_manifests(case_suites_root)
     experiments_root.mkdir(parents=True, exist_ok=True)
-    if not examples_root.is_dir():
-        return SeedResult(seeded=False, copied_experiment_ids=[])
+    case_suites_root.mkdir(parents=True, exist_ok=True)
 
-    copied: list[str] = []
-    for example_dir in sorted(path for path in examples_root.iterdir() if path.is_dir()):
-        if _is_ignored_experiment_dir(example_dir):
-            continue
-        manifest_path = example_dir / "experiment.json"
-        if not manifest_path.is_file():
-            continue
-        destination = experiments_root / example_dir.name
-        shutil.copytree(example_dir, destination)
-        if settings is not None and not _has_committed_runtime_artifacts(example_dir):
-            _apply_settings_to_copied_manifest(
-                destination / "experiment.json",
-                settings,
+    copied_experiment_ids: list[str] = []
+    if not has_runtime_experiments and example_experiments_root.is_dir():
+        for example_dir in sorted(
+            path for path in example_experiments_root.iterdir() if path.is_dir()
+        ):
+            if _is_ignored_experiment_dir(example_dir):
+                continue
+            manifest_path = example_dir / "experiment.json"
+            if not manifest_path.is_file():
+                continue
+            destination = experiments_root / example_dir.name
+            shutil.copytree(example_dir, destination)
+            if settings is not None and not _has_committed_runtime_artifacts(example_dir):
+                _apply_settings_to_copied_manifest(
+                    destination / "experiment.json",
+                    settings,
+                )
+            _copy_suite_cases_for_legacy_storage(
+                destination,
+                example_case_suites_root=example_case_suites_root,
             )
-        copied.append(example_dir.name)
+            copied_experiment_ids.append(example_dir.name)
 
-    return SeedResult(seeded=bool(copied), copied_experiment_ids=copied)
+    copied_case_suite_ids: list[str] = []
+    if not has_runtime_case_suites and example_case_suites_root.is_dir():
+        for example_dir in sorted(
+            path for path in example_case_suites_root.iterdir() if path.is_dir()
+        ):
+            manifest_path = example_dir / "suite.json"
+            if not manifest_path.is_file():
+                continue
+            destination = case_suites_root / example_dir.name
+            shutil.copytree(example_dir, destination)
+            copied_case_suite_ids.append(example_dir.name)
+
+    return SeedResult(
+        seeded=bool(copied_experiment_ids),
+        copied_experiment_ids=copied_experiment_ids,
+        seeded_case_suites=bool(copied_case_suite_ids),
+        copied_case_suite_ids=copied_case_suite_ids,
+    )
+
+
+def _copy_suite_cases_for_legacy_storage(
+    experiment_dir: Path, *, example_case_suites_root: Path
+) -> None:
+    experiment = ExperimentArtifact.model_validate_json(
+        (experiment_dir / "experiment.json").read_text(encoding="utf-8")
+    )
+    if experiment.case_suite_id is None:
+        return
+    source_cases_dir = example_case_suites_root / experiment.case_suite_id / "cases"
+    if not source_cases_dir.is_dir():
+        return
+    destination_cases_dir = experiment_dir / "cases"
+    if destination_cases_dir.is_dir() and any(destination_cases_dir.glob("*.json")):
+        return
+    destination_cases_dir.mkdir(parents=True, exist_ok=True)
+    for source_path in sorted(source_cases_dir.glob("*.json")):
+        shutil.copy2(source_path, destination_cases_dir / source_path.name)
 
 
 def _has_committed_runtime_artifacts(example_dir: Path) -> bool:

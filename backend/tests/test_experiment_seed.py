@@ -35,16 +35,42 @@ MANIFEST = {
 
 
 def write_example(root: Path, experiment_id: str = "demo") -> Path:
-    example_dir = root / "examples" / experiment_id
+    example_dir = root / "examples" / "experiments" / experiment_id
     version_dir = example_dir / "versions" / "v001"
     version_dir.mkdir(parents=True)
-    manifest = {**MANIFEST, "id": experiment_id, "title": experiment_id.title()}
+    manifest = {
+        **MANIFEST,
+        "id": experiment_id,
+        "title": experiment_id.title(),
+        "case_suite_id": "demo-suite",
+    }
     (example_dir / "experiment.json").write_text(
         json.dumps(manifest, ensure_ascii=False),
         encoding="utf-8",
     )
     (version_dir / "prompt.md").write_text("Prompt", encoding="utf-8")
     return example_dir
+
+
+def write_case_suite(root: Path, suite_id: str = "demo-suite") -> Path:
+    suite_dir = root / "examples" / "case_suites" / suite_id
+    cases_dir = suite_dir / "cases"
+    cases_dir.mkdir(parents=True)
+    manifest = {
+        "schema_version": "prompt_lab.case_suite/v1",
+        "id": suite_id,
+        "title": suite_id.replace("-", " ").title(),
+        "description": "",
+    }
+    (suite_dir / "suite.json").write_text(
+        json.dumps(manifest, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (cases_dir / "case-a.json").write_text(
+        json.dumps({"value": "alpha"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return suite_dir
 
 
 def test_seed_creates_experiments_root_when_missing() -> None:
@@ -54,6 +80,7 @@ def test_seed_creates_experiments_root_when_missing() -> None:
 
         result = seed_experiments_from_examples(
             experiments_root=root / "experiments",
+            case_suites_root=root / "case_suites",
             examples_root=root / "examples",
         )
 
@@ -78,6 +105,7 @@ def test_seed_applies_global_defaults_to_copied_manifest() -> None:
 
         result = seed_experiments_from_examples(
             experiments_root=root / "experiments",
+            case_suites_root=root / "case_suites",
             examples_root=root / "examples",
             settings=settings,
         )
@@ -95,7 +123,7 @@ def test_seed_applies_global_defaults_to_copied_manifest() -> None:
         }
         assert copied_manifest["run_defaults"]["repeat_count"] == 7
         source_manifest = json.loads(
-            (root / "examples" / "demo" / "experiment.json").read_text(
+            (root / "examples" / "experiments" / "demo" / "experiment.json").read_text(
                 encoding="utf-8"
             )
         )
@@ -122,6 +150,7 @@ def test_seed_preserves_manifest_defaults_for_artifact_fixtures() -> None:
 
         result = seed_experiments_from_examples(
             experiments_root=root / "experiments",
+            case_suites_root=root / "case_suites",
             examples_root=root / "examples",
             settings=settings,
         )
@@ -148,6 +177,7 @@ def test_seed_copies_when_experiments_root_is_empty() -> None:
 
         result = seed_experiments_from_examples(
             experiments_root=root / "experiments",
+            case_suites_root=root / "case_suites",
             examples_root=root / "examples",
         )
 
@@ -169,6 +199,7 @@ def test_seed_does_nothing_when_any_runtime_manifest_exists() -> None:
 
         result = seed_experiments_from_examples(
             experiments_root=root / "experiments",
+            case_suites_root=root / "case_suites",
             examples_root=root / "examples",
         )
 
@@ -183,6 +214,7 @@ def test_seed_creates_empty_experiments_when_examples_missing() -> None:
 
         result = seed_experiments_from_examples(
             experiments_root=root / "experiments",
+            case_suites_root=root / "case_suites",
             examples_root=root / "examples",
         )
 
@@ -202,6 +234,7 @@ def test_seed_fails_on_conflicting_existing_directory_without_manifest() -> None
         try:
             seed_experiments_from_examples(
                 experiments_root=root / "experiments",
+                case_suites_root=root / "case_suites",
                 examples_root=root / "examples",
             )
         except FileExistsError:
@@ -210,6 +243,55 @@ def test_seed_fails_on_conflicting_existing_directory_without_manifest() -> None
             raise AssertionError("Expected conflicting seed destination to fail")
 
         assert (conflict_dir / "notes.txt").read_text(encoding="utf-8") == "local data"
+
+
+def test_seed_copies_case_suites_independently() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_case_suite(root)
+
+        result = seed_experiments_from_examples(
+            experiments_root=root / "experiments",
+            case_suites_root=root / "case_suites",
+            examples_root=root / "examples",
+        )
+
+        assert result.seeded_case_suites is True
+        assert result.copied_case_suite_ids == ["demo-suite"]
+        assert (root / "case_suites" / "demo-suite" / "suite.json").is_file()
+        assert (
+            root / "case_suites" / "demo-suite" / "cases" / "case-a.json"
+        ).is_file()
+
+
+def test_seed_does_not_overwrite_existing_case_suites() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_case_suite(root, "template-suite")
+        runtime_dir = root / "case_suites" / "local-suite"
+        runtime_dir.mkdir(parents=True)
+        (runtime_dir / "suite.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "prompt_lab.case_suite/v1",
+                    "id": "local-suite",
+                    "title": "Local Suite",
+                    "description": "",
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        result = seed_experiments_from_examples(
+            experiments_root=root / "experiments",
+            case_suites_root=root / "case_suites",
+            examples_root=root / "examples",
+        )
+
+        assert result.seeded_case_suites is False
+        assert result.copied_case_suite_ids == []
+        assert not (root / "case_suites" / "template-suite").exists()
 
 
 def test_repository_demo_examples_seed_for_ui_testing() -> None:
@@ -297,6 +379,8 @@ def main() -> int:
         test_seed_does_nothing_when_any_runtime_manifest_exists,
         test_seed_creates_empty_experiments_when_examples_missing,
         test_seed_fails_on_conflicting_existing_directory_without_manifest,
+        test_seed_copies_case_suites_independently,
+        test_seed_does_not_overwrite_existing_case_suites,
         test_repository_demo_examples_seed_for_ui_testing,
     ]
     for test in tests:
