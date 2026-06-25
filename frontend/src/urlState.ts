@@ -1,4 +1,5 @@
 const EXPERIMENT_PARAM = "experiment";
+const EXPERIMENTS_SEGMENT = "experiments";
 const CASE_SUITES_SEGMENT = "case-suites";
 const GLOBAL_SETTINGS_SEGMENT = "global-settings";
 
@@ -48,8 +49,12 @@ export function parseExperimentRoute(url: URL): ExperimentRoute {
     .split("/")
     .map((segment) => segment.trim())
     .filter((segment) => segment !== "");
-  const experimentId = decodePathSegment(segments[0]) ?? parseExperimentId(url.search);
-  const tab = isWorkbenchTab(segments[1]) ? segments[1] : DEFAULT_TAB;
+  const isCanonicalRoute = segments[0] === EXPERIMENTS_SEGMENT;
+  const experimentSegment = isCanonicalRoute ? segments[1] : segments[0];
+  const tabSegment = isCanonicalRoute ? segments[2] : segments[1];
+  const experimentId =
+    decodePathSegment(experimentSegment) ?? parseExperimentId(url.search);
+  const tab = isWorkbenchTab(tabSegment) ? tabSegment : DEFAULT_TAB;
   return { experimentId, tab };
 }
 
@@ -92,5 +97,5 @@ export function buildExperimentPath(
   experimentId: string,
   tab: WorkbenchTab
 ): string {
-  return `/${encodeURIComponent(experimentId)}/${tab}`;
+  return `/${EXPERIMENTS_SEGMENT}/${encodeURIComponent(experimentId)}/${tab}`;
 }

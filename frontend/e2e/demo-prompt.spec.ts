@@ -94,7 +94,7 @@ test("demo cases tab shows suite-backed cases and opens case suites", async ({
   ).toContainText("Demo JSON briefs");
 
   await page.getByRole("button", { name: "Experiments" }).click();
-  await expect(page).toHaveURL(/\/demo-json\/prompt$/);
+  await expect(page).toHaveURL(/\/experiments\/demo-json\/prompt$/);
   await expect(page.getByRole("navigation", { name: "Experiments" })).toBeVisible();
 });
 
@@ -343,7 +343,9 @@ test("experiment management creates clones and deletes experiments", async ({
   await newDialog.getByLabel("Title").fill(`Managed Text ${unique}`);
   await newDialog.getByRole("button", { name: "Create experiment" }).click();
 
-  await expect(page).toHaveURL(new RegExp(`/managed-text-${unique}/prompt$`));
+  await expect(page).toHaveURL(
+    new RegExp(`/experiments/managed-text-${unique}/prompt$`)
+  );
   await expect(
     page.getByRole("navigation", { name: "Experiments" })
   ).toContainText(`Managed Text ${unique}`);
@@ -354,7 +356,9 @@ test("experiment management creates clones and deletes experiments", async ({
   await pydanticDialog.getByLabel("Output type").selectOption("pydantic");
   await pydanticDialog.getByLabel("Model entrypoint").fill("model.Output");
   await pydanticDialog.getByRole("button", { name: "Create experiment" }).click();
-  await expect(page).toHaveURL(new RegExp(`/managed-json-${unique}/prompt$`));
+  await expect(page).toHaveURL(
+    new RegExp(`/experiments/managed-json-${unique}/prompt$`)
+  );
   await expect(page.getByRole("region", { name: "Prompt source" })).toContainText(
     "model.py"
   );
@@ -368,7 +372,9 @@ test("experiment management creates clones and deletes experiments", async ({
   await cloneDialog.getByLabel("Title").fill(`Managed Clone ${unique}`);
   await cloneDialog.getByRole("button", { name: "Clone experiment" }).click();
 
-  await expect(page).toHaveURL(new RegExp(`/managed-clone-${unique}/settings$`));
+  await expect(page).toHaveURL(
+    new RegExp(`/experiments/managed-clone-${unique}/settings$`)
+  );
   await page.getByRole("tab", { name: "Cases" }).click();
   await expect(page.getByRole("region", { name: "Cases" })).toContainText(
     "product-brief"

@@ -15,8 +15,15 @@ import {
 test("parses canonical experiment and tab paths", () => {
   assert.deepEqual(
     parseExperimentRoute(
-      new URL("http://localhost:5173/split-scenes/settings")
+      new URL("http://localhost:5173/experiments/split-scenes/settings")
     ),
+    { experimentId: "split-scenes", tab: "settings" }
+  );
+});
+
+test("keeps legacy experiment paths working", () => {
+  assert.deepEqual(
+    parseExperimentRoute(new URL("http://localhost:5173/split-scenes/settings")),
     { experimentId: "split-scenes", tab: "settings" }
   );
 });
@@ -32,21 +39,25 @@ test("keeps old query experiment links working", () => {
 
 test("defaults invalid tabs to prompt", () => {
   assert.deepEqual(
-    parseExperimentRoute(new URL("http://localhost:5173/split-scenes/unknown")),
+    parseExperimentRoute(
+      new URL("http://localhost:5173/experiments/split-scenes/unknown")
+    ),
     { experimentId: "split-scenes", tab: "prompt" }
   );
 });
 
 test("parses prompt tab routes", () => {
   assert.deepEqual(
-    parseExperimentRoute(new URL("http://localhost:5173/demo/prompt")),
+    parseExperimentRoute(new URL("http://localhost:5173/experiments/demo/prompt")),
     { experimentId: "demo", tab: "prompt" }
   );
 });
 
 test("parses validation tab routes", () => {
   assert.deepEqual(
-    parseExperimentRoute(new URL("http://localhost:5173/demo/validation")),
+    parseExperimentRoute(
+      new URL("http://localhost:5173/experiments/demo/validation")
+    ),
     { experimentId: "demo", tab: "validation" }
   );
 });
@@ -54,7 +65,7 @@ test("parses validation tab routes", () => {
 test("builds encoded canonical paths", () => {
   assert.equal(
     buildExperimentPath("summarize chapter", "cases"),
-    "/summarize%20chapter/cases"
+    "/experiments/summarize%20chapter/cases"
   );
 });
 
