@@ -1,4 +1,4 @@
-import { cpSync, rmSync } from "node:fs";
+import { cpSync, existsSync, readdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
@@ -8,7 +8,18 @@ test.describe.configure({ mode: "serial" });
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const demoFixtureNames = ["demo-json", "demo-string"] as const;
 
+function removeManagedExperimentFixtures() {
+  const experimentsRoot = resolve(repoRoot, "experiments");
+  if (!existsSync(experimentsRoot)) return;
+  for (const entry of readdirSync(experimentsRoot, { withFileTypes: true })) {
+    if (entry.isDirectory() && entry.name.startsWith("managed-")) {
+      rmSync(resolve(experimentsRoot, entry.name), { recursive: true, force: true });
+    }
+  }
+}
+
 function resetDemoFixtures() {
+  removeManagedExperimentFixtures();
   for (const fixtureName of demoFixtureNames) {
     const source = resolve(repoRoot, "examples", fixtureName);
     const destination = resolve(repoRoot, "experiments", fixtureName);
@@ -19,6 +30,10 @@ function resetDemoFixtures() {
 
 test.beforeAll(() => {
   resetDemoFixtures();
+});
+
+test.afterAll(() => {
+  removeManagedExperimentFixtures();
 });
 
 async function selectVersion(page: import("@playwright/test").Page, version: string) {
@@ -261,4 +276,66 @@ test("demo json validators can overwrite current version", async ({ page }) => {
     validation.getByText("No validation loaded. Validate the active run to review evidence.")
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Validate active run" })).toBeVisible();
+});
+
+test("experiment management creates clones and deletes experiments", async ({
+  page
+}) => {
+  await page.goto("/demo-json/settings");
+
+  const unique = Date.now();
+  await page.getByRole("button", { name: "New" }).click();
+  const newDialog = page.getByRole("dialog", { name: "New experiment" });
+  await expect(newDialog).toBeVisible();
+  await newDialog.getByLabel("Title").fill(`Managed Text ${unique}`);
+  await newDialog.getByRole("button", { name: "Create experiment" }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/managed-text-${unique}/prompt$`));
+  await expect(
+    page.getByRole("navigation", { name: "Experiments" })
+  ).toContainText(`Managed Text ${unique}`);
+
+  await page.getByRole("button", { name: "New" }).click();
+  const pydanticDialog = page.getByRole("dialog", { name: "New experiment" });
+  await pydanticDialog.getByLabel("Title").fill(`Managed JSON ${unique}`);
+  await pydanticDialog.getByLabel("Output type").selectOption("pydantic");
+  await pydanticDialog.getByLabel("Model entrypoint").fill("model.Output");
+  await pydanticDialog.getByRole("button", { name: "Create experiment" }).click();
+  await expect(page).toHaveURL(new RegExp(`/managed-json-${unique}/prompt$`));
+  await expect(page.getByRole("region", { name: "Prompt source" })).toContainText(
+    "model.py"
+  );
+
+  await page.goto("/demo-json/settings");
+  await page
+    .getByRole("navigation", { name: "Experiments" })
+    .getByRole("button", { name: "Clone", exact: true })
+    .click();
+  const cloneDialog = page.getByRole("dialog", { name: "Clone experiment" });
+  await cloneDialog.getByLabel("Title").fill(`Managed Clone ${unique}`);
+  await cloneDialog.getByRole("button", { name: "Clone experiment" }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/managed-clone-${unique}/settings$`));
+  await page.getByRole("tab", { name: "Cases" }).click();
+  await expect(page.getByRole("region", { name: "Cases" })).toContainText(
+    "product-brief"
+  );
+  await page.getByRole("tab", { name: "Validators" }).click();
+  await expect(page.getByRole("region", { name: "Validators" })).toContainText(
+    "Report"
+  );
+
+  await page
+    .getByRole("navigation", { name: "Experiments" })
+    .getByRole("button", { name: "Delete", exact: true })
+    .click();
+  const deleteDialog = page.getByRole("dialog", { name: "Delete experiment" });
+  await expect(deleteDialog).toContainText(
+    "runs, validations, reviews, proposals, and comparisons"
+  );
+  await deleteDialog.getByRole("button", { name: "Delete experiment" }).click();
+
+  await expect(
+    page.getByRole("navigation", { name: "Experiments" })
+  ).not.toContainText(`Managed Clone ${unique}`);
 });
