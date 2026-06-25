@@ -56,6 +56,13 @@ select {
   line-height: 1.5;
 }
 
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .header-settings-button {
   flex: 0 0 auto;
   min-height: 36px;
@@ -202,6 +209,10 @@ select {
 .version-switcher select:focus-visible,
 .case-browser-header input:focus-visible,
 .case-browser-item-main:focus-visible,
+.case-suite-list-item:focus-visible,
+.case-suite-case-item:focus-visible,
+.case-suite-manager input:focus-visible,
+.case-suite-manager textarea:focus-visible,
 .comparison-controls select:focus-visible,
 .validation-include-control input:focus-visible,
 .reason-input:focus-visible,
@@ -531,7 +542,8 @@ select {
 
 .overview-section,
 .runs-panel,
-.case-browser {
+.case-browser,
+.case-suite-manager {
   min-width: 0;
   border: 1px solid #e4e7ec;
   border-radius: 8px;
@@ -1213,6 +1225,227 @@ select {
   min-width: 0;
   padding: 16px;
   overflow: auto;
+}
+
+.case-suite-manager {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  min-height: 640px;
+  overflow: hidden;
+}
+
+.case-suite-sidebar {
+  min-width: 0;
+  border-right: 1px solid #e4e7ec;
+  background: #fbfcfd;
+}
+
+.case-suite-header,
+.case-suite-panel-form,
+.case-suite-editor,
+.case-suite-cases-heading,
+.case-suite-add-case,
+.case-suite-payload-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.case-suite-header {
+  padding: 14px;
+  border-bottom: 1px solid #e4e7ec;
+}
+
+.case-suite-header h2,
+.case-suite-editor-heading h3,
+.case-suite-cases-heading h3,
+.case-suite-panel-form h3,
+.case-suite-add-case h3,
+.case-suite-payload-heading h3 {
+  margin: 0;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 1.3;
+}
+
+.case-suite-header p,
+.case-suite-header span,
+.case-suite-editor-heading p,
+.case-suite-reference,
+.case-suite-cases-heading span,
+.case-suite-list-item span,
+.case-suite-case-item span {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.case-suite-list {
+  max-height: 360px;
+  overflow: auto;
+}
+
+.case-suite-list-item,
+.case-suite-case-item {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-bottom: 1px solid #eef1f5;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.case-suite-list-item:hover,
+.case-suite-list-item:focus-within,
+.case-suite-case-item:hover,
+.case-suite-case-item:focus-within {
+  background: #f4f7fa;
+}
+
+.case-suite-list-item.is-selected,
+.case-suite-case-item.is-selected {
+  background: #eaf2ff;
+  box-shadow: inset 4px 0 0 #2563eb;
+}
+
+.case-suite-list-item strong,
+.case-suite-case-item strong {
+  overflow-wrap: anywhere;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.case-suite-panel-form {
+  padding: 14px;
+  border-top: 1px solid #e4e7ec;
+}
+
+.case-suite-panel-form label,
+.case-suite-fields label,
+.case-suite-add-case label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.case-suite-panel-form label span,
+.case-suite-fields label span,
+.case-suite-add-case label span {
+  color: #475467;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.3;
+}
+
+.case-suite-panel-form input,
+.case-suite-panel-form textarea,
+.case-suite-fields input,
+.case-suite-fields textarea,
+.case-suite-add-case input,
+.case-suite-add-case textarea,
+.case-suite-payload-editor textarea {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  padding: 7px 9px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.case-suite-panel-form textarea,
+.case-suite-fields textarea,
+.case-suite-add-case textarea,
+.case-suite-payload-editor textarea {
+  resize: vertical;
+}
+
+.case-suite-detail {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  overflow: auto;
+}
+
+.case-suite-editor {
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e4e7ec;
+}
+
+.case-suite-editor-heading,
+.case-suite-payload-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.case-suite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.case-suite-fields {
+  display: grid;
+  grid-template-columns: minmax(180px, 280px) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.case-suite-reference {
+  padding: 8px 10px;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.case-suite-cases {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 14px;
+  min-width: 0;
+}
+
+.case-suite-cases-list {
+  min-width: 0;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.case-suite-cases-heading {
+  padding: 12px;
+  border-bottom: 1px solid #e4e7ec;
+  background: #fbfcfd;
+}
+
+.case-suite-payload-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 14px;
+  min-width: 0;
+}
+
+.case-suite-add-case {
+  align-content: start;
+}
+
+.case-suite-payload-editor {
+  align-content: start;
+  min-width: 0;
 }
 
 .case-detail-heading {
@@ -2885,14 +3118,21 @@ select {
 }
 
 @media (max-width: 980px) {
-  .case-browser {
+  .case-browser,
+  .case-suite-manager {
     grid-template-columns: 1fr;
     min-height: 0;
   }
 
-  .case-browser-sidebar {
+  .case-browser-sidebar,
+  .case-suite-sidebar {
     border-right: 0;
     border-bottom: 1px solid #e4e7ec;
+  }
+
+  .case-suite-cases,
+  .case-suite-payload-panel {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -2903,11 +3143,15 @@ select {
   }
 
   .app-header {
-    display: block;
+    display: grid;
   }
 
   .app-header h1 {
     font-size: 28px;
+  }
+
+  .header-actions {
+    justify-content: flex-start;
   }
 
   .experiment-row {
@@ -2975,6 +3219,9 @@ select {
   }
 
   .case-browser,
+  .case-suite-fields,
+  .case-suite-cases,
+  .case-suite-payload-panel,
   .bindings-row,
   .runs-drilldown,
   .run-detail-meta,
@@ -3014,7 +3261,8 @@ select {
     width: 100%;
   }
 
-  .case-browser-sidebar {
+  .case-browser-sidebar,
+  .case-suite-sidebar {
     border-right: 0;
     border-bottom: 1px solid #e4e7ec;
   }

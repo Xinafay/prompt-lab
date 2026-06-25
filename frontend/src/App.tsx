@@ -5,9 +5,12 @@ import {
   cancelJob,
   cloneExperiment,
   compareVersions,
+  createCaseSuite,
   createExperiment,
   createProposalVersion,
+  deleteCaseSuite,
   deleteExperiment,
+  getCaseSuiteCases,
   generateProposal,
   getActiveJob,
   getCaseSuites,
@@ -28,7 +31,9 @@ import {
   previewValidationPrompts,
   runVersion,
   saveCaseInclusion,
+  saveCaseSuiteCases,
   validateVersion,
+  updateCaseSuite,
   updateExperiment,
   updateGlobalSettings,
   updateHumanNotes,
@@ -38,6 +43,7 @@ import {
   updateVersionValidators
 } from "./api";
 import { CaseBrowser } from "./components/CaseBrowser";
+import { CaseSuiteManager } from "./components/CaseSuiteManager";
 import { ComparisonView } from "./components/ComparisonView";
 import {
   CloneExperimentModal,
@@ -65,6 +71,8 @@ import { WorkflowToolbar } from "./components/WorkflowToolbar";
 import type {
   Case,
   CaseSuite,
+  CaseSuiteCreateRequest,
+  CaseSuiteUpdateRequest,
   CompareMatrixResponse,
   CreatedVersionResponse,
   Experiment,
@@ -120,7 +128,7 @@ type GlobalSettingsState =
   | { status: "error"; message: string };
 
 type HistoryMode = "push" | "replace";
-type AppView = "experiment" | "globalSettings";
+type AppView = "experiment" | "globalSettings" | "caseSuites";
 type PromptPreviewAction = () => void | Promise<void>;
 type SourceViewMode = "edit" | "diff";
 type UnsavedNavigationKind =
@@ -139,6 +147,7 @@ type ExperimentManagementDialog =
 type PendingNavigationTarget =
   | { kind: "experiment"; experiment: Experiment | null }
   | { kind: "experimentDialog"; dialog: ExperimentManagementDialog }
+  | { kind: "caseSuites" }
   | { kind: "globalSettings" }
   | { kind: "route"; route: ReturnType<typeof currentExperimentRoute> }
   | { kind: "tab"; tab: WorkbenchTab }
@@ -226,6 +235,12 @@ function App() {
   const [selectedExperiment, setSelectedExperiment] =
     useState<Experiment | null>(null);
   const [caseSuites, setCaseSuites] = useState<CaseSuite[]>([]);
+  const [selectedCaseSuiteId, setSelectedCaseSuiteId] = useState<string | null>(
+    null
+  );
+  const [caseSuiteCases, setCaseSuiteCases] = useState<Case[]>([]);
+  const [caseSuiteBusy, setCaseSuiteBusy] = useState(false);
+  const [caseSuiteMessage, setCaseSuiteMessage] = useState<string | null>(null);
   const [detailState, setDetailState] = useState<DetailState>({ status: "idle" });
   const [globalSettingsState, setGlobalSettingsState] =
     useState<GlobalSettingsState>({ status: "loading" });
@@ -457,6 +472,14 @@ function App() {
     writeGlobalSettingsRoute(options?.historyMode ?? "replace");
   }
 
+  function selectCaseSuites() {
+    setAppView("caseSuites");
+    setPendingNavigation(null);
+    setNavigationError(null);
+    setNavigationSaving(false);
+    setCaseSuiteMessage(null);
+  }
+
   function unsavedNavigationKind(): UnsavedNavigationKind | null {
     if (
       appView === "experiment" &&
@@ -622,6 +645,10 @@ function App() {
       selectGlobalSettings({ historyMode: "push" });
       return;
     }
+    if (navigation.kind === "caseSuites") {
+      selectCaseSuites();
+      return;
+    }
     if (navigation.kind === "route") {
       selectExperiment(experimentForRoute(navigation.route), {
         historyMode: "push",
@@ -660,6 +687,19 @@ function App() {
       return;
     }
     selectGlobalSettings({ historyMode: "push" });
+  }
+
+  function requestCaseSuitesSelection() {
+    if (appView === "caseSuites") {
+      return;
+    }
+    const navigation = buildPendingNavigation({ kind: "caseSuites" });
+    if (navigation !== null) {
+      setNavigationError(null);
+      setPendingNavigation(navigation);
+      return;
+    }
+    selectCaseSuites();
   }
 
   function requestTabChange(tab: WorkbenchTab) {
@@ -1012,6 +1052,22 @@ function App() {
     };
   }, []);
 
+  async function refreshCaseSuites(preferredSuiteId?: string | null) {
+    const suites = await getCaseSuites();
+    setCaseSuites(suites);
+    setSelectedCaseSuiteId((current) => {
+      const preferred = preferredSuiteId ?? current;
+      if (
+        preferred !== null &&
+        suites.some((suite) => suite.id === preferred)
+      ) {
+        return preferred;
+      }
+      return suites[0]?.id ?? null;
+    });
+    return suites;
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -1020,6 +1076,15 @@ function App() {
         const suites = await getCaseSuites();
         if (!cancelled) {
           setCaseSuites(suites);
+          setSelectedCaseSuiteId((current) => {
+            if (
+              current !== null &&
+              suites.some((suite) => suite.id === current)
+            ) {
+              return current;
+            }
+            return suites[0]?.id ?? null;
+          });
         }
       } catch (error) {
         if (!cancelled) {
@@ -1036,6 +1101,43 @@ function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (selectedCaseSuiteId === null) {
+      setCaseSuiteCases([]);
+      return;
+    }
+
+    let cancelled = false;
+    setCaseSuiteBusy(true);
+
+    async function loadSelectedSuiteCases(suiteId: string) {
+      try {
+        const loadedCases = await getCaseSuiteCases(suiteId);
+        if (!cancelled) {
+          setCaseSuiteCases(loadedCases);
+          setCaseSuiteMessage(null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setCaseSuiteCases([]);
+          setCaseSuiteMessage(
+            error instanceof Error ? error.message : "Could not load suite cases."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setCaseSuiteBusy(false);
+        }
+      }
+    }
+
+    void loadSelectedSuiteCases(selectedCaseSuiteId);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCaseSuiteId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1309,6 +1411,9 @@ function App() {
   }, [selectedExperiment]);
 
   const subtitle = useMemo(() => {
+    if (appView === "caseSuites") {
+      return "Manage reusable case suites";
+    }
     if (appView === "globalSettings") {
       return "Application-level configuration";
     }
@@ -1621,6 +1726,117 @@ function App() {
       }
     } finally {
       setWorkflowBusy(false);
+    }
+  }
+
+  function handleCaseSuiteCasesChange(nextCases: Case[]) {
+    setCaseSuiteCases(nextCases);
+    setCaseSuiteMessage(null);
+  }
+
+  async function handleCreateCaseSuite(request: CaseSuiteCreateRequest) {
+    setCaseSuiteBusy(true);
+    setCaseSuiteMessage("Creating case suite...");
+    try {
+      const created = await createCaseSuite(request);
+      await refreshCaseSuites(created.id);
+      setCaseSuiteMessage("Case Suite created.");
+    } catch (error) {
+      setCaseSuiteMessage(error instanceof Error ? error.message : "Unknown error");
+      throw error;
+    } finally {
+      setCaseSuiteBusy(false);
+    }
+  }
+
+  async function handleUpdateCaseSuite(
+    suiteId: string,
+    request: CaseSuiteUpdateRequest
+  ) {
+    setCaseSuiteBusy(true);
+    setCaseSuiteMessage("Saving case suite...");
+    try {
+      const updated = await updateCaseSuite(suiteId, request);
+      await refreshCaseSuites(updated.id);
+      setCaseSuiteMessage("Case Suite saved.");
+    } catch (error) {
+      setCaseSuiteMessage(error instanceof Error ? error.message : "Unknown error");
+      throw error;
+    } finally {
+      setCaseSuiteBusy(false);
+    }
+  }
+
+  async function handleDeleteCaseSuite(suiteId: string) {
+    setCaseSuiteBusy(true);
+    setCaseSuiteMessage("Deleting case suite...");
+    try {
+      await deleteCaseSuite(suiteId);
+      await refreshCaseSuites(null);
+      setCaseSuiteMessage("Case Suite deleted.");
+    } catch (error) {
+      setCaseSuiteMessage(error instanceof Error ? error.message : "Unknown error");
+      throw error;
+    } finally {
+      setCaseSuiteBusy(false);
+    }
+  }
+
+  async function refreshCurrentExperimentAfterCaseSuiteSave(
+    affectedExperimentIds: string[]
+  ) {
+    if (
+      selectedExperiment === null ||
+      detailState.status !== "loaded" ||
+      !affectedExperimentIds.includes(selectedExperiment.id)
+    ) {
+      return;
+    }
+    const version = detailState.overview.version;
+    const [overview, runs] = await Promise.all([
+      getVersionOverview(selectedExperiment.id, version),
+      getVersionRuns(selectedExperiment.id, version)
+    ]);
+    setDetailState({ status: "loaded", overview, runs });
+    setCommittedValidationState(null);
+    setCompareValidationByVersion({});
+    setCommittedReviewState(null);
+    setProposalResponse(null);
+    setCreatedVersion(null);
+    setComparison(null);
+    clearCaseEditor();
+  }
+
+  async function handleSaveCaseSuiteCases() {
+    if (selectedCaseSuiteId === null) {
+      return;
+    }
+    setCaseSuiteBusy(true);
+    setCaseSuiteMessage("Saving case suite cases...");
+    try {
+      const response = await saveCaseSuiteCases(selectedCaseSuiteId, {
+        cases: caseSuiteCases.map((artifactCase) => ({
+          case_id: artifactCase.id,
+          payload: artifactCase.payload
+        }))
+      });
+      setCaseSuiteCases(response.cases);
+      await refreshCaseSuites(selectedCaseSuiteId);
+      await refreshCurrentExperimentAfterCaseSuiteSave(
+        response.affected_experiment_ids
+      );
+      setCaseSuiteMessage(
+        response.affected_experiment_ids.length > 0
+          ? `Case Suite cases saved. Invalidated generated artifacts for ${response.affected_experiment_ids.join(
+              ", "
+            )}.`
+          : "Case Suite cases saved."
+      );
+    } catch (error) {
+      setCaseSuiteMessage(error instanceof Error ? error.message : "Unknown error");
+      throw error;
+    } finally {
+      setCaseSuiteBusy(false);
     }
   }
 
@@ -2678,17 +2894,30 @@ function App() {
           <h1>Prompt Lab</h1>
           <p>{subtitle}</p>
         </div>
-        <button
-          className={
-            appView === "globalSettings"
-              ? "header-settings-button is-active"
-              : "header-settings-button"
-          }
-          onClick={requestGlobalSettingsSelection}
-          type="button"
-        >
-          Global settings
-        </button>
+        <div className="header-actions">
+          <button
+            className={
+              appView === "caseSuites"
+                ? "header-settings-button is-active"
+                : "header-settings-button"
+            }
+            onClick={requestCaseSuitesSelection}
+            type="button"
+          >
+            Case Suites
+          </button>
+          <button
+            className={
+              appView === "globalSettings"
+                ? "header-settings-button is-active"
+                : "header-settings-button"
+            }
+            onClick={requestGlobalSettingsSelection}
+            type="button"
+          >
+            Global settings
+          </button>
+        </div>
       </header>
 
       <section className="workspace" aria-live="polite">
@@ -2736,6 +2965,22 @@ function App() {
                     settings={globalSettingsState.settings}
                   />
                 )
+              ) : null}
+
+              {appView === "caseSuites" ? (
+                <CaseSuiteManager
+                  cases={caseSuiteCases}
+                  isBusy={caseSuiteBusy}
+                  message={caseSuiteMessage}
+                  onCasesChange={handleCaseSuiteCasesChange}
+                  onCreateSuite={handleCreateCaseSuite}
+                  onDeleteSuite={handleDeleteCaseSuite}
+                  onSaveCases={handleSaveCaseSuiteCases}
+                  onSelectSuite={setSelectedCaseSuiteId}
+                  onUpdateSuite={handleUpdateCaseSuite}
+                  selectedSuiteId={selectedCaseSuiteId}
+                  suites={caseSuites}
+                />
               ) : null}
 
               {appView === "experiment" && state.experiments.length === 0 ? (
