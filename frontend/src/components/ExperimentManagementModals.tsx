@@ -73,7 +73,7 @@ export function NewExperimentModal({
       <form
         aria-labelledby="new-experiment-title"
         aria-modal="true"
-        className="settings-navigation-modal experiment-management-modal"
+        className="modal-card modal-card-compact"
         onSubmit={handleSubmit}
         role="dialog"
       >
@@ -162,7 +162,7 @@ export function CloneExperimentModal({
       <form
         aria-labelledby="clone-experiment-title"
         aria-modal="true"
-        className="settings-navigation-modal experiment-management-modal"
+        className="modal-card modal-card-compact"
         onSubmit={handleSubmit}
         role="dialog"
       >
@@ -223,7 +223,7 @@ export function DeleteExperimentModal({
       <form
         aria-labelledby="delete-experiment-title"
         aria-modal="true"
-        className="settings-navigation-modal experiment-management-modal"
+        className="modal-card modal-card-compact"
         onSubmit={handleSubmit}
         role="dialog"
       >

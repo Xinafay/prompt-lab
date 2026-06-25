@@ -1935,6 +1935,7 @@ select {
   background: rgb(17 24 39 / 0.42);
 }
 
+.modal-card,
 .settings-navigation-modal {
   display: grid;
   gap: 16px;
@@ -1946,6 +1947,7 @@ select {
   box-shadow: 0 24px 60px rgb(16 24 40 / 0.22);
 }
 
+.modal-card h2,
 .settings-navigation-modal h2 {
   margin: 0;
   color: #111827;
@@ -1954,6 +1956,7 @@ select {
   line-height: 1.25;
 }
 
+.modal-card p,
 .settings-navigation-modal p {
   margin: 6px 0 0;
   color: #667085;
@@ -1961,21 +1964,21 @@ select {
   line-height: 1.45;
 }
 
-.experiment-management-modal {
+.modal-card-compact {
   width: min(560px, 100%);
 }
 
-.case-payload-modal {
+.modal-card-large-code {
   width: min(1040px, 100%);
   max-height: calc(100vh - 48px);
   overflow: auto;
 }
 
-.case-payload-modal .code-viewer .cm-editor {
+.modal-card-large-code .code-viewer .cm-editor {
   min-height: min(560px, calc(100vh - 300px));
 }
 
-.case-payload-modal .code-viewer .cm-scroller {
+.modal-card-large-code .code-viewer .cm-scroller {
   max-height: min(640px, calc(100vh - 260px));
 }
 
@@ -2029,9 +2032,9 @@ select {
   outline-offset: 2px;
 }
 
-.experiment-management-modal .settings-field,
-.experiment-management-modal .settings-error,
-.experiment-management-modal .modal-actions {
+.modal-card .settings-field,
+.modal-card .settings-error,
+.modal-card .modal-actions {
   min-width: 0;
 }
 

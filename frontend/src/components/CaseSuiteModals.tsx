@@ -65,7 +65,7 @@ export function NewCaseSuiteModal({
       <form
         aria-labelledby="new-case-suite-title"
         aria-modal="true"
-        className="settings-navigation-modal experiment-management-modal"
+        className="modal-card modal-card-compact"
         onSubmit={handleSubmit}
         role="dialog"
       >
@@ -171,7 +171,7 @@ export function AddCaseModal({
       <form
         aria-labelledby="add-case-title"
         aria-modal="true"
-        className="settings-navigation-modal experiment-management-modal case-payload-modal"
+        className="modal-card modal-card-large-code"
         onSubmit={handleSubmit}
         role="dialog"
       >
@@ -264,7 +264,7 @@ export function EditCasePayloadModal({
       <form
         aria-labelledby="edit-case-payload-title"
         aria-modal="true"
-        className="settings-navigation-modal experiment-management-modal case-payload-modal"
+        className="modal-card modal-card-large-code"
         onSubmit={handleSubmit}
         role="dialog"
       >
