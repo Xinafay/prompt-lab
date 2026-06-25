@@ -1975,11 +1975,11 @@ select {
 }
 
 .modal-card-large-code .code-viewer .cm-editor {
-  min-height: min(560px, calc(100vh - 300px));
+  min-height: clamp(260px, calc(100vh - 380px), 560px);
 }
 
 .modal-card-large-code .code-viewer .cm-scroller {
-  max-height: min(640px, calc(100vh - 260px));
+  max-height: clamp(260px, calc(100vh - 340px), 640px);
 }
 
 .case-file-upload {
