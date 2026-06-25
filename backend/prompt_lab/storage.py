@@ -176,10 +176,10 @@ class PromptLabStore:
         if title.strip() == "":
             raise ValueError("Experiment title cannot be blank")
         source_dir = self.experiment_dir(source_experiment_id)
-        source_artifact = self.load_experiment(source_experiment_id)
         for path in source_dir.rglob("*"):
             if path.is_symlink():
                 raise NotFoundError("Experiment not found")
+        source_artifact = self.load_experiment(source_experiment_id)
         experiment_id = self._available_experiment_id(title)
         destination = self.experiments_root.resolve() / experiment_id
         try:

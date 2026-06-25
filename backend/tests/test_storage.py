@@ -897,6 +897,39 @@ def test_store_clone_rejects_source_symlink_before_copying() -> None:
         assert not (root / "experiments" / "demo-clone").exists()
 
 
+def test_store_clone_rejects_manifest_symlink_before_reading() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source = root / "experiments" / "demo"
+        (source / "versions" / "v001").mkdir(parents=True)
+        secret_manifest = root / "secret-experiment.json"
+        write_experiment_manifest(secret_manifest)
+        try:
+            (source / "experiment.json").symlink_to(secret_manifest)
+        except (OSError, NotImplementedError):
+            return
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        secret_manifest.chmod(0)
+        try:
+            try:
+                store.clone_experiment(
+                    source_experiment_id="demo",
+                    title="Demo Clone",
+                )
+            except NotFoundError:
+                pass
+            else:
+                raise AssertionError("Expected manifest symlink to be rejected")
+
+            assert not (root / "experiments" / "demo-clone").exists()
+        finally:
+            secret_manifest.chmod(0o600)
+
+
 def test_store_delete_experiment_removes_directory() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -966,6 +999,7 @@ def main() -> int:
         test_store_clone_rejects_whitespace_title_without_creating_fallback,
         test_store_clone_removes_destination_when_source_manifest_is_invalid,
         test_store_clone_rejects_source_symlink_before_copying,
+        test_store_clone_rejects_manifest_symlink_before_reading,
         test_store_delete_experiment_removes_directory,
         test_store_delete_experiment_rejects_path_escape,
     ]
