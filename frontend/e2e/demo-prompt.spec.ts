@@ -456,6 +456,10 @@ test("experiment management creates clones and deletes experiments", async ({
     "Report"
   );
 
+  await page.getByRole("tab", { name: "Settings" }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`/experiments/managed-clone-${unique}/settings$`)
+  );
   await page.getByRole("button", { name: "Delete experiment" }).click();
   const deleteDialog = page.getByRole("dialog", { name: "Delete experiment" });
   await expect(deleteDialog).toContainText(
