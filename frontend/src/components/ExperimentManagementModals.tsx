@@ -231,8 +231,8 @@ export function DeleteExperimentModal({
           <h2 id="delete-experiment-title">Delete experiment</h2>
           <p>
             Delete {experimentTitle} from the local workspace. This removes its
-            cases, versions, prompts, models, validators, runs, validations,
-            reviews, proposals, and comparisons.
+            experiment manifest, cases, versions, prompts, models, validators,
+            runs, validations, reviews, proposals, and comparisons.
           </p>
         </div>
 

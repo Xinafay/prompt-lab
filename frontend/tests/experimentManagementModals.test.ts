@@ -64,7 +64,7 @@ test("delete experiment modal uses custom destructive copy", () => {
   assert.match(html, /Demo JSON/);
   assert.match(
     html,
-    /runs, validations, reviews, proposals, and comparisons/
+    /experiment manifest, cases, versions, prompts, models, validators, runs, validations, reviews, proposals, and comparisons/
   );
   assert.match(html, /Delete experiment/);
   assert.doesNotMatch(html, /window.confirm/);
