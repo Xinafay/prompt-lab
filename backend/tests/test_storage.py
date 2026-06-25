@@ -701,7 +701,7 @@ def test_store_create_experiment_rejects_invalid_output_type() -> None:
         try:
             store.create_experiment(
                 title="Demo",
-                output_type="typo",
+                output_type="typo",  # type: ignore[reportArgumentType]
                 model_entrypoint=None,
                 settings=settings,
             )

@@ -563,7 +563,7 @@ def test_api_create_experiment_returns_409_on_file_exists_error() -> None:
         def conflict_create(*_args: object, **_kwargs: object) -> object:
             raise FileExistsError("Experiment already exists")
 
-        api_module.PromptLabStore.create_experiment = conflict_create
+        api_module.PromptLabStore.create_experiment = conflict_create  # type: ignore[assignment]
         try:
             response = TestClient(app).post(
                 "/api/experiments",
@@ -586,7 +586,7 @@ def test_api_create_experiment_returns_400_on_value_error() -> None:
         def invalid_create(*_args: object, **_kwargs: object) -> object:
             raise ValueError("Experiment id is invalid")
 
-        api_module.PromptLabStore.create_experiment = invalid_create
+        api_module.PromptLabStore.create_experiment = invalid_create  # type: ignore[assignment]
         try:
             response = TestClient(app).post(
                 "/api/experiments",
@@ -609,7 +609,7 @@ def test_api_clone_experiment_returns_409_on_file_exists_error() -> None:
         def conflict_clone(*_args: object, **_kwargs: object) -> object:
             raise FileExistsError("Experiment already exists")
 
-        api_module.PromptLabStore.clone_experiment = conflict_clone
+        api_module.PromptLabStore.clone_experiment = conflict_clone  # type: ignore[assignment]
         try:
             response = TestClient(app).post(
                 "/api/experiments/demo/clone",
