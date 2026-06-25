@@ -5,6 +5,8 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { CaseSuiteManager } from "../src/components/CaseSuiteManager.tsx";
+import { AddCaseModal, NewCaseSuiteModal } from "../src/components/CaseSuiteModals.tsx";
+import { CaseSuitesList } from "../src/components/CaseSuitesList.tsx";
 import {
   canSaveSuiteCases,
   getSuiteSelectionBlockedMessage,
@@ -61,19 +63,27 @@ function renderManager(props: Partial<React.ComponentProps<typeof CaseSuiteManag
       isBusy: false,
       message: null,
       onCasesChange: () => undefined,
-      onCreateSuite: async () => undefined,
+      onAddCase: () => undefined,
       onDeleteSuite: async () => undefined,
       onResetCases: () => undefined,
       onSaveCases: async () => undefined,
-      onSelectSuite: () => undefined,
       onUpdateSuite: async () => undefined,
       ...props
     })
   );
 }
 
-test("case suite manager renders suite list with selected suite metadata", () => {
-  const html = renderManager();
+test("case suites list renders suite rail metadata and create action", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(CaseSuitesList, {
+      isBusy: false,
+      isSelectionBlocked: false,
+      onCreate: () => undefined,
+      onSelect: () => undefined,
+      selectedSuiteId: "suite-regression",
+      suites
+    })
+  );
 
   assert.match(html, /Case Suites/);
   assert.match(html, /Regression Suite/);
@@ -81,12 +91,12 @@ test("case suite manager renders suite list with selected suite metadata", () =>
   assert.match(html, /2 cases/);
   assert.match(html, /Referenced by demo-json/);
   assert.match(html, /Empty Suite/);
+  assert.match(html, />New<\/button>/);
 });
 
 test("case suite manager renders management controls and disables referenced delete", () => {
   const html = renderManager();
 
-  assert.match(html, /Create suite/);
   assert.match(html, /Save suite/);
   assert.match(html, /Delete suite/);
   assert.match(html, /Cannot delete a suite referenced by experiments/);
@@ -100,8 +110,6 @@ test("case suite manager renders selected cases, payload editor, and save contro
   assert.match(html, /alpha/);
   assert.match(html, /bravo/);
   assert.match(html, /Add case/);
-  assert.match(html, /Case ID/);
-  assert.match(html, /JSON object/);
   assert.match(html, /Payload JSON/);
   assert.match(html, /Delete selected case/);
   assert.match(html, /Save suite cases/);
@@ -121,6 +129,33 @@ test("case suite manager renders busy and empty states", () => {
   assert.match(html, /No cases in this suite/);
 });
 
+test("case suite creation and add case render as modals", () => {
+  const createHtml = renderToStaticMarkup(
+    React.createElement(NewCaseSuiteModal, {
+      error: null,
+      isBusy: false,
+      onCancel: () => undefined,
+      onSubmit: async () => undefined
+    })
+  );
+  const addCaseHtml = renderToStaticMarkup(
+    React.createElement(AddCaseModal, {
+      existingCases: cases,
+      isBusy: false,
+      onCancel: () => undefined,
+      onSubmit: () => undefined
+    })
+  );
+
+  assert.match(createHtml, /role="dialog"/);
+  assert.match(createHtml, /New Case Suite/);
+  assert.match(createHtml, /Create suite/);
+  assert.match(addCaseHtml, /role="dialog"/);
+  assert.match(addCaseHtml, /Add case/);
+  assert.match(addCaseHtml, /Case ID/);
+  assert.match(addCaseHtml, /JSON object/);
+});
+
 test("production app wires a dedicated case suites view", () => {
   const source = readFileSync(
     new URL("../src/App.tsx", import.meta.url),
@@ -129,6 +164,9 @@ test("production app wires a dedicated case suites view", () => {
 
   assert.match(source, /type AppView = "experiment" \| "globalSettings" \| "caseSuites"/);
   assert.match(source, /CaseSuiteManager/);
+  assert.match(source, /CaseSuitesList/);
+  assert.match(source, /NewCaseSuiteModal/);
+  assert.match(source, /AddCaseModal/);
   assert.match(source, /Case Suites/);
   assert.match(source, /saveCaseSuiteCases/);
   assert.match(source, /getCaseSuiteCases/);
@@ -208,6 +246,6 @@ test("case suite manager stacks below the shared mobile breakpoint", () => {
 
   assert.match(
     css,
-    /@media \(max-width: 980px\)[\s\S]*?\.case-suite-manager\s*\{[\s\S]*?grid-template-columns:\s*1fr;/
+    /@media \(max-width: 980px\)[\s\S]*?\.case-suite-cases\s*\{[\s\S]*?grid-template-columns:\s*1fr;/
   );
 });

@@ -70,10 +70,13 @@ test("demo cases tab shows suite-backed cases and opens case suites", async ({
 
   await page.getByRole("button", { name: "Case Suites" }).click();
   await expect(
-    page.getByRole("complementary", { name: "Case suite list" })
+    page.getByRole("navigation", { name: "Case Suites" })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Case Suite details" })
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Case Suites" })).toBeVisible();
-  const suiteList = page.getByRole("complementary", { name: "Case suite list" });
+  const suiteList = page.getByRole("navigation", { name: "Case Suites" });
   await expect(
     suiteList.getByRole("button", { name: /Demo JSON briefs/ })
   ).toBeVisible();

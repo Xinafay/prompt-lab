@@ -1,14 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
-import type {
-  Case,
-  CaseSuite,
-  CaseSuiteCreateRequest,
-  CaseSuiteUpdateRequest
-} from "../types";
+import type { Case, CaseSuite, CaseSuiteUpdateRequest } from "../types";
 import {
   canSaveSuiteCases,
-  isSuiteMutationDisabled,
   parseCasePayloadDraft,
   SUITE_CASE_SELECTION_BLOCKED_MESSAGE
 } from "./caseSuiteDrafts";
@@ -20,14 +14,13 @@ interface CaseSuiteManagerProps {
   isBusy: boolean;
   message: string | null;
   caseSuiteCasesDirty: boolean;
-  onSelectSuite: (suiteId: string) => void;
-  onCreateSuite: (request: CaseSuiteCreateRequest) => void | Promise<void>;
   onUpdateSuite: (
     suiteId: string,
     request: CaseSuiteUpdateRequest
   ) => void | Promise<void>;
   onDeleteSuite: (suiteId: string) => void | Promise<void>;
   onCasesChange: (cases: Case[]) => void;
+  onAddCase: () => void;
   onResetCases: () => void;
   onSaveCases: () => void | Promise<void>;
 }
@@ -49,19 +42,16 @@ export function CaseSuiteManager({
   isBusy,
   message,
   onCasesChange,
-  onCreateSuite,
   onDeleteSuite,
+  onAddCase,
   onResetCases,
   onSaveCases,
-  onSelectSuite,
   onUpdateSuite
 }: CaseSuiteManagerProps) {
   const selectedSuite = useMemo(
     () => suites.find((suite) => suite.id === selectedSuiteId) ?? null,
     [selectedSuiteId, suites]
   );
-  const [createTitle, setCreateTitle] = useState("");
-  const [createDescription, setCreateDescription] = useState("");
   const [suiteTitle, setSuiteTitle] = useState(selectedSuite?.title ?? "");
   const [suiteDescription, setSuiteDescription] = useState(
     selectedSuite?.description ?? ""
@@ -71,8 +61,6 @@ export function CaseSuiteManager({
     cases.find((artifactCase) => artifactCase.id === selectedCaseId) ??
     cases[0] ??
     null;
-  const [addCaseId, setAddCaseId] = useState("");
-  const [addPayloadText, setAddPayloadText] = useState("{\n  \n}");
   const [payloadText, setPayloadText] = useState(
     selectedCase === null ? "" : formatPayload(selectedCase.payload)
   );
@@ -80,10 +68,7 @@ export function CaseSuiteManager({
   const [payloadError, setPayloadError] = useState<string | null>(null);
   const referencedBy = selectedSuite?.experiment_ids ?? [];
   const hasCasePayloadError = payloadError !== null;
-  const suiteMutationDisabled = isSuiteMutationDisabled({
-    isBusy,
-    caseSuiteCasesDirty
-  });
+  const suiteMutationDisabled = isBusy || caseSuiteCasesDirty;
   const saveSuiteCasesDisabled = !canSaveSuiteCases({
     isBusy,
     isDirty: caseSuiteCasesDirty,
@@ -114,26 +99,6 @@ export function CaseSuiteManager({
     setPayloadText(formatPayload(nextSelected.payload));
     setPayloadError(null);
   }, [cases, selectedCaseId]);
-
-  async function handleCreateSuite(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const title = createTitle.trim();
-    if (title.length === 0) {
-      setError("Suite title is required.");
-      return;
-    }
-    setError(null);
-    try {
-      await onCreateSuite({
-        title,
-        description: createDescription.trim()
-      });
-      setCreateTitle("");
-      setCreateDescription("");
-    } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "Unknown error");
-    }
-  }
 
   async function handleUpdateSuite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -184,32 +149,6 @@ export function CaseSuiteManager({
     }
   }
 
-  function handleAddCase(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const caseId = addCaseId.trim();
-    if (caseId.length === 0) {
-      setError("Case ID is required.");
-      return;
-    }
-    if (cases.some((artifactCase) => artifactCase.id === caseId)) {
-      setError(`Case ${caseId} already exists.`);
-      return;
-    }
-    const parsed = parseCasePayloadDraft(addPayloadText);
-    if (parsed.ok) {
-      setError(null);
-      onCasesChange([
-        ...cases,
-        { id: caseId, enabled: true, payload: parsed.payload }
-      ]);
-      setSelectedCaseId(caseId);
-      setAddCaseId("");
-      setAddPayloadText("{\n  \n}");
-    } else {
-      setError(parsed.error);
-    }
-  }
-
   function handleDeleteSelectedCase() {
     if (selectedCase === null) return;
     const nextCases = cases.filter(
@@ -235,73 +174,10 @@ export function CaseSuiteManager({
   }
 
   return (
-    <section className="case-suite-manager">
-      <aside className="case-suite-sidebar" aria-label="Case suite list">
-        <div className="case-suite-header">
-          <div>
-            <h2>Case Suites</h2>
-            <p>{suites.length} suite{suites.length === 1 ? "" : "s"}</p>
-          </div>
-          {isBusy ? <span>Loading suite changes</span> : null}
-        </div>
-
-        <div className="case-suite-list">
-          {suites.map((suite) => {
-            const experimentIds = suite.experiment_ids ?? [];
-            return (
-              <button
-                className={
-                  suite.id === selectedSuiteId
-                    ? "case-suite-list-item is-selected"
-                    : "case-suite-list-item"
-                }
-                disabled={suiteMutationDisabled}
-                key={suite.id}
-                onClick={() => onSelectSuite(suite.id)}
-                type="button"
-              >
-                <strong>{suite.title}</strong>
-                <span>{suite.id}</span>
-                <span>{formatCaseCount(suite.case_count)}</span>
-                {experimentIds.length > 0 ? (
-                  <span>Referenced by {experimentIds.join(", ")}</span>
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-
-        <form className="case-suite-panel-form" onSubmit={handleCreateSuite}>
-          <h3>Create suite</h3>
-          <label>
-            <span>Title</span>
-            <input
-              disabled={suiteMutationDisabled}
-              onChange={(event) => setCreateTitle(event.target.value)}
-              value={createTitle}
-            />
-          </label>
-          <label>
-            <span>Description</span>
-            <textarea
-              disabled={suiteMutationDisabled}
-              onChange={(event) => setCreateDescription(event.target.value)}
-              rows={3}
-              value={createDescription}
-            />
-          </label>
-          <button
-            className="secondary-action"
-            disabled={suiteMutationDisabled}
-            type="submit"
-          >
-            Create suite
-          </button>
-        </form>
-      </aside>
-
+    <section className="case-suite-manager" aria-label="Case Suite details">
       <div className="case-suite-detail">
         {message !== null ? <div className="settings-message">{message}</div> : null}
+        {isBusy ? <div className="settings-message">Loading suite changes</div> : null}
         {error !== null ? <div className="settings-error">{error}</div> : null}
         {caseSuiteCasesDirty ? (
           <div className="settings-message">
@@ -368,7 +244,17 @@ export function CaseSuiteManager({
               <div className="case-suite-cases-list">
                 <div className="case-suite-cases-heading">
                   <h3>Suite cases</h3>
-                  <span>{formatCaseCount(cases.length)}</span>
+                  <div>
+                    <span>{formatCaseCount(cases.length)}</span>
+                    <button
+                      className="secondary-action"
+                      disabled={isBusy || selectedSuite === null}
+                      onClick={onAddCase}
+                      type="button"
+                    >
+                      Add case
+                    </button>
+                  </div>
                 </div>
                 {cases.length === 0 ? (
                   <div className="case-browser-empty">No cases in this suite.</div>
@@ -393,30 +279,6 @@ export function CaseSuiteManager({
               </div>
 
               <div className="case-suite-payload-panel">
-                <form className="case-suite-add-case" onSubmit={handleAddCase}>
-                  <h3>Add case</h3>
-                  <label>
-                    <span>Case ID</span>
-                    <input
-                      disabled={isBusy}
-                      onChange={(event) => setAddCaseId(event.target.value)}
-                      value={addCaseId}
-                    />
-                  </label>
-                  <label>
-                    <span>JSON object</span>
-                    <textarea
-                      disabled={isBusy}
-                      onChange={(event) => setAddPayloadText(event.target.value)}
-                      rows={5}
-                      value={addPayloadText}
-                    />
-                  </label>
-                  <button className="secondary-action" disabled={isBusy} type="submit">
-                    Add case
-                  </button>
-                </form>
-
                 <div className="case-suite-payload-editor">
                   <div className="case-suite-payload-heading">
                     <h3>Payload JSON</h3>

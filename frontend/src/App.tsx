@@ -44,6 +44,8 @@ import {
 } from "./api";
 import { CaseBrowser } from "./components/CaseBrowser";
 import { CaseSuiteManager } from "./components/CaseSuiteManager";
+import { AddCaseModal, NewCaseSuiteModal } from "./components/CaseSuiteModals";
+import { CaseSuitesList } from "./components/CaseSuitesList";
 import { getSuiteSelectionBlockedMessage } from "./components/caseSuiteDrafts";
 import { ComparisonView } from "./components/ComparisonView";
 import {
@@ -144,6 +146,8 @@ type ExperimentManagementDialog =
   | { kind: "new" }
   | { kind: "clone"; experiment: Experiment }
   | { kind: "delete"; experiment: Experiment };
+
+type CaseSuiteDialog = { kind: "new" } | { kind: "addCase" };
 
 type PendingNavigationTarget =
   | { kind: "experiment"; experiment: Experiment | null }
@@ -252,6 +256,12 @@ function App() {
     []
   );
   const [caseSuiteCasesDirty, setCaseSuiteCasesDirty] = useState(false);
+  const [caseSuiteDialog, setCaseSuiteDialog] = useState<CaseSuiteDialog | null>(
+    null
+  );
+  const [caseSuiteActionError, setCaseSuiteActionError] = useState<string | null>(
+    null
+  );
   const [caseSuiteBusy, setCaseSuiteBusy] = useState(false);
   const [caseSuiteMessage, setCaseSuiteMessage] = useState<string | null>(null);
   const [detailState, setDetailState] = useState<DetailState>({ status: "idle" });
@@ -722,6 +732,24 @@ function App() {
       return;
     }
     setSelectedCaseSuiteId(suiteId);
+  }
+
+  function requestNewCaseSuite() {
+    const blockedMessage = getSuiteSelectionBlockedMessage(caseSuiteCasesDirty);
+    if (blockedMessage !== null) {
+      setCaseSuiteMessage(blockedMessage);
+      return;
+    }
+    setCaseSuiteActionError(null);
+    setCaseSuiteDialog({ kind: "new" });
+  }
+
+  function requestAddCaseToSuite() {
+    if (selectedCaseSuiteId === null) {
+      return;
+    }
+    setCaseSuiteActionError(null);
+    setCaseSuiteDialog({ kind: "addCase" });
   }
 
   function requestTabChange(tab: WorkbenchTab) {
@@ -1781,13 +1809,22 @@ function App() {
     try {
       const created = await createCaseSuite(request);
       await refreshCaseSuites(created.id);
+      setCaseSuiteDialog(null);
       setCaseSuiteMessage("Case Suite created.");
     } catch (error) {
-      setCaseSuiteMessage(error instanceof Error ? error.message : "Unknown error");
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setCaseSuiteActionError(message);
+      setCaseSuiteMessage(message);
       throw error;
     } finally {
       setCaseSuiteBusy(false);
     }
+  }
+
+  function handleAddCaseToSuite(artifactCase: Case) {
+    handleCaseSuiteCasesChange([...caseSuiteCases, artifactCase]);
+    setCaseSuiteDialog(null);
+    setCaseSuiteMessage(`Added ${artifactCase.id}. Save suite cases to apply changes.`);
   }
 
   async function handleUpdateCaseSuite(
@@ -2985,16 +3022,27 @@ function App() {
 
         {state.status === "loaded" ? (
           <div className="tool-layout">
-            <ExperimentsList
-              experiments={state.experiments}
-              onClone={requestCloneExperiment}
-              onCreate={requestNewExperiment}
-              onDelete={requestDeleteExperiment}
-              onSelect={requestExperimentSelection}
-              selectedExperimentId={
-                appView === "experiment" ? selectedExperiment?.id ?? null : null
-              }
-            />
+            {appView === "caseSuites" ? (
+              <CaseSuitesList
+                isBusy={caseSuiteBusy}
+                isSelectionBlocked={caseSuiteCasesDirty}
+                onCreate={requestNewCaseSuite}
+                onSelect={handleSelectCaseSuite}
+                selectedSuiteId={selectedCaseSuiteId}
+                suites={caseSuites}
+              />
+            ) : (
+              <ExperimentsList
+                experiments={state.experiments}
+                onClone={requestCloneExperiment}
+                onCreate={requestNewExperiment}
+                onDelete={requestDeleteExperiment}
+                onSelect={requestExperimentSelection}
+                selectedExperimentId={
+                  appView === "experiment" ? selectedExperiment?.id ?? null : null
+                }
+              />
+            )}
 
             <div className="detail-panel">
               {appView === "globalSettings" ? (
@@ -3024,12 +3072,11 @@ function App() {
                   caseSuiteCasesDirty={caseSuiteCasesDirty}
                   isBusy={caseSuiteBusy}
                   message={caseSuiteMessage}
+                  onAddCase={requestAddCaseToSuite}
                   onCasesChange={handleCaseSuiteCasesChange}
-                  onCreateSuite={handleCreateCaseSuite}
                   onDeleteSuite={handleDeleteCaseSuite}
                   onResetCases={handleResetCaseSuiteCases}
                   onSaveCases={handleSaveCaseSuiteCases}
-                  onSelectSuite={handleSelectCaseSuite}
                   onUpdateSuite={handleUpdateCaseSuite}
                   selectedSuiteId={selectedCaseSuiteId}
                   suites={caseSuites}
@@ -3370,6 +3417,24 @@ function App() {
           isBusy={experimentActionBusy}
           onCancel={closeExperimentDialog}
           onConfirm={handleDeleteExperiment}
+        />
+      ) : null}
+
+      {caseSuiteDialog?.kind === "new" ? (
+        <NewCaseSuiteModal
+          error={caseSuiteActionError}
+          isBusy={caseSuiteBusy}
+          onCancel={() => setCaseSuiteDialog(null)}
+          onSubmit={handleCreateCaseSuite}
+        />
+      ) : null}
+
+      {caseSuiteDialog?.kind === "addCase" ? (
+        <AddCaseModal
+          existingCases={caseSuiteCases}
+          isBusy={caseSuiteBusy}
+          onCancel={() => setCaseSuiteDialog(null)}
+          onSubmit={handleAddCaseToSuite}
         />
       ) : null}
 
