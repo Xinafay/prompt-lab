@@ -1368,6 +1368,17 @@ function App() {
         return;
       }
       if (requestedCaseSuitesRoute !== null) {
+        const blockedMessage =
+          appView === "caseSuites" &&
+          activeCaseSuiteTab === "cases" &&
+          requestedCaseSuitesRoute.tab !== "cases"
+            ? getSuiteSelectionBlockedMessage(caseSuiteCasesDirty)
+            : null;
+        if (blockedMessage !== null) {
+          writeCurrentRoute("replace");
+          setCaseSuiteMessage(blockedMessage);
+          return;
+        }
         selectCaseSuites({
           suiteId: requestedCaseSuitesRoute.suiteId,
           tab: requestedCaseSuitesRoute.tab,
@@ -1392,14 +1403,17 @@ function App() {
       window.removeEventListener("popstate", handlePopState);
     };
   }, [
+    activeCaseSuiteTab,
     activeTab,
     appView,
     casesDirty,
+    caseSuiteCasesDirty,
     decisionsDirty,
     globalSettingsBusy,
     globalSettingsDirty,
     humanNotesDirty,
     reviewState,
+    selectedCaseSuiteId,
     selectedExperiment,
     settingsBusy,
     settingsDirty,
