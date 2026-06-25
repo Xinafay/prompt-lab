@@ -783,6 +783,60 @@ def test_store_clones_experiment_directory_and_rewrites_manifest() -> None:
         assert saved["title"] == "Demo Clone"
 
 
+def test_store_clone_uses_unique_slug_when_destination_exists() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source = root / "experiments" / "demo"
+        collision = root / "experiments" / "demo-clone"
+        (source / "versions" / "v001").mkdir(parents=True)
+        (collision / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(source / "experiment.json")
+        write_experiment_manifest(
+            collision / "experiment.json",
+            experiment_id="demo-clone",
+        )
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        cloned = store.clone_experiment(
+            source_experiment_id="demo",
+            title="Demo Clone",
+        )
+
+        clone_dir = root / "experiments" / "demo-clone-2"
+        assert cloned.id == "demo-clone-2"
+        assert clone_dir.is_dir()
+        saved = json.loads((clone_dir / "experiment.json").read_text(encoding="utf-8"))
+        assert saved["id"] == "demo-clone-2"
+        assert saved["title"] == "Demo Clone"
+
+
+def test_store_clone_rejects_whitespace_title_without_creating_fallback() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source = root / "experiments" / "demo"
+        (source / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(source / "experiment.json")
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        try:
+            store.clone_experiment(
+                source_experiment_id="demo",
+                title="   ",
+            )
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Expected whitespace clone title to be rejected")
+
+        assert not (root / "experiments" / "experiment").exists()
+
+
 def test_store_delete_experiment_removes_directory() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -848,6 +902,8 @@ def main() -> int:
         test_store_create_experiment_rejects_invalid_output_type,
         test_store_create_experiment_rejects_pydantic_missing_model_entrypoint,
         test_store_clones_experiment_directory_and_rewrites_manifest,
+        test_store_clone_uses_unique_slug_when_destination_exists,
+        test_store_clone_rejects_whitespace_title_without_creating_fallback,
         test_store_delete_experiment_removes_directory,
         test_store_delete_experiment_rejects_path_escape,
     ]

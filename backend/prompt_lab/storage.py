@@ -173,6 +173,8 @@ class PromptLabStore:
         source_experiment_id: str,
         title: str,
     ) -> ExperimentArtifact:
+        if title.strip() == "":
+            raise ValueError("Experiment title cannot be blank")
         source_dir = self.experiment_dir(source_experiment_id)
         experiment_id = self._available_experiment_id(title)
         destination = self.experiments_root.resolve() / experiment_id
