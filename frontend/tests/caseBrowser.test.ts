@@ -96,6 +96,30 @@ test("case browser renders experiment inclusion controls and suite title", () =>
   assert.doesNotMatch(html, /Delete case/);
 });
 
+test("case browser renders suite management actions without inclusion controls", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(CaseBrowser, {
+      cases: [
+        {
+          id: "suite-case",
+          enabled: true,
+          payload: { value: "alpha" }
+        }
+      ],
+      onDeleteCase: () => undefined,
+      onEditCase: () => undefined,
+      suiteTitle: "Reusable Suite"
+    })
+  );
+
+  assert.match(html, /1 of 1 from Reusable Suite/);
+  assert.match(html, /Edit/);
+  assert.match(html, /Delete/);
+  assert.match(html, /bindings-table/);
+  assert.doesNotMatch(html, /Include in runs/);
+  assert.doesNotMatch(html, /Excluded/);
+});
+
 test("production workbench treats case edits as unsaved navigation state", () => {
   const source = readFileSync(
     new URL("../src/App.tsx", import.meta.url),

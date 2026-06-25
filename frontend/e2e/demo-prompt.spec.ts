@@ -84,6 +84,25 @@ test("demo cases tab shows suite-backed cases and opens case suites", async ({
   await expect(
     suiteList.getByRole("button", { name: /Demo string replies/ })
   ).toBeVisible();
+  const suiteDetails = page.getByRole("region", { name: "Case Suite details" });
+  await expect(suiteDetails.getByRole("table", { name: "Payload" })).toBeVisible();
+  await expect(suiteDetails.getByRole("button", { name: "Edit" }).first()).toBeVisible();
+  await expect(
+    suiteDetails.getByRole("button", { name: "Delete" }).first()
+  ).toBeVisible();
+  await expect(suiteDetails).not.toContainText("Delete selected case");
+
+  await suiteDetails.getByRole("button", { name: "Edit" }).first().click();
+  await expect(
+    page.getByRole("dialog", { name: "Edit case payload" })
+  ).toBeVisible();
+  await expect(page.getByRole("region", { name: "Payload JSON" })).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).click();
+
+  await suiteDetails.getByRole("button", { name: "Add case" }).click();
+  await expect(page.getByRole("dialog", { name: "Add case" })).toBeVisible();
+  await expect(page.getByLabel("Upload case JSON")).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).click();
 
   await page.reload();
   await expect(

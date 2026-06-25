@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import type { Case, CaseSuite, CaseSuiteUpdateRequest } from "../types";
+import { CaseBrowser } from "./CaseBrowser";
+import { EditCasePayloadModal } from "./CaseSuiteModals";
 import {
   canSaveSuiteCases,
-  parseCasePayloadDraft,
   SUITE_CASE_SELECTION_BLOCKED_MESSAGE
 } from "./caseSuiteDrafts";
 
@@ -30,10 +31,6 @@ function formatCaseCount(count: number | undefined): string {
   return `${safeCount} case${safeCount === 1 ? "" : "s"}`;
 }
 
-function formatPayload(payload: Record<string, unknown>): string {
-  return JSON.stringify(payload, null, 2);
-}
-
 export function CaseSuiteManager({
   suites,
   selectedSuiteId,
@@ -56,23 +53,14 @@ export function CaseSuiteManager({
   const [suiteDescription, setSuiteDescription] = useState(
     selectedSuite?.description ?? ""
   );
-  const [selectedCaseId, setSelectedCaseId] = useState(cases[0]?.id ?? "");
-  const selectedCase =
-    cases.find((artifactCase) => artifactCase.id === selectedCaseId) ??
-    cases[0] ??
-    null;
-  const [payloadText, setPayloadText] = useState(
-    selectedCase === null ? "" : formatPayload(selectedCase.payload)
-  );
+  const [editingCase, setEditingCase] = useState<Case | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [payloadError, setPayloadError] = useState<string | null>(null);
   const referencedBy = selectedSuite?.experiment_ids ?? [];
-  const hasCasePayloadError = payloadError !== null;
   const suiteMutationDisabled = isBusy || caseSuiteCasesDirty;
   const saveSuiteCasesDisabled = !canSaveSuiteCases({
     isBusy,
     isDirty: caseSuiteCasesDirty,
-    hasPayloadError: hasCasePayloadError,
+    hasPayloadError: false,
     selectedSuiteId: selectedSuite?.id ?? null
   });
   const deleteDisabled =
@@ -81,24 +69,36 @@ export function CaseSuiteManager({
   useEffect(() => {
     setSuiteTitle(selectedSuite?.title ?? "");
     setSuiteDescription(selectedSuite?.description ?? "");
+    setEditingCase(null);
     setError(null);
-    setPayloadError(null);
   }, [selectedSuite]);
 
   useEffect(() => {
-    if (cases.length === 0) {
-      setSelectedCaseId("");
-      setPayloadText("");
-      setPayloadError(null);
+    if (
+      editingCase !== null &&
+      !cases.some((artifactCase) => artifactCase.id === editingCase.id)
+    ) {
+      setEditingCase(null);
+    }
+  }, [cases, editingCase]);
+
+  function handleEditCasePayload(updatedCase: Case) {
+    onCasesChange(
+      cases.map((artifactCase) =>
+        artifactCase.id === updatedCase.id ? updatedCase : artifactCase
+      )
+    );
+    setEditingCase(null);
+    setError(null);
+  }
+
+  function handleDeleteCase(artifactCase: Case) {
+    if (isBusy) {
       return;
     }
-    const nextSelected =
-      cases.find((artifactCase) => artifactCase.id === selectedCaseId) ??
-      cases[0];
-    setSelectedCaseId(nextSelected.id);
-    setPayloadText(formatPayload(nextSelected.payload));
-    setPayloadError(null);
-  }, [cases, selectedCaseId]);
+    onCasesChange(cases.filter((item) => item.id !== artifactCase.id));
+    setError(null);
+  }
 
   async function handleUpdateSuite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -129,42 +129,7 @@ export function CaseSuiteManager({
     }
   }
 
-  function handlePayloadTextChange(nextText: string) {
-    setPayloadText(nextText);
-    if (selectedCase === null) return;
-    const parsed = parseCasePayloadDraft(nextText);
-    if (parsed.ok) {
-      setPayloadError(null);
-      setError(null);
-      onCasesChange(
-        cases.map((artifactCase) =>
-          artifactCase.id === selectedCase.id
-            ? { ...artifactCase, payload: parsed.payload }
-            : artifactCase
-        )
-      );
-    } else {
-      setPayloadError(parsed.error);
-      setError(parsed.error);
-    }
-  }
-
-  function handleDeleteSelectedCase() {
-    if (selectedCase === null) return;
-    const nextCases = cases.filter(
-      (artifactCase) => artifactCase.id !== selectedCase.id
-    );
-    onCasesChange(nextCases);
-    setSelectedCaseId(nextCases[0]?.id ?? "");
-    setPayloadError(null);
-    setError(null);
-  }
-
   async function handleSaveCases() {
-    if (hasCasePayloadError) {
-      setError(payloadError);
-      return;
-    }
     setError(null);
     try {
       await onSaveCases();
@@ -241,62 +206,18 @@ export function CaseSuiteManager({
             </form>
 
             <div className="case-suite-cases">
-              <div className="case-suite-cases-list">
-                <div className="case-suite-cases-heading">
-                  <h3>Suite cases</h3>
-                  <div>
-                    <span>{formatCaseCount(cases.length)}</span>
-                    <button
-                      className="secondary-action"
-                      disabled={isBusy || selectedSuite === null}
-                      onClick={onAddCase}
-                      type="button"
-                    >
-                      Add case
-                    </button>
-                  </div>
-                </div>
-                {cases.length === 0 ? (
-                  <div className="case-browser-empty">No cases in this suite.</div>
-                ) : (
-                  cases.map((artifactCase) => (
-                    <button
-                      className={
-                        artifactCase.id === selectedCase?.id
-                          ? "case-suite-case-item is-selected"
-                          : "case-suite-case-item"
-                      }
-                      disabled={isBusy}
-                      key={artifactCase.id}
-                      onClick={() => setSelectedCaseId(artifactCase.id)}
-                      type="button"
-                    >
-                      <strong>{artifactCase.id}</strong>
-                      <span>{Object.keys(artifactCase.payload).length} keys</span>
-                    </button>
-                  ))
-                )}
-              </div>
-
-              <div className="case-suite-payload-panel">
-                <div className="case-suite-payload-editor">
-                  <div className="case-suite-payload-heading">
-                    <h3>Payload JSON</h3>
-                    <button
-                      className="secondary-action danger-action"
-                      disabled={isBusy || selectedCase === null}
-                      onClick={handleDeleteSelectedCase}
-                      type="button"
-                    >
-                      Delete selected case
-                    </button>
-                  </div>
-                  <textarea
-                    disabled={isBusy || selectedCase === null}
-                    onChange={(event) => handlePayloadTextChange(event.target.value)}
-                    rows={14}
-                    value={payloadText}
-                  />
+              <div className="case-suite-cases-heading">
+                <h3>Suite cases</h3>
+                <div>
+                  <span>{formatCaseCount(cases.length)}</span>
+                  <button
+                    className="secondary-action"
+                    disabled={isBusy || selectedSuite === null}
+                    onClick={onAddCase}
+                    type="button"
+                  >
+                    Add case
+                  </button>
                   <button
                     className="primary-action"
                     disabled={saveSuiteCasesDisabled}
@@ -315,7 +236,26 @@ export function CaseSuiteManager({
                   </button>
                 </div>
               </div>
+              {cases.length === 0 ? (
+                <div className="case-browser-empty">No cases in this suite.</div>
+              ) : (
+                <CaseBrowser
+                  cases={cases}
+                  isBusy={isBusy}
+                  onDeleteCase={handleDeleteCase}
+                  onEditCase={setEditingCase}
+                  suiteTitle={selectedSuite.title}
+                />
+              )}
             </div>
+            {editingCase === null ? null : (
+              <EditCasePayloadModal
+                artifactCase={editingCase}
+                isBusy={isBusy}
+                onCancel={() => setEditingCase(null)}
+                onSubmit={handleEditCasePayload}
+              />
+            )}
           </>
         )}
       </div>

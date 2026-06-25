@@ -1327,8 +1327,7 @@ select {
 }
 
 .case-suite-fields input,
-.case-suite-fields textarea,
-.case-suite-payload-editor textarea {
+.case-suite-fields textarea {
   width: 100%;
   min-height: 36px;
   border: 1px solid #d0d5dd;
@@ -1340,8 +1339,7 @@ select {
   line-height: 1.35;
 }
 
-.case-suite-fields textarea,
-.case-suite-payload-editor textarea {
+.case-suite-fields textarea {
   resize: vertical;
 }
 
@@ -1390,8 +1388,7 @@ select {
 
 .case-suite-cases {
   display: grid;
-  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -1418,16 +1415,6 @@ select {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-}
-
-.case-suite-payload-panel {
-  display: block;
-  min-width: 0;
-}
-
-.case-suite-payload-editor {
-  align-content: start;
-  min-width: 0;
 }
 
 .case-detail-heading {
@@ -2022,6 +2009,12 @@ select {
 
 .experiment-management-modal {
   width: min(560px, 100%);
+}
+
+.case-payload-modal {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
 }
 
 .experiment-management-modal .settings-field,

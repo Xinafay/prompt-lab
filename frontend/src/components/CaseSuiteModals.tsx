@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 
 import type { Case, CaseSuiteCreateRequest } from "../types";
+import { CodeEditor } from "./CodeViewer";
 import { parseCasePayloadDraft } from "./caseSuiteDrafts";
 
 interface NewCaseSuiteModalProps {
@@ -17,12 +18,27 @@ interface AddCaseModalProps {
   onSubmit: (artifactCase: Case) => void;
 }
 
+interface EditCasePayloadModalProps {
+  artifactCase: Case;
+  isBusy: boolean;
+  onCancel: () => void;
+  onSubmit: (artifactCase: Case) => void;
+}
+
 async function ignoreHandledRejection(action: () => Promise<void>): Promise<void> {
   try {
     await action();
   } catch {
     // Parent handlers own user-visible errors.
   }
+}
+
+function caseIdFromFileName(fileName: string): string {
+  return fileName.replace(/\.json$/i, "").trim();
+}
+
+function formatPayload(payload: Record<string, unknown>): string {
+  return JSON.stringify(payload, null, 2);
 }
 
 export function NewCaseSuiteModal({
@@ -111,6 +127,27 @@ export function AddCaseModal({
   const trimmedCaseId = caseId.trim();
   const submitDisabled = isBusy || trimmedCaseId === "";
 
+  async function handleUploadFile(file: File | null) {
+    if (file === null) return;
+    try {
+      const parsed = parseCasePayloadDraft(await file.text());
+      if (!parsed.ok) {
+        setError(parsed.error);
+        return;
+      }
+      const uploadedCaseId = caseIdFromFileName(file.name);
+      if (uploadedCaseId !== "") {
+        setCaseId(uploadedCaseId);
+      }
+      setPayloadText(formatPayload(parsed.payload));
+      setError(null);
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error ? uploadError.message : "Could not read file."
+      );
+    }
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitDisabled) return;
@@ -153,6 +190,18 @@ export function AddCaseModal({
         </label>
 
         <label className="settings-field">
+          <span>Upload case JSON</span>
+          <input
+            accept="application/json,.json"
+            disabled={isBusy}
+            onChange={(event) =>
+              void handleUploadFile(event.currentTarget.files?.[0] ?? null)
+            }
+            type="file"
+          />
+        </label>
+
+        <label className="settings-field">
           <span>JSON object</span>
           <textarea
             disabled={isBusy}
@@ -175,6 +224,69 @@ export function AddCaseModal({
           </button>
           <button className="primary-action" disabled={submitDisabled} type="submit">
             Add case
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+export function EditCasePayloadModal({
+  artifactCase,
+  isBusy,
+  onCancel,
+  onSubmit
+}: EditCasePayloadModalProps) {
+  const [payloadText, setPayloadText] = useState(formatPayload(artifactCase.payload));
+  const [error, setError] = useState<string | null>(null);
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isBusy) return;
+    const parsed = parseCasePayloadDraft(payloadText);
+    if (!parsed.ok) {
+      setError(parsed.error);
+      return;
+    }
+    setError(null);
+    onSubmit({ ...artifactCase, payload: parsed.payload });
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <form
+        aria-labelledby="edit-case-payload-title"
+        aria-modal="true"
+        className="settings-navigation-modal experiment-management-modal case-payload-modal"
+        onSubmit={handleSubmit}
+        role="dialog"
+      >
+        <div>
+          <h2 id="edit-case-payload-title">Edit case payload</h2>
+          <p>{artifactCase.id}</p>
+        </div>
+
+        <CodeEditor
+          disabled={isBusy}
+          label="Payload JSON"
+          language="json"
+          onChange={setPayloadText}
+          value={payloadText}
+        />
+
+        {error !== null ? <div className="settings-error">{error}</div> : null}
+
+        <div className="modal-actions">
+          <button
+            className="secondary-action"
+            disabled={isBusy}
+            onClick={onCancel}
+            type="button"
+          >
+            Cancel
+          </button>
+          <button className="primary-action" disabled={isBusy} type="submit">
+            Save payload
           </button>
         </div>
       </form>

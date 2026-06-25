@@ -5,7 +5,11 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { CaseSuiteManager } from "../src/components/CaseSuiteManager.tsx";
-import { AddCaseModal, NewCaseSuiteModal } from "../src/components/CaseSuiteModals.tsx";
+import {
+  AddCaseModal,
+  EditCasePayloadModal,
+  NewCaseSuiteModal
+} from "../src/components/CaseSuiteModals.tsx";
 import { CaseSuitesList } from "../src/components/CaseSuitesList.tsx";
 import {
   canSaveSuiteCases,
@@ -103,17 +107,19 @@ test("case suite manager renders management controls and disables referenced del
   assert.match(html, /<button[^>]*disabled=""[^>]*>Delete suite<\/button>/);
 });
 
-test("case suite manager renders selected cases, payload editor, and save controls", () => {
+test("case suite manager renders cases with browser layout and suite actions", () => {
   const html = renderManager();
 
   assert.match(html, /Suite cases/);
   assert.match(html, /alpha/);
   assert.match(html, /bravo/);
   assert.match(html, /Add case/);
-  assert.match(html, /Payload JSON/);
-  assert.match(html, /Delete selected case/);
+  assert.match(html, /Edit/);
+  assert.match(html, /Delete/);
+  assert.match(html, /bindings-table/);
+  assert.doesNotMatch(html, /Delete selected case/);
+  assert.doesNotMatch(html, /case-suite-payload-editor/);
   assert.match(html, /Save suite cases/);
-  assert.match(html, /&quot;customer&quot;: &quot;Ada&quot;/);
 });
 
 test("case suite manager renders busy and empty states", () => {
@@ -129,7 +135,7 @@ test("case suite manager renders busy and empty states", () => {
   assert.match(html, /No cases in this suite/);
 });
 
-test("case suite creation and add case render as modals", () => {
+test("case suite creation, add case, and edit case render as modals", () => {
   const createHtml = renderToStaticMarkup(
     React.createElement(NewCaseSuiteModal, {
       error: null,
@@ -146,6 +152,14 @@ test("case suite creation and add case render as modals", () => {
       onSubmit: () => undefined
     })
   );
+  const editCaseHtml = renderToStaticMarkup(
+    React.createElement(EditCasePayloadModal, {
+      artifactCase: cases[0],
+      isBusy: false,
+      onCancel: () => undefined,
+      onSubmit: () => undefined
+    })
+  );
 
   assert.match(createHtml, /role="dialog"/);
   assert.match(createHtml, /New Case Suite/);
@@ -154,6 +168,11 @@ test("case suite creation and add case render as modals", () => {
   assert.match(addCaseHtml, /Add case/);
   assert.match(addCaseHtml, /Case ID/);
   assert.match(addCaseHtml, /JSON object/);
+  assert.match(addCaseHtml, /Upload case JSON/);
+  assert.match(editCaseHtml, /role="dialog"/);
+  assert.match(editCaseHtml, /Edit case payload/);
+  assert.match(editCaseHtml, /Payload JSON/);
+  assert.match(editCaseHtml, /code-editor/);
 });
 
 test("production app wires a dedicated case suites view", () => {
