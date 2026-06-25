@@ -60,9 +60,18 @@ def _slugify_title(title: str) -> str:
 class PromptLabStore:
     """Filesystem-backed Prompt Lab artifact store."""
 
-    def __init__(self, *, experiments_root: Path, examples_root: Path) -> None:
+    def __init__(
+        self,
+        *,
+        experiments_root: Path,
+        examples_root: Path,
+        case_suites_root: Path | None = None,
+    ) -> None:
         self.experiments_root = experiments_root
         self.examples_root = examples_root
+        self.case_suites_root = (
+            case_suites_root or experiments_root.parent / "case_suites"
+        )
 
     def list_experiments(self) -> list[ExperimentArtifact]:
         """Return runtime experiments from `experiments/`, sorted by id."""
@@ -90,6 +99,17 @@ class PromptLabStore:
     def load_experiment(self, experiment_id: str) -> ExperimentArtifact:
         path = self.experiment_dir(experiment_id) / "experiment.json"
         return ExperimentArtifact.model_validate(_read_json(path))
+
+    def case_suite_dir(self, suite_id: str) -> Path:
+        """Resolve a case suite directory under the runtime case suites root."""
+        _validate_storage_id(suite_id, "Case Suite")
+        resolved_root = self.case_suites_root.resolve()
+        candidate = (resolved_root / suite_id).resolve()
+        if candidate != resolved_root and not candidate.is_relative_to(resolved_root):
+            raise NotFoundError("Case Suite not found")
+        if (candidate / "suite.json").is_file():
+            return candidate
+        raise NotFoundError("Case Suite not found")
 
     def _available_experiment_id(self, title: str) -> str:
         base = _slugify_title(title)
@@ -253,7 +273,13 @@ class PromptLabStore:
         return path.read_text(encoding="utf-8")
 
     def load_cases(self, experiment_id: str) -> list[CaseArtifact]:
-        cases_dir = self.experiment_dir(experiment_id) / "cases"
+        experiment = self.load_experiment(experiment_id)
+        if experiment.case_suite_id is None:
+            raise NotFoundError("Case Suite not assigned")
+        return self.load_cases_for_suite(experiment.case_suite_id)
+
+    def load_cases_for_suite(self, suite_id: str) -> list[CaseArtifact]:
+        cases_dir = self.case_suite_dir(suite_id) / "cases"
         if not cases_dir.is_dir():
             return []
         cases: list[CaseArtifact] = []

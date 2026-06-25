@@ -365,6 +365,10 @@ def test_repository_demo_examples_seed_for_ui_testing() -> None:
             assert validation_case_ids >= suite_case_ids
             assert not (experiment_dir / "cases").exists()
 
+            overview = client.get(f"/api/experiments/{experiment_id}/versions/v002")
+            assert overview.status_code == 200
+            assert {case["id"] for case in overview.json()["cases"]} == suite_case_ids
+
             runs = client.get(
                 f"/api/experiments/{experiment_id}/versions/v002/runs"
             )

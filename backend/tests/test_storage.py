@@ -69,20 +69,16 @@ def test_store_ignores_old_runtime_experiment_directories() -> None:
         assert experiments[0].title == "Demo"
 
 
-def test_store_loads_cases_for_experiment() -> None:
+def test_store_loads_cases_through_experiment_case_suite_id() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
         experiment = root / "experiments" / "demo"
-        cases = experiment / "cases"
-        cases.mkdir(parents=True)
-        (experiment / "experiment.json").write_text(
-            '{"schema_version":"prompt_lab.experiment/v1","id":"demo","title":"Demo","description":"","active_version":"v001","output":{"type":"text"},"template":{"engine":"jinja2","path":"prompt.md"},"models":{"generator_model":"local/a","validator_model":"openai/b","judge_model":"openai/b"},"run_defaults":{"repeat_count":3,"llm_cache":"disabled","case_order":"case-major"}}',
-            encoding="utf-8",
+        (experiment / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(
+            experiment / "experiment.json",
+            case_suite_id="demo-suite",
         )
-        (cases / "case-a.json").write_text(
-            '{"text":"hello"}',
-            encoding="utf-8",
-        )
+        write_case_suite(root, "demo-suite", {"case-a": {"text": "hello"}})
 
         store = PromptLabStore(experiments_root=root / "experiments", examples_root=root / "examples")
 
@@ -90,6 +86,22 @@ def test_store_loads_cases_for_experiment() -> None:
         assert len(loaded) == 1
         assert loaded[0].id == "case-a"
         assert loaded[0].payload == {"text": "hello"}
+
+
+def test_store_load_cases_rejects_missing_case_suite_assignment() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        experiment = root / "experiments" / "demo"
+        (experiment / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(experiment / "experiment.json")
+        store = PromptLabStore(experiments_root=root / "experiments", examples_root=root / "examples")
+
+        try:
+            store.load_cases("demo")
+        except NotFoundError as exc:
+            assert str(exc) == "Case Suite not assigned"
+        else:
+            raise AssertionError("Expected missing case suite assignment to fail")
 
 
 def test_store_rejects_read_path_escape() -> None:
@@ -439,33 +451,62 @@ def test_store_resolves_only_experiments_root() -> None:
 
 
 def write_experiment_manifest(
-    path: Path, *, experiment_id: str = "demo", active_version: str = "v001"
+    path: Path,
+    *,
+    experiment_id: str = "demo",
+    active_version: str = "v001",
+    case_suite_id: str | None = None,
 ) -> None:
+    payload: dict[str, Any] = {
+        "schema_version": "prompt_lab.experiment/v1",
+        "id": experiment_id,
+        "title": "Demo",
+        "description": "",
+        "active_version": active_version,
+        "output": {"type": "text"},
+        "template": {"engine": "jinja2", "path": "prompt.md"},
+        "models": {
+            "generator_model": "local/a",
+            "validator_model": "openai/b",
+            "judge_model": "openai/b",
+        },
+        "run_defaults": {
+            "repeat_count": 3,
+            "llm_cache": "disabled",
+            "case_order": "case-major",
+        },
+    }
+    if case_suite_id is not None:
+        payload["case_suite_id"] = case_suite_id
     path.write_text(
+        json.dumps(payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def write_case_suite(
+    root: Path, suite_id: str, cases: dict[str, dict[str, Any]]
+) -> None:
+    suite_dir = root / "case_suites" / suite_id
+    cases_dir = suite_dir / "cases"
+    cases_dir.mkdir(parents=True)
+    (suite_dir / "suite.json").write_text(
         json.dumps(
             {
-                "schema_version": "prompt_lab.experiment/v1",
-                "id": experiment_id,
-                "title": "Demo",
+                "schema_version": "prompt_lab.case_suite/v1",
+                "id": suite_id,
+                "title": suite_id.replace("-", " ").title(),
                 "description": "",
-                "active_version": active_version,
-                "output": {"type": "text"},
-                "template": {"engine": "jinja2", "path": "prompt.md"},
-                "models": {
-                    "generator_model": "local/a",
-                    "validator_model": "openai/b",
-                    "judge_model": "openai/b",
-                },
-                "run_defaults": {
-                    "repeat_count": 3,
-                    "llm_cache": "disabled",
-                    "case_order": "case-major",
-                },
             },
             ensure_ascii=False,
         ),
         encoding="utf-8",
     )
+    for case_id, payload in cases.items():
+        (cases_dir / f"{case_id}.json").write_text(
+            json.dumps(payload, ensure_ascii=False),
+            encoding="utf-8",
+        )
 
 
 def test_store_saves_experiment_manifest_under_experiments_root() -> None:
@@ -1078,7 +1119,8 @@ def main() -> int:
     tests = [
         test_store_does_not_list_examples_directly,
         test_store_ignores_old_runtime_experiment_directories,
-        test_store_loads_cases_for_experiment,
+        test_store_loads_cases_through_experiment_case_suite_id,
+        test_store_load_cases_rejects_missing_case_suite_assignment,
         test_store_rejects_read_path_escape,
         test_store_rejects_write_path_escape,
         test_store_rejects_experiment_id_path_escape,

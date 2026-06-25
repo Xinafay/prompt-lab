@@ -1434,6 +1434,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     store = PromptLabStore(
         experiments_root=resolved_config.experiments_root,
         examples_root=resolved_config.examples_root,
+        case_suites_root=resolved_config.case_suites_root,
     )
     job_manager = JobManager()
     app = FastAPI(title="Prompt Lab")
