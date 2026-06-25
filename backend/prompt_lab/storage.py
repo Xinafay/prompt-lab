@@ -208,6 +208,9 @@ class PromptLabStore:
         return cloned
 
     def delete_experiment(self, experiment_id: str) -> None:
+        _validate_storage_id(experiment_id, "Experiment")
+        if (self.experiments_root / experiment_id).is_symlink():
+            raise NotFoundError("Experiment not found")
         experiment_dir = self.experiment_dir(experiment_id)
         shutil.rmtree(experiment_dir)
 

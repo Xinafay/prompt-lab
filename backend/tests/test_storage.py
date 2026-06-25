@@ -1022,6 +1022,36 @@ def test_store_delete_experiment_removes_directory() -> None:
         assert not experiment.exists()
 
 
+def test_store_delete_experiment_rejects_top_level_symlink() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        real_experiment = root / "experiments" / "real-demo"
+        (real_experiment / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(
+            real_experiment / "experiment.json",
+            experiment_id="real-demo",
+        )
+        link = root / "experiments" / "demo"
+        try:
+            link.symlink_to(real_experiment, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            return
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        try:
+            store.delete_experiment("demo")
+        except NotFoundError:
+            pass
+        else:
+            raise AssertionError("Expected top-level experiment symlink to be rejected")
+
+        assert real_experiment.is_dir()
+        assert link.is_symlink()
+
+
 def test_store_delete_experiment_rejects_path_escape() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -1079,6 +1109,7 @@ def main() -> int:
         test_store_clone_rejects_top_level_source_symlink,
         test_store_clone_rolls_back_destination_when_manifest_write_fails,
         test_store_delete_experiment_removes_directory,
+        test_store_delete_experiment_rejects_top_level_symlink,
         test_store_delete_experiment_rejects_path_escape,
     ]
     for test in tests:
