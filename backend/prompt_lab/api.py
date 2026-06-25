@@ -32,6 +32,7 @@ from prompt_lab.judge import build_judge_prompt
 from prompt_lab.jobs import JobAlreadyRunningError, JobManager
 from prompt_lab.models.artifacts import (
     CaseArtifact,
+    CaseSuiteArtifact,
     ExperimentArtifact,
     JsonObject,
     RunArtifact,
@@ -112,6 +113,20 @@ class ExperimentCloneRequest(BaseModel):
     title: str
 
 
+class CaseSuiteCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    description: str = ""
+
+
+class CaseSuiteUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    description: str = ""
+
+
 class CaseUploadRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -129,6 +144,18 @@ class CaseSetUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     cases: list[CaseUploadRequest]
+    excluded_case_ids: list[str] = Field(default_factory=list)
+
+
+class CaseSuiteCasesReplaceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cases: list[CaseUploadRequest]
+
+
+class CaseInclusionUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     excluded_case_ids: list[str] = Field(default_factory=list)
 
 
@@ -1139,6 +1166,35 @@ def _case_responses(
     return [_case_response(artifact_case, experiment) for artifact_case in cases]
 
 
+def _case_artifacts_from_uploads(
+    uploads: list[CaseUploadRequest],
+) -> list[CaseArtifact]:
+    case_ids: set[str] = set()
+    cases: list[CaseArtifact] = []
+    for upload in uploads:
+        _validate_case_id_path_segment(upload.case_id)
+        if upload.case_id in case_ids:
+            raise HTTPException(status_code=400, detail="Duplicate case id")
+        case_ids.add(upload.case_id)
+        cases.append(CaseArtifact(id=upload.case_id, payload=upload.payload))
+    return cases
+
+
+def _validate_excluded_case_ids(
+    excluded_case_ids: list[str], cases: list[CaseArtifact]
+) -> None:
+    case_ids = {artifact_case.id for artifact_case in cases}
+    excluded_ids = set(excluded_case_ids)
+    for case_id in excluded_ids:
+        _validate_case_id_path_segment(case_id)
+    unknown_excluded_ids = sorted(excluded_ids - case_ids)
+    if unknown_excluded_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Excluded case not found: {unknown_excluded_ids[0]}",
+        )
+
+
 def _enabled_cases(
     cases: list[CaseArtifact], experiment: ExperimentArtifact
 ) -> list[CaseArtifact]:
@@ -1521,6 +1577,155 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         del request
         return JSONResponse(status_code=404, content={"detail": str(exc)})
 
+    def load_cases_or_case_suite_400(experiment_id: str) -> list[CaseArtifact]:
+        try:
+            return store.load_cases(experiment_id)
+        except NotFoundError as exc:
+            if str(exc) == "Case Suite not assigned":
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise
+
+    def case_suite_response(suite: CaseSuiteArtifact) -> dict[str, object]:
+        cases = store.load_cases_for_suite(suite.id)
+        experiment_ids = [
+            experiment.id for experiment in store.experiments_using_case_suite(suite.id)
+        ]
+        return {
+            **suite.model_dump(mode="json"),
+            "case_count": len(cases),
+            "experiment_ids": experiment_ids,
+        }
+
+    @app.get("/api/case-suites")
+    def list_case_suites() -> list[dict[str, object]]:
+        return [case_suite_response(suite) for suite in store.list_case_suites()]
+
+    @app.post("/api/case-suites")
+    def create_case_suite(request: CaseSuiteCreateRequest) -> dict[str, object]:
+        title = request.title.strip()
+        if title == "":
+            raise HTTPException(
+                status_code=400,
+                detail="Case Suite title is required",
+            )
+        try:
+            suite = store.create_case_suite(
+                title=title,
+                description=request.description,
+            )
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return suite.model_dump(mode="json")
+
+    @app.get("/api/case-suites/{suite_id}")
+    def get_case_suite(suite_id: str) -> dict[str, object]:
+        return store.load_case_suite(suite_id).model_dump(mode="json")
+
+    @app.patch("/api/case-suites/{suite_id}")
+    def update_case_suite(
+        suite_id: str, request: CaseSuiteUpdateRequest
+    ) -> dict[str, object]:
+        title = request.title.strip()
+        if title == "":
+            raise HTTPException(
+                status_code=400,
+                detail="Case Suite title is required",
+            )
+        suite = store.load_case_suite(suite_id).model_copy(
+            update={"title": title, "description": request.description}
+        )
+        return store.save_case_suite(suite_id, suite).model_dump(mode="json")
+
+    @app.delete("/api/case-suites/{suite_id}")
+    def delete_case_suite(suite_id: str) -> dict[str, object]:
+        try:
+            store.delete_case_suite(suite_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {"suite_id": suite_id}
+
+    @app.get("/api/case-suites/{suite_id}/cases")
+    def list_case_suite_cases(suite_id: str) -> list[dict[str, object]]:
+        return [
+            artifact_case.model_dump(mode="json")
+            for artifact_case in store.load_cases_for_suite(suite_id)
+        ]
+
+    @app.post("/api/case-suites/{suite_id}/cases")
+    def create_case_suite_case(
+        suite_id: str, request: CaseUploadRequest
+    ) -> dict[str, object]:
+        _validate_case_id_path_segment(request.case_id)
+        affected_experiment_ids = [
+            experiment.id for experiment in store.experiments_using_case_suite(suite_id)
+        ]
+        try:
+            artifact_case = store.write_case_to_suite(
+                suite_id,
+                request.case_id,
+                request.payload,
+                overwrite=False,
+            )
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        cases = store.load_cases_for_suite(suite_id)
+        return {
+            "case": artifact_case.model_dump(mode="json"),
+            "cases": [item.model_dump(mode="json") for item in cases],
+            "affected_experiment_ids": affected_experiment_ids,
+        }
+
+    @app.put("/api/case-suites/{suite_id}/cases")
+    def replace_case_suite_cases(
+        suite_id: str, request: CaseSuiteCasesReplaceRequest
+    ) -> dict[str, object]:
+        cases = _case_artifacts_from_uploads(request.cases)
+        affected_experiment_ids = [
+            experiment.id for experiment in store.experiments_using_case_suite(suite_id)
+        ]
+        updated_cases = store.replace_suite_cases(suite_id, cases)
+        return {
+            "cases": [item.model_dump(mode="json") for item in updated_cases],
+            "affected_experiment_ids": affected_experiment_ids,
+        }
+
+    @app.put("/api/case-suites/{suite_id}/cases/{case_id}")
+    def overwrite_case_suite_case(
+        suite_id: str, case_id: str, request: CaseUploadRequest
+    ) -> dict[str, object]:
+        _validate_case_id_path_segment(case_id)
+        affected_experiment_ids = [
+            experiment.id for experiment in store.experiments_using_case_suite(suite_id)
+        ]
+        artifact_case = store.write_case_to_suite(
+            suite_id,
+            case_id,
+            request.payload,
+            overwrite=True,
+        )
+        cases = store.load_cases_for_suite(suite_id)
+        return {
+            "case": artifact_case.model_dump(mode="json"),
+            "cases": [item.model_dump(mode="json") for item in cases],
+            "affected_experiment_ids": affected_experiment_ids,
+        }
+
+    @app.delete("/api/case-suites/{suite_id}/cases/{case_id}")
+    def delete_case_suite_case(suite_id: str, case_id: str) -> dict[str, object]:
+        _validate_case_id_path_segment(case_id)
+        affected_experiment_ids = [
+            experiment.id for experiment in store.experiments_using_case_suite(suite_id)
+        ]
+        store.delete_case_from_suite(suite_id, case_id)
+        cases = store.load_cases_for_suite(suite_id)
+        return {
+            "case_id": case_id,
+            "cases": [item.model_dump(mode="json") for item in cases],
+            "affected_experiment_ids": affected_experiment_ids,
+        }
+
     @app.get("/api/experiments")
     def list_experiments() -> list[dict[str, object]]:
         return [item.model_dump(mode="json") for item in store.list_experiments()]
@@ -1599,12 +1804,25 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     ) -> dict[str, object]:
         if experiment.id != experiment_id:
             raise HTTPException(status_code=400, detail="Experiment id mismatch")
+        current_experiment = store.load_experiment(experiment_id)
+        if experiment.case_suite_id is not None:
+            try:
+                store.load_case_suite(experiment.case_suite_id)
+            except NotFoundError as exc:
+                if str(exc) == "Case Suite not found":
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Case Suite not found",
+                    ) from exc
+                raise
         try:
             store.save_experiment(experiment_id, experiment)
         except NotFoundError as exc:
             if str(exc) == "Version not found":
                 raise HTTPException(status_code=400, detail="Version not found") from exc
             raise
+        if experiment.case_suite_id != current_experiment.case_suite_id:
+            store.invalidate_experiment_generated_artifacts(experiment_id)
         return experiment.model_dump(mode="json")
 
     @app.get("/api/experiments/{experiment_id}/versions")
@@ -1641,7 +1859,12 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             if model_file is not None
             else None
         )
-        cases = store.load_cases(experiment_id)
+        case_suite = None
+        if experiment.case_suite_id is None:
+            cases = []
+        else:
+            case_suite = store.load_case_suite(experiment.case_suite_id)
+            cases = store.load_cases_for_suite(experiment.case_suite_id)
         validators = store.load_validators(experiment_id, version)
         return {
             "experiment": experiment.model_dump(mode="json"),
@@ -1650,6 +1873,9 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             "model_py": model_source,
             "model_file": model_file,
             "rubric": _read_optional_text(experiment_dir / "rubric.md"),
+            "case_suite": (
+                case_suite.model_dump(mode="json") if case_suite is not None else None
+            ),
             "cases": _case_responses(cases, experiment),
             "validators": [validator.model_dump(mode="json") for validator in validators],
         }
@@ -1684,10 +1910,11 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     ) -> dict[str, object]:
         _validate_case_id_path_segment(case_id)
         experiment = store.load_experiment(experiment_id)
+        cases = load_cases_or_case_suite_400(experiment_id)
         matching_case = next(
             (
                 artifact_case
-                for artifact_case in store.load_cases(experiment_id)
+                for artifact_case in cases
                 if artifact_case.id == case_id
             ),
             None,
@@ -1702,7 +1929,23 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             excluded_case_ids.add(case_id)
         experiment.run_defaults.excluded_case_ids = sorted(excluded_case_ids)
         store.save_experiment(experiment_id, experiment)
+        store.invalidate_experiment_generated_artifacts(experiment_id)
         return _case_response(matching_case, experiment)
+
+    @app.put("/api/experiments/{experiment_id}/case-inclusion")
+    def update_case_inclusion(
+        experiment_id: str, request: CaseInclusionUpdateRequest
+    ) -> dict[str, object]:
+        experiment = store.load_experiment(experiment_id)
+        cases = load_cases_or_case_suite_400(experiment_id)
+        _validate_excluded_case_ids(request.excluded_case_ids, cases)
+        experiment.run_defaults.excluded_case_ids = sorted(set(request.excluded_case_ids))
+        store.save_experiment(experiment_id, experiment)
+        store.invalidate_experiment_generated_artifacts(experiment_id)
+        return {
+            "experiment": experiment.model_dump(mode="json"),
+            "cases": _case_responses(cases, experiment),
+        }
 
     @app.post("/api/experiments/{experiment_id}/versions/{version}/source")
     def update_version_source(
@@ -1831,7 +2074,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         version: str,
     ) -> dict[str, object]:
         experiment = store.load_experiment(experiment_id)
-        cases = store.load_cases(experiment_id)
+        cases = load_cases_or_case_suite_400(experiment_id)
         if not cases:
             raise HTTPException(status_code=400, detail="Version has no cases")
         cases = _enabled_cases(cases, experiment)
@@ -1942,7 +2185,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         dry_run = request.dry_run if request is not None else False
         experiment = store.load_experiment(experiment_id)
         version_dir = store.version_dir(experiment_id, version)
-        cases = store.load_cases(experiment_id)
+        cases = load_cases_or_case_suite_400(experiment_id)
         if not cases:
             raise HTTPException(status_code=400, detail="Version has no cases")
         cases = _enabled_cases(cases, experiment)
@@ -2092,7 +2335,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     ) -> dict[str, object]:
         experiment = store.load_experiment(experiment_id)
         version_dir = store.version_dir(experiment_id, version)
-        cases = store.load_cases(experiment_id)
+        cases = load_cases_or_case_suite_400(experiment_id)
         case_ids = {case.id for case in cases}
         cases_by_id = {case.id: case for case in cases}
         selected_run_batch_id, run_artifacts = _load_latest_validated_run_batch(
@@ -2222,7 +2465,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             dry_run = request.dry_run if request is not None else False
             experiment = store.load_experiment(experiment_id)
             version_dir = store.version_dir(experiment_id, version)
-            cases = store.load_cases(experiment_id)
+            cases = load_cases_or_case_suite_400(experiment_id)
             case_ids = {case.id for case in cases}
             cases_by_id = {case.id: case for case in cases}
             selected_run_batch_id, run_artifacts = _load_latest_validated_run_batch(
@@ -2490,7 +2733,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         prompt_template = store.read_text(
             experiment_id, version, experiment.template.path
         )
-        cases = store.load_cases(experiment_id)
+        cases = load_cases_or_case_suite_400(experiment_id)
         case_ids = {case.id for case in cases}
         selected_run_batch_id = validation_batch.run_batch_id
         if run_batch_id is not None and run_batch_id != selected_run_batch_id:
@@ -2612,7 +2855,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             prompt_template = store.read_text(
                 experiment_id, version, experiment.template.path
             )
-            cases = store.load_cases(experiment_id)
+            cases = load_cases_or_case_suite_400(experiment_id)
             case_ids = {case.id for case in cases}
             selected_run_batch_id = validation_batch.run_batch_id
             if run_batch_id is not None and run_batch_id != selected_run_batch_id:
@@ -2832,7 +3075,7 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
             candidate_version,
             candidate_validation_batch.validation_batch_id,
         )
-        cases = store.load_cases(experiment_id)
+        cases = load_cases_or_case_suite_400(experiment_id)
         if not cases:
             raise HTTPException(status_code=400, detail="Experiment has no cases")
         for case in cases:

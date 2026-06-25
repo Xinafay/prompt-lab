@@ -681,6 +681,7 @@ def test_api_updates_experiment_manifest_under_experiments() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
         write_demo_experiment_manifest(root)
+        write_case_suite(root, cases={"a": demo_case_payload()})
         app = create_app(PromptLabConfig.from_env(project_root=root))
         payload = demo_experiment_payload()
         payload["title"] = "Updated"
@@ -737,6 +738,7 @@ def test_api_rejects_experiment_update_missing_active_version() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
         write_demo_experiment_manifest(root)
+        write_case_suite(root, cases={"a": demo_case_payload()})
         app = create_app(PromptLabConfig.from_env(project_root=root))
         payload = demo_experiment_payload(active_version="v999")
 
@@ -834,9 +836,329 @@ def test_api_gets_version_overview() -> None:
         assert body["model_py"] is None
         assert body["model_file"] is None
         assert body["rubric"] == "Prefer concise answers."
+        assert body["case_suite"]["id"] == "demo-suite"
         assert body["cases"][0]["id"] == "a"
         assert body["validators"][0]["validator_id"] == "quality"
         assert body["validators"][0]["checks"][0]["check_id"] == "has-answer"
+
+
+def test_api_manages_case_suites_and_rejects_referenced_delete() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_case_suite(
+            root,
+            suite_id="demo-suite",
+            cases={"a": demo_case_payload(value="alpha")},
+        )
+        write_demo_experiment_manifest(root)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        client = TestClient(app)
+
+        list_response = client.get("/api/case-suites")
+
+        assert list_response.status_code == 200
+        assert list_response.json() == [
+            {
+                "schema_version": "prompt_lab.case_suite/v1",
+                "id": "demo-suite",
+                "title": "Demo Suite",
+                "description": "",
+                "case_count": 1,
+                "experiment_ids": ["demo"],
+            }
+        ]
+
+        blank_response = client.post("/api/case-suites", json={"title": "  "})
+
+        assert blank_response.status_code == 400
+        assert blank_response.json()["detail"] == "Case Suite title is required"
+
+        create_response = client.post(
+            "/api/case-suites",
+            json={"title": " New Suite ", "description": " Draft cases "},
+        )
+
+        assert create_response.status_code == 200
+        created = create_response.json()
+        assert created["id"] == "new-suite"
+        assert created["title"] == "New Suite"
+        assert created["description"] == " Draft cases "
+
+        get_response = client.get("/api/case-suites/new-suite")
+
+        assert get_response.status_code == 200
+        assert get_response.json()["title"] == "New Suite"
+
+        patch_response = client.patch(
+            "/api/case-suites/new-suite",
+            json={"title": "Renamed Suite", "description": "Updated"},
+        )
+
+        assert patch_response.status_code == 200
+        assert patch_response.json()["title"] == "Renamed Suite"
+        assert patch_response.json()["description"] == "Updated"
+
+        conflict_response = client.delete("/api/case-suites/demo-suite")
+
+        assert conflict_response.status_code == 409
+        assert conflict_response.json()["detail"] == (
+            "Case Suite is used by one or more experiments"
+        )
+
+        delete_response = client.delete("/api/case-suites/new-suite")
+
+        assert delete_response.status_code == 200
+        assert delete_response.json() == {"suite_id": "new-suite"}
+        assert not (root / "case_suites" / "new-suite").exists()
+
+
+def test_api_manages_suite_cases_and_invalidates_consumers() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_case_suite(
+            root,
+            suite_id="demo-suite",
+            cases={"a": demo_case_payload(value="alpha")},
+        )
+        write_demo_experiment_manifest(root)
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        client = TestClient(app)
+        stale_run = (
+            root
+            / "experiments"
+            / "demo"
+            / "versions"
+            / "v001"
+            / "runs"
+            / "stale"
+            / "a"
+            / "repeat-001.json"
+        )
+        write_json(stale_run, {"stale": True})
+
+        cases_response = client.get("/api/case-suites/demo-suite/cases")
+
+        assert cases_response.status_code == 200
+        assert [item["id"] for item in cases_response.json()] == ["a"]
+
+        duplicate_response = client.post(
+            "/api/case-suites/demo-suite/cases",
+            json={"case_id": "a", "payload": {"value": "duplicate"}},
+        )
+
+        assert duplicate_response.status_code == 409
+        assert duplicate_response.json()["detail"] == "Case already exists"
+        assert stale_run.is_file()
+
+        unsafe_response = client.post(
+            "/api/case-suites/demo-suite/cases",
+            json={"case_id": "../b", "payload": {"value": "unsafe"}},
+        )
+
+        assert unsafe_response.status_code == 400
+        assert unsafe_response.json()["detail"] == "Unsafe case id"
+        assert stale_run.is_file()
+
+        create_response = client.post(
+            "/api/case-suites/demo-suite/cases",
+            json={"case_id": "b", "payload": {"value": "bravo"}},
+        )
+
+        assert create_response.status_code == 200
+        assert create_response.json()["case"]["id"] == "b"
+        assert [item["id"] for item in create_response.json()["cases"]] == ["a", "b"]
+        assert create_response.json()["affected_experiment_ids"] == ["demo"]
+        assert not stale_run.exists()
+
+        write_json(stale_run, {"stale": True})
+        replace_response = client.put(
+            "/api/case-suites/demo-suite/cases",
+            json={
+                "cases": [
+                    {"case_id": "b", "payload": {"value": "bravo updated"}},
+                    {"case_id": "c", "payload": {"value": "charlie"}},
+                ]
+            },
+        )
+
+        assert replace_response.status_code == 200
+        assert [item["id"] for item in replace_response.json()["cases"]] == ["b", "c"]
+        assert replace_response.json()["affected_experiment_ids"] == ["demo"]
+        assert not stale_run.exists()
+        assert not (root / "case_suites" / "demo-suite" / "cases" / "a.json").exists()
+
+        duplicate_replace_response = client.put(
+            "/api/case-suites/demo-suite/cases",
+            json={
+                "cases": [
+                    {"case_id": "b", "payload": {"value": "one"}},
+                    {"case_id": "b", "payload": {"value": "two"}},
+                ]
+            },
+        )
+
+        assert duplicate_replace_response.status_code == 400
+        assert duplicate_replace_response.json()["detail"] == "Duplicate case id"
+
+        write_json(stale_run, {"stale": True})
+        overwrite_response = client.put(
+            "/api/case-suites/demo-suite/cases/b",
+            json={"case_id": "ignored", "payload": {"value": "path wins"}},
+        )
+
+        assert overwrite_response.status_code == 200
+        assert overwrite_response.json()["case"] == {
+            "id": "b",
+            "payload": {"value": "path wins"},
+            "enabled": True,
+        }
+        assert overwrite_response.json()["affected_experiment_ids"] == ["demo"]
+        assert not stale_run.exists()
+
+        delete_response = client.delete("/api/case-suites/demo-suite/cases/b")
+
+        assert delete_response.status_code == 200
+        assert delete_response.json()["case_id"] == "b"
+        assert [item["id"] for item in delete_response.json()["cases"]] == ["c"]
+        assert delete_response.json()["affected_experiment_ids"] == ["demo"]
+
+
+def test_api_bulk_case_inclusion_updates_experiment_defaults_only_and_invalidates() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        example = root / "examples" / "experiments" / "demo"
+        version_dir = example / "versions" / "v001"
+        version_dir.mkdir(parents=True)
+        write_json(example / "experiment.json", demo_experiment_payload())
+        (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
+        write_example_case_suite(
+            root,
+            cases={
+                "a": demo_case_payload(value="alpha"),
+                "b": demo_case_payload(value="bravo"),
+            },
+        )
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        client = TestClient(app)
+        runtime_experiment = root / "experiments" / "demo"
+        stale_run = (
+            runtime_experiment
+            / "versions"
+            / "v001"
+            / "runs"
+            / "stale"
+            / "a"
+            / "repeat-001.json"
+        )
+        write_json(stale_run, {"stale": True})
+
+        response = client.put(
+            "/api/experiments/demo/case-inclusion",
+            json={"excluded_case_ids": ["b"]},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["experiment"]["run_defaults"]["excluded_case_ids"] == ["b"]
+        assert {item["id"]: item["enabled"] for item in body["cases"]} == {
+            "a": True,
+            "b": False,
+        }
+        assert json.loads(
+            (
+                root / "case_suites" / "demo-suite" / "cases" / "b.json"
+            ).read_text(encoding="utf-8")
+        ) == {"value": "bravo"}
+        assert not stale_run.exists()
+
+        unknown_response = client.put(
+            "/api/experiments/demo/case-inclusion",
+            json={"excluded_case_ids": ["missing"]},
+        )
+
+        assert unknown_response.status_code == 400
+        assert unknown_response.json()["detail"] == "Excluded case not found: missing"
+
+
+def test_api_no_suite_workflow_preview_returns_400_and_overview_has_empty_cases() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        example = root / "examples" / "experiments" / "demo"
+        version_dir = example / "versions" / "v001"
+        version_dir.mkdir(parents=True)
+        write_json(
+            example / "experiment.json",
+            demo_experiment_payload(case_suite_id=None),
+        )
+        (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        client = TestClient(app)
+
+        overview_response = client.get("/api/experiments/demo/versions/v001")
+
+        assert overview_response.status_code == 200
+        overview = overview_response.json()
+        assert overview["case_suite"] is None
+        assert overview["cases"] == []
+
+        preview_response = client.post(
+            "/api/experiments/demo/versions/v001/runs/preview-prompts"
+        )
+
+        assert preview_response.status_code == 400
+        assert preview_response.json()["detail"] == "Case Suite not assigned"
+
+        inclusion_response = client.patch(
+            "/api/experiments/demo/cases/a/run-inclusion",
+            json={"enabled": False},
+        )
+
+        assert inclusion_response.status_code == 400
+        assert inclusion_response.json()["detail"] == "Case Suite not assigned"
+
+
+def test_api_experiment_suite_update_validates_and_invalidates_on_change() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        example = root / "examples" / "experiments" / "demo"
+        version_dir = example / "versions" / "v001"
+        version_dir.mkdir(parents=True)
+        write_json(example / "experiment.json", demo_experiment_payload())
+        (version_dir / "prompt.md").write_text("Say {{ value }}", encoding="utf-8")
+        write_example_case_suite(root, cases={"a": demo_case_payload(value="alpha")})
+        write_case_suite(
+            root,
+            suite_id="alternate-suite",
+            cases={"b": demo_case_payload(value="bravo")},
+        )
+        app = create_app(PromptLabConfig.from_env(project_root=root))
+        client = TestClient(app)
+        payload = demo_experiment_payload()
+        payload["case_suite_id"] = "missing-suite"
+
+        missing_response = client.put("/api/experiments/demo", json=payload)
+
+        assert missing_response.status_code == 400
+        assert missing_response.json()["detail"] == "Case Suite not found"
+
+        runtime_experiment = root / "experiments" / "demo"
+        stale_run = (
+            runtime_experiment
+            / "versions"
+            / "v001"
+            / "runs"
+            / "stale"
+            / "a"
+            / "repeat-001.json"
+        )
+        write_json(stale_run, {"stale": True})
+        payload["case_suite_id"] = "alternate-suite"
+
+        update_response = client.put("/api/experiments/demo", json=payload)
+
+        assert update_response.status_code == 200
+        assert update_response.json()["case_suite_id"] == "alternate-suite"
+        assert not stale_run.exists()
 
 
 def test_api_rejects_case_payload_mutations_and_updates_run_inclusion() -> None:
@@ -904,7 +1226,7 @@ def test_api_rejects_case_payload_mutations_and_updates_run_inclusion() -> None:
             (runtime_experiment / "experiment.json").read_text(encoding="utf-8")
         )
         assert manifest["run_defaults"]["excluded_case_ids"] == ["b"]
-        assert (runtime_experiment / "versions" / "v001" / "runs").exists()
+        assert not (runtime_experiment / "versions" / "v001" / "runs").exists()
 
         refreshed_response = client.get("/api/experiments/demo/versions/v001")
 
@@ -1989,6 +2311,11 @@ def main() -> int:
         test_api_seeds_examples_into_experiments_on_startup,
         test_api_ignores_old_example_directories_when_seeding,
         test_api_gets_version_overview,
+        test_api_manages_case_suites_and_rejects_referenced_delete,
+        test_api_manages_suite_cases_and_invalidates_consumers,
+        test_api_bulk_case_inclusion_updates_experiment_defaults_only_and_invalidates,
+        test_api_no_suite_workflow_preview_returns_400_and_overview_has_empty_cases,
+        test_api_experiment_suite_update_validates_and_invalidates_on_change,
         test_api_rejects_case_payload_mutations_and_updates_run_inclusion,
         test_api_rejects_case_set_payload_update_without_clearing_runs,
         test_api_gets_pydantic_version_overview_model_source,
