@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
-import type { Experiment } from "../types";
+import type { CaseSuite, Experiment } from "../types";
 import { TooltipButton } from "./TooltipButton";
 
 interface ExperimentSettingsProps {
+  caseSuites: CaseSuite[];
   experiment: Experiment;
   isBusy: boolean;
   message: string | null;
@@ -35,6 +36,7 @@ function prepareForSave(draft: Experiment): Experiment {
 }
 
 export function ExperimentSettings({
+  caseSuites,
   experiment,
   isBusy,
   message,
@@ -154,6 +156,30 @@ export function ExperimentSettings({
               }))
             }
           />
+        </label>
+      </section>
+
+      <section className="settings-section">
+        <h3>Case Suite</h3>
+        <label className="settings-field">
+          <span>Case Suite</span>
+          <select
+            value={draft.case_suite_id ?? ""}
+            onChange={(event) =>
+              updateDraft((current) => ({
+                ...current,
+                case_suite_id:
+                  event.target.value === "" ? null : event.target.value
+              }))
+            }
+          >
+            <option value="">No Case Suite assigned</option>
+            {caseSuites.map((suite) => (
+              <option key={suite.id} value={suite.id}>
+                {suite.title} ({suite.id})
+              </option>
+            ))}
+          </select>
         </label>
       </section>
 

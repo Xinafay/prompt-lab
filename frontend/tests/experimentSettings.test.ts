@@ -4,7 +4,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { ExperimentSettings } from "../src/components/ExperimentSettings.tsx";
-import type { Experiment } from "../src/types.ts";
+import type { CaseSuite, Experiment } from "../src/types.ts";
 
 const experiment: Experiment = {
   schema_version: "prompt_lab.experiment/v1",
@@ -37,6 +37,7 @@ const experiment: Experiment = {
 test("experiment settings renders creation-time structural fields read-only", () => {
   const html = renderToStaticMarkup(
     React.createElement(ExperimentSettings, {
+      caseSuites: [],
       experiment,
       isBusy: false,
       message: null,
@@ -53,4 +54,37 @@ test("experiment settings renders creation-time structural fields read-only", ()
   assert.match(html, /<input readOnly="" value="model.Output"\/>/);
   assert.match(html, /<input readOnly="" value="prompt.md"\/>/);
   assert.doesNotMatch(html, /<select[^>]*><option value="text"/);
+});
+
+test("experiment settings renders selected case suite selector", () => {
+  const caseSuites: CaseSuite[] = [
+    {
+      schema_version: "prompt_lab.case_suite/v1",
+      id: "suite-regression",
+      title: "Regression Suite",
+      description: "Shared regression cases",
+      case_count: 3,
+      experiment_ids: ["demo-json"]
+    }
+  ];
+  const html = renderToStaticMarkup(
+    React.createElement(ExperimentSettings, {
+      caseSuites,
+      experiment: {
+        ...experiment,
+        case_suite_id: "suite-regression"
+      },
+      isBusy: false,
+      message: null,
+      onDirtyChange: () => undefined,
+      onDraftChange: () => undefined,
+      onReset: () => undefined,
+      onSave: async () => undefined
+    })
+  );
+
+  assert.match(html, /Case Suite/);
+  assert.match(html, /No Case Suite assigned/);
+  assert.match(html, /Regression Suite/);
+  assert.match(html, /suite-regression/);
 });

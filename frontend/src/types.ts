@@ -19,6 +19,7 @@ export interface Experiment {
   title: string;
   description: string;
   active_version: string;
+  case_suite_id?: string | null;
   output: OutputConfig;
   template: {
     engine: TemplateEngine;
@@ -57,6 +58,25 @@ export interface Case {
   enabled: boolean;
 }
 
+export interface CaseSuite {
+  schema_version: "prompt_lab.case_suite/v1";
+  id: string;
+  title: string;
+  description: string;
+  case_count?: number;
+  experiment_ids?: string[];
+}
+
+export interface CaseSuiteCreateRequest {
+  title: string;
+  description?: string;
+}
+
+export interface CaseSuiteUpdateRequest {
+  title?: string;
+  description?: string;
+}
+
 export interface CaseUploadRequest {
   case_id: string;
   payload: Record<string, unknown>;
@@ -74,6 +94,22 @@ export interface CaseSetUpdateRequest {
 export interface CaseSetUpdateResponse {
   experiment: Experiment;
   cases: Case[];
+}
+
+export interface CaseInclusionUpdateRequest {
+  excluded_case_ids: string[];
+}
+
+export interface CaseInclusionUpdateResponse {
+  experiment: Experiment;
+  cases: Case[];
+}
+
+export interface CaseSuiteCasesUpdateResponse {
+  case?: Case;
+  case_id?: string;
+  cases: Case[];
+  affected_experiment_ids: string[];
 }
 
 export interface RunArtifact {
@@ -126,6 +162,7 @@ export interface VersionOverview {
   model_file?: string | null;
   rubric: string;
   cases: Case[];
+  case_suite?: CaseSuite | null;
   validators: ValidatorDefinition[];
 }
 

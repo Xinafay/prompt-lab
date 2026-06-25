@@ -1,8 +1,14 @@
 import type {
   Case,
+  CaseInclusionUpdateRequest,
+  CaseInclusionUpdateResponse,
   CaseRunInclusionRequest,
   CaseSetUpdateRequest,
   CaseSetUpdateResponse,
+  CaseSuite,
+  CaseSuiteCasesUpdateResponse,
+  CaseSuiteCreateRequest,
+  CaseSuiteUpdateRequest,
   CaseUploadRequest,
   CompareMatrixResponse,
   CreatedVersionResponse,
@@ -126,6 +132,92 @@ export function deleteExperiment(
 ): Promise<ExperimentDeleteResponse> {
   return apiDelete<ExperimentDeleteResponse>(
     `/api/experiments/${encodeURIComponent(experimentId)}`
+  );
+}
+
+export function getCaseSuites(): Promise<CaseSuite[]> {
+  return apiGet<CaseSuite[]>("/api/case-suites");
+}
+
+export function createCaseSuite(
+  request: CaseSuiteCreateRequest
+): Promise<CaseSuite> {
+  return apiPost<CaseSuite>("/api/case-suites", request);
+}
+
+export function updateCaseSuite(
+  suiteId: string,
+  request: CaseSuiteUpdateRequest
+): Promise<CaseSuite> {
+  return apiPatch<CaseSuite>(
+    `/api/case-suites/${encodeURIComponent(suiteId)}`,
+    request
+  );
+}
+
+export function deleteCaseSuite(suiteId: string): Promise<{ suite_id: string }> {
+  return apiDelete<{ suite_id: string }>(
+    `/api/case-suites/${encodeURIComponent(suiteId)}`
+  );
+}
+
+export function getCaseSuiteCases(suiteId: string): Promise<Case[]> {
+  return apiGet<Case[]>(
+    `/api/case-suites/${encodeURIComponent(suiteId)}/cases`
+  );
+}
+
+export function saveCaseSuiteCases(
+  suiteId: string,
+  request: { cases: CaseUploadRequest[] }
+): Promise<CaseSuiteCasesUpdateResponse> {
+  return apiPut<CaseSuiteCasesUpdateResponse>(
+    `/api/case-suites/${encodeURIComponent(suiteId)}/cases`,
+    request
+  );
+}
+
+export function createCaseSuiteCase(
+  suiteId: string,
+  request: CaseUploadRequest
+): Promise<CaseSuiteCasesUpdateResponse> {
+  return apiPost<CaseSuiteCasesUpdateResponse>(
+    `/api/case-suites/${encodeURIComponent(suiteId)}/cases`,
+    request
+  );
+}
+
+export function updateCaseSuiteCase(
+  suiteId: string,
+  caseId: string,
+  request: CaseUploadRequest
+): Promise<CaseSuiteCasesUpdateResponse> {
+  return apiPut<CaseSuiteCasesUpdateResponse>(
+    `/api/case-suites/${encodeURIComponent(suiteId)}/cases/${encodeURIComponent(
+      caseId
+    )}`,
+    request
+  );
+}
+
+export function deleteCaseSuiteCase(
+  suiteId: string,
+  caseId: string
+): Promise<CaseSuiteCasesUpdateResponse> {
+  return apiDelete<CaseSuiteCasesUpdateResponse>(
+    `/api/case-suites/${encodeURIComponent(suiteId)}/cases/${encodeURIComponent(
+      caseId
+    )}`
+  );
+}
+
+export function saveCaseInclusion(
+  experimentId: string,
+  request: CaseInclusionUpdateRequest
+): Promise<CaseInclusionUpdateResponse> {
+  return apiPut<CaseInclusionUpdateResponse>(
+    `/api/experiments/${encodeURIComponent(experimentId)}/case-inclusion`,
+    request
   );
 }
 
