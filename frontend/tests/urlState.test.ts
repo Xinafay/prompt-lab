@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildCaseSuitesPath,
   buildGlobalSettingsPath,
   buildExperimentPath,
+  isCaseSuitesRoute,
   isGlobalSettingsRoute,
+  parseCaseSuitesRoute,
   parseExperimentRoute,
   workbenchTabs
 } from "../src/urlState.ts";
@@ -65,6 +68,38 @@ test("recognizes global settings route", () => {
     false
   );
   assert.equal(buildGlobalSettingsPath(), "/global-settings");
+});
+
+test("parses and builds case suite routes", () => {
+  assert.equal(
+    isCaseSuitesRoute(new URL("http://localhost:5173/case-suites")),
+    true
+  );
+  assert.equal(
+    isCaseSuitesRoute(
+      new URL("http://localhost:5173/case-suites/demo-json-briefs")
+    ),
+    true
+  );
+  assert.equal(
+    isCaseSuitesRoute(new URL("http://localhost:5173/demo-json/cases")),
+    false
+  );
+  assert.deepEqual(
+    parseCaseSuitesRoute(
+      new URL("http://localhost:5173/case-suites/demo-json-briefs")
+    ),
+    { suiteId: "demo-json-briefs" }
+  );
+  assert.deepEqual(
+    parseCaseSuitesRoute(new URL("http://localhost:5173/case-suites")),
+    { suiteId: null }
+  );
+  assert.equal(buildCaseSuitesPath(), "/case-suites");
+  assert.equal(
+    buildCaseSuitesPath("Demo JSON briefs"),
+    "/case-suites/Demo%20JSON%20briefs"
+  );
 });
 
 test("exports the supported workbench tabs", () => {

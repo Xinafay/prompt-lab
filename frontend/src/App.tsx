@@ -99,9 +99,12 @@ import type {
   WorkflowMode
 } from "./types";
 import {
+  buildCaseSuitesPath,
   buildGlobalSettingsPath,
   buildExperimentPath,
+  isCaseSuitesRoute,
   isGlobalSettingsRoute,
+  parseCaseSuitesRoute,
   parseExperimentRoute,
   type WorkbenchTab
 } from "./urlState";
@@ -152,7 +155,7 @@ type CaseSuiteDialog = { kind: "new" } | { kind: "addCase" };
 type PendingNavigationTarget =
   | { kind: "experiment"; experiment: Experiment | null }
   | { kind: "experimentDialog"; dialog: ExperimentManagementDialog }
-  | { kind: "caseSuites" }
+  | { kind: "caseSuites"; suiteId?: string | null }
   | { kind: "globalSettings" }
   | { kind: "route"; route: ReturnType<typeof currentExperimentRoute> }
   | { kind: "tab"; tab: WorkbenchTab }
@@ -172,6 +175,22 @@ type PendingValidatorsOverwrite = {
 
 function currentExperimentRoute() {
   return parseExperimentRoute(new URL(window.location.href));
+}
+
+function currentCaseSuitesRoute() {
+  return parseCaseSuitesRoute(new URL(window.location.href));
+}
+
+function resolveCaseSuiteId(
+  suites: CaseSuite[],
+  preferredSuiteId: string | null | undefined,
+  currentSuiteId: string | null
+): string | null {
+  const preferred = preferredSuiteId ?? currentSuiteId;
+  if (preferred !== null && suites.some((suite) => suite.id === preferred)) {
+    return preferred;
+  }
+  return suites[0]?.id ?? null;
 }
 
 const SHOW_DRY_RUN_CONTROLS =
@@ -243,13 +262,18 @@ function App() {
   const [appView, setAppView] = useState<AppView>(() =>
     isGlobalSettingsRoute(new URL(window.location.href))
       ? "globalSettings"
+      : isCaseSuitesRoute(new URL(window.location.href))
+        ? "caseSuites"
       : "experiment"
   );
   const [selectedExperiment, setSelectedExperiment] =
     useState<Experiment | null>(null);
   const [caseSuites, setCaseSuites] = useState<CaseSuite[]>([]);
   const [selectedCaseSuiteId, setSelectedCaseSuiteId] = useState<string | null>(
-    null
+    () =>
+      isCaseSuitesRoute(new URL(window.location.href))
+        ? currentCaseSuitesRoute().suiteId
+        : null
   );
   const [caseSuiteCases, setCaseSuiteCases] = useState<Case[]>([]);
   const [caseSuiteCasesBaseline, setCaseSuiteCasesBaseline] = useState<Case[]>(
@@ -367,9 +391,24 @@ function App() {
     window.history[method](window.history.state, "", url);
   }
 
+  function writeCaseSuitesRoute(
+    suiteId: string | null,
+    historyMode: HistoryMode
+  ) {
+    const url = new URL(window.location.href);
+    url.pathname = buildCaseSuitesPath(suiteId);
+    url.search = "";
+    const method = historyMode === "push" ? "pushState" : "replaceState";
+    window.history[method](window.history.state, "", url);
+  }
+
   function writeCurrentRoute(historyMode: HistoryMode) {
     if (appView === "globalSettings") {
       writeGlobalSettingsRoute(historyMode);
+      return;
+    }
+    if (appView === "caseSuites") {
+      writeCaseSuitesRoute(selectedCaseSuiteId, historyMode);
       return;
     }
     if (selectedExperiment !== null) {
@@ -495,12 +534,23 @@ function App() {
     writeGlobalSettingsRoute(options?.historyMode ?? "replace");
   }
 
-  function selectCaseSuites() {
+  function selectCaseSuites(options?: {
+    historyMode?: HistoryMode;
+    suiteId?: string | null;
+    updateUrl?: boolean;
+  }) {
+    const nextSuiteId = options?.suiteId ?? selectedCaseSuiteId;
     setAppView("caseSuites");
+    if (options !== undefined && "suiteId" in options) {
+      setSelectedCaseSuiteId(options.suiteId ?? null);
+    }
     setPendingNavigation(null);
     setNavigationError(null);
     setNavigationSaving(false);
     setCaseSuiteMessage(null);
+    if (options?.updateUrl !== false) {
+      writeCaseSuitesRoute(nextSuiteId, options?.historyMode ?? "replace");
+    }
   }
 
   function unsavedNavigationKind(): UnsavedNavigationKind | null {
@@ -669,7 +719,7 @@ function App() {
       return;
     }
     if (navigation.kind === "caseSuites") {
-      selectCaseSuites();
+      selectCaseSuites({ historyMode: "push", suiteId: navigation.suiteId });
       return;
     }
     if (navigation.kind === "route") {
@@ -699,6 +749,16 @@ function App() {
     selectExperiment(experiment, { historyMode: "push" });
   }
 
+  function requestExperimentsSelection() {
+    if (appView === "experiment") {
+      return;
+    }
+    const experiment =
+      selectedExperiment ??
+      (state.status === "loaded" ? state.experiments[0] ?? null : null);
+    requestExperimentSelection(experiment);
+  }
+
   function requestGlobalSettingsSelection() {
     if (appView === "globalSettings") {
       return;
@@ -716,13 +776,16 @@ function App() {
     if (appView === "caseSuites") {
       return;
     }
-    const navigation = buildPendingNavigation({ kind: "caseSuites" });
+    const navigation = buildPendingNavigation({
+      kind: "caseSuites",
+      suiteId: selectedCaseSuiteId
+    });
     if (navigation !== null) {
       setNavigationError(null);
       setPendingNavigation(navigation);
       return;
     }
-    selectCaseSuites();
+    selectCaseSuites({ historyMode: "push", suiteId: selectedCaseSuiteId });
   }
 
   function handleSelectCaseSuite(suiteId: string) {
@@ -732,6 +795,7 @@ function App() {
       return;
     }
     setSelectedCaseSuiteId(suiteId);
+    writeCaseSuitesRoute(suiteId, "push");
   }
 
   function requestNewCaseSuite() {
@@ -1068,9 +1132,16 @@ function App() {
         if (!cancelled) {
           setState({ status: "loaded", experiments });
           if (selectedKeyRef.current === null) {
+            const url = new URL(window.location.href);
             const requestedRoute = currentExperimentRoute();
-            if (isGlobalSettingsRoute(new URL(window.location.href))) {
+            if (isGlobalSettingsRoute(url)) {
               selectGlobalSettings({ historyMode: "replace" });
+            } else if (isCaseSuitesRoute(url)) {
+              selectCaseSuites({
+                historyMode: "replace",
+                suiteId: parseCaseSuitesRoute(url).suiteId,
+                updateUrl: false
+              });
             } else {
               const requestedExperiment =
                 requestedRoute.experimentId === null
@@ -1104,17 +1175,16 @@ function App() {
 
   async function refreshCaseSuites(preferredSuiteId?: string | null) {
     const suites = await getCaseSuites();
+    const nextSuiteId = resolveCaseSuiteId(
+      suites,
+      preferredSuiteId,
+      selectedCaseSuiteId
+    );
     setCaseSuites(suites);
-    setSelectedCaseSuiteId((current) => {
-      const preferred = preferredSuiteId ?? current;
-      if (
-        preferred !== null &&
-        suites.some((suite) => suite.id === preferred)
-      ) {
-        return preferred;
-      }
-      return suites[0]?.id ?? null;
-    });
+    setSelectedCaseSuiteId(nextSuiteId);
+    if (appView === "caseSuites") {
+      writeCaseSuitesRoute(nextSuiteId, "replace");
+    }
     return suites;
   }
 
@@ -1125,16 +1195,20 @@ function App() {
       try {
         const suites = await getCaseSuites();
         if (!cancelled) {
+          const url = new URL(window.location.href);
+          const requestedSuiteId = isCaseSuitesRoute(url)
+            ? parseCaseSuitesRoute(url).suiteId
+            : null;
+          const nextSuiteId = resolveCaseSuiteId(
+            suites,
+            requestedSuiteId,
+            selectedCaseSuiteId
+          );
           setCaseSuites(suites);
-          setSelectedCaseSuiteId((current) => {
-            if (
-              current !== null &&
-              suites.some((suite) => suite.id === current)
-            ) {
-              return current;
-            }
-            return suites[0]?.id ?? null;
-          });
+          setSelectedCaseSuiteId(nextSuiteId);
+          if (isCaseSuitesRoute(url)) {
+            writeCaseSuitesRoute(nextSuiteId, "replace");
+          }
         }
       } catch (error) {
         if (!cancelled) {
@@ -1233,6 +1307,11 @@ function App() {
       const navigation = buildPendingNavigation(
         isGlobalSettingsRoute(url)
           ? { kind: "globalSettings" }
+          : isCaseSuitesRoute(url)
+            ? {
+                kind: "caseSuites",
+                suiteId: parseCaseSuitesRoute(url).suiteId
+              }
           : { kind: "route", route: requestedRoute }
       );
       if (navigation !== null) {
@@ -1243,6 +1322,13 @@ function App() {
       }
       if (isGlobalSettingsRoute(url)) {
         selectGlobalSettings({ historyMode: "replace" });
+        return;
+      }
+      if (isCaseSuitesRoute(url)) {
+        selectCaseSuites({
+          suiteId: parseCaseSuitesRoute(url).suiteId,
+          updateUrl: false
+        });
         return;
       }
       const requestedExperiment =
@@ -2983,6 +3069,17 @@ function App() {
           <p>{subtitle}</p>
         </div>
         <div className="header-actions">
+          <button
+            className={
+              appView === "experiment"
+                ? "header-settings-button is-active"
+                : "header-settings-button"
+            }
+            onClick={requestExperimentsSelection}
+            type="button"
+          >
+            Experiments
+          </button>
           <button
             className={
               appView === "caseSuites"

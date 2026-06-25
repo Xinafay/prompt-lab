@@ -69,6 +69,7 @@ test("demo cases tab shows suite-backed cases and opens case suites", async ({
   await expect(jsonCases).toContainText("service-brief");
 
   await page.getByRole("button", { name: "Case Suites" }).click();
+  await expect(page).toHaveURL(/\/case-suites\/demo-json-briefs$/);
   await expect(
     page.getByRole("navigation", { name: "Case Suites" })
   ).toBeVisible();
@@ -83,6 +84,18 @@ test("demo cases tab shows suite-backed cases and opens case suites", async ({
   await expect(
     suiteList.getByRole("button", { name: /Demo string replies/ })
   ).toBeVisible();
+
+  await page.reload();
+  await expect(
+    page.getByRole("navigation", { name: "Case Suites" })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Case Suite details" })
+  ).toContainText("Demo JSON briefs");
+
+  await page.getByRole("button", { name: "Experiments" }).click();
+  await expect(page).toHaveURL(/\/demo-json\/prompt$/);
+  await expect(page.getByRole("navigation", { name: "Experiments" })).toBeVisible();
 });
 
 test("demo string prompt and validators tabs show source sections", async ({ page }) => {
