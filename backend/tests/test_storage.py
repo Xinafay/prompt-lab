@@ -257,6 +257,42 @@ def test_store_write_case_to_suite_respects_overwrite_flag() -> None:
         ) == {"text": "new"}
 
 
+def test_store_write_case_to_suite_invalidates_consuming_experiment_artifacts() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_case_suite_manifest(root / "case_suites" / "demo-suite" / "suite.json")
+        write_experiment_with_generated_artifacts(root, case_suite_id="demo-suite")
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        store.write_case_to_suite("demo-suite", "case-a", {"text": "new"})
+
+        assert_generated_artifacts_removed(root, "demo")
+
+
+def test_store_failed_write_case_to_suite_does_not_invalidate_consumers() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_case_suite_manifest(root / "case_suites" / "demo-suite" / "suite.json")
+        write_case_suite_case(root, payload={"text": "old"})
+        write_experiment_with_generated_artifacts(root, case_suite_id="demo-suite")
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        try:
+            store.write_case_to_suite("demo-suite", "case-a", {"text": "new"})
+        except FileExistsError:
+            pass
+        else:
+            raise AssertionError("Expected duplicate suite case write to fail")
+
+        assert_generated_artifacts_exist(root, "demo")
+
+
 def test_store_replace_suite_cases_removes_omitted_cases_and_writes_payloads() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -287,6 +323,25 @@ def test_store_replace_suite_cases_removes_omitted_cases_and_writes_payloads() -
         assert not (cases_dir / "case-b.json").exists()
 
 
+def test_store_replace_suite_cases_invalidates_consuming_experiment_artifacts() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_case_suite_manifest(root / "case_suites" / "demo-suite" / "suite.json")
+        write_case_suite_case(root, case_id="case-a", payload={"text": "old"})
+        write_experiment_with_generated_artifacts(root, case_suite_id="demo-suite")
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        store.replace_suite_cases(
+            "demo-suite",
+            [CaseArtifact(id="case-a", payload={"text": "updated"})],
+        )
+
+        assert_generated_artifacts_removed(root, "demo")
+
+
 def test_store_delete_case_from_suite_removes_case_and_rejects_missing_case() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -306,6 +361,42 @@ def test_store_delete_case_from_suite_removes_case_and_rejects_missing_case() ->
             assert str(exc) == "Case not found"
         else:
             raise AssertionError("Expected missing suite case delete to fail")
+
+
+def test_store_delete_case_from_suite_invalidates_consuming_experiment_artifacts() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_case_suite_manifest(root / "case_suites" / "demo-suite" / "suite.json")
+        write_case_suite_case(root)
+        write_experiment_with_generated_artifacts(root, case_suite_id="demo-suite")
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        store.delete_case_from_suite("demo-suite", "case-a")
+
+        assert_generated_artifacts_removed(root, "demo")
+
+
+def test_store_missing_delete_case_from_suite_does_not_invalidate_consumers() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_case_suite_manifest(root / "case_suites" / "demo-suite" / "suite.json")
+        write_experiment_with_generated_artifacts(root, case_suite_id="demo-suite")
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+
+        try:
+            store.delete_case_from_suite("demo-suite", "missing")
+        except NotFoundError:
+            pass
+        else:
+            raise AssertionError("Expected missing suite case delete to fail")
+
+        assert_generated_artifacts_exist(root, "demo")
 
 
 def test_store_experiments_using_case_suite_returns_matching_experiments() -> None:
@@ -810,6 +901,40 @@ def write_case_suite_case(
         json.dumps(payload or {"text": "hello"}, ensure_ascii=False),
         encoding="utf-8",
     )
+
+
+def write_experiment_with_generated_artifacts(
+    root: Path,
+    *,
+    experiment_id: str = "demo",
+    case_suite_id: str = "demo-suite",
+) -> None:
+    experiment = root / "experiments" / experiment_id
+    for version in ("v001", "v002"):
+        version_dir = experiment / "versions" / version
+        version_dir.mkdir(parents=True, exist_ok=True)
+        for name in ("runs", "validations", "reviews", "comparisons"):
+            (version_dir / name).mkdir(parents=True, exist_ok=True)
+    write_experiment_manifest(
+        experiment / "experiment.json",
+        experiment_id=experiment_id,
+        active_version="v002",
+        case_suite_id=case_suite_id,
+    )
+
+
+def assert_generated_artifacts_removed(root: Path, experiment_id: str) -> None:
+    for version in ("v001", "v002"):
+        version_dir = root / "experiments" / experiment_id / "versions" / version
+        for name in ("runs", "validations", "reviews", "comparisons"):
+            assert not (version_dir / name).exists()
+
+
+def assert_generated_artifacts_exist(root: Path, experiment_id: str) -> None:
+    for version in ("v001", "v002"):
+        version_dir = root / "experiments" / experiment_id / "versions" / version
+        for name in ("runs", "validations", "reviews", "comparisons"):
+            assert (version_dir / name).is_dir()
 
 
 def test_store_saves_experiment_manifest_under_experiments_root() -> None:
@@ -1431,8 +1556,13 @@ def main() -> int:
         test_store_deleting_referenced_case_suite_is_rejected,
         test_store_delete_case_suite_rejects_top_level_symlink,
         test_store_write_case_to_suite_respects_overwrite_flag,
+        test_store_write_case_to_suite_invalidates_consuming_experiment_artifacts,
+        test_store_failed_write_case_to_suite_does_not_invalidate_consumers,
         test_store_replace_suite_cases_removes_omitted_cases_and_writes_payloads,
+        test_store_replace_suite_cases_invalidates_consuming_experiment_artifacts,
         test_store_delete_case_from_suite_removes_case_and_rejects_missing_case,
+        test_store_delete_case_from_suite_invalidates_consuming_experiment_artifacts,
+        test_store_missing_delete_case_from_suite_does_not_invalidate_consumers,
         test_store_experiments_using_case_suite_returns_matching_experiments,
         test_store_invalidate_case_suite_consumers_removes_generated_artifact_dirs,
         test_store_rejects_case_suite_path_escapes_without_leaking_root_paths,

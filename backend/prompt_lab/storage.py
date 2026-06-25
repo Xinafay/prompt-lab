@@ -389,6 +389,7 @@ class PromptLabStore:
         if path.exists() and not overwrite:
             raise FileExistsError("Case already exists")
         _write_json(path, payload)
+        self.invalidate_case_suite_consumers(suite_id)
         return CaseArtifact.model_validate({"id": case_id, "payload": payload})
 
     def delete_case_from_suite(self, suite_id: str, case_id: str) -> None:
@@ -396,6 +397,7 @@ class PromptLabStore:
         if not path.is_file():
             raise NotFoundError("Case not found")
         path.unlink()
+        self.invalidate_case_suite_consumers(suite_id)
 
     def replace_suite_cases(
         self, suite_id: str, cases: list[CaseArtifact]
@@ -413,6 +415,7 @@ class PromptLabStore:
                 path.unlink()
         for artifact_case in cases:
             _write_json(case_paths[artifact_case.id], artifact_case.payload)
+        self.invalidate_case_suite_consumers(suite_id)
         return self.load_cases_for_suite(suite_id)
 
     def experiments_using_case_suite(
