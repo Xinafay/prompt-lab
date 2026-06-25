@@ -330,6 +330,7 @@ function App() {
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<Experiment | null>(null);
+  const [settingsResetNonce, setSettingsResetNonce] = useState(0);
   const [experimentDialog, setExperimentDialog] =
     useState<ExperimentManagementDialog | null>(null);
   const [experimentActionBusy, setExperimentActionBusy] = useState(false);
@@ -958,6 +959,9 @@ function App() {
     } else {
       setSettingsDirty(false);
       setSettingsDraft(null);
+      if (kind === "settings") {
+        setSettingsResetNonce((value) => value + 1);
+      }
     }
     setPendingNavigation(null);
     setNavigationError(null);
@@ -3466,6 +3470,7 @@ function App() {
 
                     {activeTab === "settings" ? (
                       <ExperimentSettings
+                        key={`${detailState.overview.experiment.id}:${settingsResetNonce}`}
                         caseSuites={caseSuites}
                         experiment={detailState.overview.experiment}
                         isBusy={settingsBusy}
