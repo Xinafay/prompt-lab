@@ -167,11 +167,14 @@ test("case suite creation, add case, and edit case render as modals", () => {
   assert.match(addCaseHtml, /role="dialog"/);
   assert.match(addCaseHtml, /Add case/);
   assert.match(addCaseHtml, /Case ID/);
-  assert.match(addCaseHtml, /JSON object/);
   assert.match(addCaseHtml, /Upload case JSON/);
+  assert.match(addCaseHtml, /Payload JSON/);
+  assert.match(addCaseHtml, /case-payload-modal/);
+  assert.match(addCaseHtml, /code-editor/);
   assert.match(editCaseHtml, /role="dialog"/);
   assert.match(editCaseHtml, /Edit case payload/);
   assert.match(editCaseHtml, /Payload JSON/);
+  assert.match(editCaseHtml, /case-payload-modal/);
   assert.match(editCaseHtml, /code-editor/);
 });
 

@@ -2012,9 +2012,17 @@ select {
 }
 
 .case-payload-modal {
-  width: min(760px, 100%);
+  width: min(1040px, 100%);
   max-height: calc(100vh - 48px);
   overflow: auto;
+}
+
+.case-payload-modal .code-viewer .cm-editor {
+  min-height: min(560px, calc(100vh - 300px));
+}
+
+.case-payload-modal .code-viewer .cm-scroller {
+  max-height: min(640px, calc(100vh - 260px));
 }
 
 .experiment-management-modal .settings-field,

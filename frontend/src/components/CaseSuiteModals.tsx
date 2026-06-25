@@ -169,7 +169,7 @@ export function AddCaseModal({
       <form
         aria-labelledby="add-case-title"
         aria-modal="true"
-        className="settings-navigation-modal experiment-management-modal"
+        className="settings-navigation-modal experiment-management-modal case-payload-modal"
         onSubmit={handleSubmit}
         role="dialog"
       >
@@ -201,15 +201,13 @@ export function AddCaseModal({
           />
         </label>
 
-        <label className="settings-field">
-          <span>JSON object</span>
-          <textarea
-            disabled={isBusy}
-            onChange={(event) => setPayloadText(event.target.value)}
-            rows={8}
-            value={payloadText}
-          />
-        </label>
+        <CodeEditor
+          disabled={isBusy}
+          label="Payload JSON"
+          language="json"
+          onChange={setPayloadText}
+          value={payloadText}
+        />
 
         {error !== null ? <div className="settings-error">{error}</div> : null}
 
