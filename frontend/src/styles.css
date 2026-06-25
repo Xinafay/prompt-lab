@@ -189,21 +189,8 @@ select {
   box-shadow: none;
 }
 
-.experiment-nav-actions {
-  display: flex;
-  gap: 8px;
-  padding: 0 18px 14px 18px;
-}
-
-.experiment-nav-actions .secondary-action {
-  min-height: 30px;
-  padding: 0 10px;
-  font-size: 12px;
-}
-
 .experiment-nav-item:focus-visible,
 .experiment-panel-action:focus-visible,
-.experiment-nav-actions .secondary-action:focus-visible,
 .header-settings-button:focus-visible,
 .workbench-tab:focus-visible,
 .proposal-tab:focus-visible,
@@ -660,6 +647,39 @@ select {
   font-size: 14px;
   font-weight: 750;
   line-height: 1.3;
+}
+
+.settings-section-description {
+  grid-column: 1 / -1;
+  margin: -4px 0 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.settings-section-actions,
+.settings-section-danger {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.settings-section-actions h3,
+.settings-section-danger h3,
+.settings-section-actions .settings-section-description,
+.settings-section-danger .settings-section-description {
+  grid-column: 1;
+}
+
+.settings-section-actions button,
+.settings-section-danger button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.settings-section-danger {
+  border-color: #fecaca;
+  background: #fffafa;
 }
 
 .settings-field {
@@ -3253,6 +3273,8 @@ select {
   }
 
   .case-browser,
+  .settings-section-actions,
+  .settings-section-danger,
   .case-suite-fields,
   .case-suite-cases,
   .case-suite-payload-panel,
@@ -3276,6 +3298,13 @@ select {
 
   .validator-card-actions {
     justify-content: flex-start;
+  }
+
+  .settings-section-actions button,
+  .settings-section-danger button {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: flex-start;
   }
 
   .validators-editor-modal {

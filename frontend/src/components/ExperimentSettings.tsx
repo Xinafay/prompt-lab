@@ -8,6 +8,8 @@ interface ExperimentSettingsProps {
   experiment: Experiment;
   isBusy: boolean;
   message: string | null;
+  onClone: (experiment: Experiment) => void;
+  onDelete: (experiment: Experiment) => void;
   onDirtyChange: (isDirty: boolean) => void;
   onDraftChange: (draft: Experiment | null) => void;
   onReset: () => void;
@@ -40,6 +42,8 @@ export function ExperimentSettings({
   experiment,
   isBusy,
   message,
+  onClone,
+  onDelete,
   onDirtyChange,
   onDraftChange,
   onReset,
@@ -303,6 +307,36 @@ export function ExperimentSettings({
           <span>Case order</span>
           <input readOnly value={draft.run_defaults.case_order} />
         </label>
+      </section>
+
+      <section className="settings-section settings-section-actions">
+        <h3>Experiment actions</h3>
+        <p className="settings-section-description">
+          Create a local copy of this experiment with its versions and artifacts.
+        </p>
+        <button
+          className="secondary-action"
+          disabled={isBusy}
+          onClick={() => onClone(experiment)}
+          type="button"
+        >
+          Clone experiment
+        </button>
+      </section>
+
+      <section className="settings-section settings-section-danger">
+        <h3>Danger zone</h3>
+        <p className="settings-section-description">
+          Delete this experiment from the local workspace.
+        </p>
+        <button
+          className="secondary-action danger-action"
+          disabled={isBusy}
+          onClick={() => onDelete(experiment)}
+          type="button"
+        >
+          Delete experiment
+        </button>
       </section>
     </form>
   );

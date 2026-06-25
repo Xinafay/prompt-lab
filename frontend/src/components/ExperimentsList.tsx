@@ -3,18 +3,14 @@ import type { Experiment } from "../types";
 interface ExperimentsListProps {
   experiments: Experiment[];
   selectedExperimentId: string | null;
-  onClone?: (experiment: Experiment) => void;
   onCreate?: () => void;
-  onDelete?: (experiment: Experiment) => void;
   onSelect: (experiment: Experiment) => void;
 }
 
 export function ExperimentsList({
   experiments,
   selectedExperimentId,
-  onClone,
   onCreate,
-  onDelete,
   onSelect
 }: ExperimentsListProps) {
   return (
@@ -64,24 +60,6 @@ export function ExperimentsList({
                   Validator: {experiment.models.validator_model}
                 </span>
               </button>
-              {isSelected && onClone !== undefined && onDelete !== undefined ? (
-                <div className="experiment-nav-actions">
-                  <button
-                    className="secondary-action"
-                    onClick={() => onClone(experiment)}
-                    type="button"
-                  >
-                    Clone
-                  </button>
-                  <button
-                    className="secondary-action danger-action"
-                    onClick={() => onDelete(experiment)}
-                    type="button"
-                  >
-                    Delete
-                  </button>
-                </div>
-              ) : null}
             </div>
           );
         })}

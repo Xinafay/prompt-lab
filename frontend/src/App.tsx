@@ -3193,9 +3193,7 @@ function App() {
             {appView === "experiment" ? (
               <ExperimentsList
                 experiments={state.experiments}
-                onClone={requestCloneExperiment}
                 onCreate={requestNewExperiment}
-                onDelete={requestDeleteExperiment}
                 onSelect={requestExperimentSelection}
                 selectedExperimentId={
                   appView === "experiment" ? selectedExperiment?.id ?? null : null
@@ -3472,6 +3470,8 @@ function App() {
                         experiment={detailState.overview.experiment}
                         isBusy={settingsBusy}
                         message={settingsMessage}
+                        onClone={requestCloneExperiment}
+                        onDelete={requestDeleteExperiment}
                         onDirtyChange={setSettingsDirty}
                         onDraftChange={setSettingsDraft}
                         onReset={handleResetExperimentSettings}
