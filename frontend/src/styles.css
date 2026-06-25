@@ -109,6 +109,18 @@ select {
   border-bottom: 1px solid #e4e7ec;
 }
 
+.experiments-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.experiment-panel-action {
+  min-height: 30px;
+  padding: 0 10px;
+}
+
 .panel-heading h2,
 .section-heading h3 {
   margin: 0;
@@ -120,6 +132,21 @@ select {
 
 .experiment-nav-list {
   display: grid;
+}
+
+.experiment-nav-row {
+  border-bottom: 1px solid #eef1f5;
+}
+
+.experiment-nav-row .experiment-nav-item {
+  border-bottom: 0;
+}
+
+.experiment-nav-row.is-selected {
+  background: #eaf2ff;
+  box-shadow:
+    inset 4px 0 0 #2563eb,
+    inset 0 0 0 1px #bfdbfe;
 }
 
 .experiment-nav-item {
@@ -146,7 +173,26 @@ select {
     inset 0 0 0 1px #bfdbfe;
 }
 
+.experiment-nav-row.is-selected .experiment-nav-item.is-selected {
+  background: transparent;
+  box-shadow: none;
+}
+
+.experiment-nav-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 18px 14px 18px;
+}
+
+.experiment-nav-actions .secondary-action {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
 .experiment-nav-item:focus-visible,
+.experiment-panel-action:focus-visible,
+.experiment-nav-actions .secondary-action:focus-visible,
 .header-settings-button:focus-visible,
 .workbench-tab:focus-visible,
 .proposal-tab:focus-visible,
