@@ -123,8 +123,8 @@ class CaseSuiteCreateRequest(BaseModel):
 class CaseSuiteUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    title: str
-    description: str = ""
+    title: str | None = None
+    description: str | None = None
 
 
 class CaseUploadRequest(BaseModel):
@@ -1627,15 +1627,18 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
     def update_case_suite(
         suite_id: str, request: CaseSuiteUpdateRequest
     ) -> dict[str, object]:
-        title = request.title.strip()
-        if title == "":
-            raise HTTPException(
-                status_code=400,
-                detail="Case Suite title is required",
-            )
-        suite = store.load_case_suite(suite_id).model_copy(
-            update={"title": title, "description": request.description}
-        )
+        update: dict[str, str] = {}
+        if request.title is not None:
+            title = request.title.strip()
+            if title == "":
+                raise HTTPException(
+                    status_code=400,
+                    detail="Case Suite title is required",
+                )
+            update["title"] = title
+        if request.description is not None:
+            update["description"] = request.description
+        suite = store.load_case_suite(suite_id).model_copy(update=update)
         return store.save_case_suite(suite_id, suite).model_dump(mode="json")
 
     @app.delete("/api/case-suites/{suite_id}")
@@ -1922,14 +1925,16 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         if matching_case is None:
             raise HTTPException(status_code=404, detail="Case not found")
 
-        excluded_case_ids = set(experiment.run_defaults.excluded_case_ids)
+        current_excluded_case_ids = set(experiment.run_defaults.excluded_case_ids)
+        excluded_case_ids = set(current_excluded_case_ids)
         if request.enabled:
             excluded_case_ids.discard(case_id)
         else:
             excluded_case_ids.add(case_id)
-        experiment.run_defaults.excluded_case_ids = sorted(excluded_case_ids)
-        store.save_experiment(experiment_id, experiment)
-        store.invalidate_experiment_generated_artifacts(experiment_id)
+        if excluded_case_ids != current_excluded_case_ids:
+            experiment.run_defaults.excluded_case_ids = sorted(excluded_case_ids)
+            store.save_experiment(experiment_id, experiment)
+            store.invalidate_experiment_generated_artifacts(experiment_id)
         return _case_response(matching_case, experiment)
 
     @app.put("/api/experiments/{experiment_id}/case-inclusion")
@@ -1939,9 +1944,11 @@ def create_app(config: PromptLabConfig | None = None) -> FastAPI:
         experiment = store.load_experiment(experiment_id)
         cases = load_cases_or_case_suite_400(experiment_id)
         _validate_excluded_case_ids(request.excluded_case_ids, cases)
-        experiment.run_defaults.excluded_case_ids = sorted(set(request.excluded_case_ids))
-        store.save_experiment(experiment_id, experiment)
-        store.invalidate_experiment_generated_artifacts(experiment_id)
+        excluded_case_ids = set(request.excluded_case_ids)
+        if excluded_case_ids != set(experiment.run_defaults.excluded_case_ids):
+            experiment.run_defaults.excluded_case_ids = sorted(excluded_case_ids)
+            store.save_experiment(experiment_id, experiment)
+            store.invalidate_experiment_generated_artifacts(experiment_id)
         return {
             "experiment": experiment.model_dump(mode="json"),
             "cases": _case_responses(cases, experiment),

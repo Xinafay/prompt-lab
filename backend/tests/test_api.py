@@ -898,6 +898,34 @@ def test_api_manages_case_suites_and_rejects_referenced_delete() -> None:
         assert patch_response.json()["title"] == "Renamed Suite"
         assert patch_response.json()["description"] == "Updated"
 
+        title_only_response = client.patch(
+            "/api/case-suites/new-suite",
+            json={"title": "Title Only"},
+        )
+
+        assert title_only_response.status_code == 200
+        assert title_only_response.json()["title"] == "Title Only"
+        assert title_only_response.json()["description"] == "Updated"
+
+        description_only_response = client.patch(
+            "/api/case-suites/new-suite",
+            json={"description": "Description Only"},
+        )
+
+        assert description_only_response.status_code == 200
+        assert description_only_response.json()["title"] == "Title Only"
+        assert description_only_response.json()["description"] == "Description Only"
+
+        blank_title_patch_response = client.patch(
+            "/api/case-suites/new-suite",
+            json={"title": "  "},
+        )
+
+        assert blank_title_patch_response.status_code == 400
+        assert blank_title_patch_response.json()["detail"] == (
+            "Case Suite title is required"
+        )
+
         conflict_response = client.delete("/api/case-suites/demo-suite")
 
         assert conflict_response.status_code == 409
@@ -1071,6 +1099,16 @@ def test_api_bulk_case_inclusion_updates_experiment_defaults_only_and_invalidate
         ) == {"value": "bravo"}
         assert not stale_run.exists()
 
+        write_json(stale_run, {"stale": True})
+
+        no_op_response = client.put(
+            "/api/experiments/demo/case-inclusion",
+            json={"excluded_case_ids": ["b"]},
+        )
+
+        assert no_op_response.status_code == 200
+        assert stale_run.is_file()
+
         unknown_response = client.put(
             "/api/experiments/demo/case-inclusion",
             json={"excluded_case_ids": ["missing"]},
@@ -1227,6 +1265,26 @@ def test_api_rejects_case_payload_mutations_and_updates_run_inclusion() -> None:
         )
         assert manifest["run_defaults"]["excluded_case_ids"] == ["b"]
         assert not (runtime_experiment / "versions" / "v001" / "runs").exists()
+
+        no_op_run = (
+            runtime_experiment
+            / "versions"
+            / "v001"
+            / "runs"
+            / "stale"
+            / "b"
+            / "repeat-001.json"
+        )
+        write_json(no_op_run, {"stale": True})
+
+        no_op_inclusion_response = client.patch(
+            "/api/experiments/demo/cases/b/run-inclusion",
+            json={"enabled": False},
+        )
+
+        assert no_op_inclusion_response.status_code == 200
+        assert no_op_inclusion_response.json()["enabled"] is False
+        assert no_op_run.is_file()
 
         refreshed_response = client.get("/api/experiments/demo/versions/v001")
 
