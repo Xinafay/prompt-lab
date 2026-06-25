@@ -65,10 +65,6 @@ def seed_experiments_from_examples(
                     destination / "experiment.json",
                     settings,
                 )
-            _copy_suite_cases_for_legacy_storage(
-                destination,
-                example_case_suites_root=example_case_suites_root,
-            )
             copied_experiment_ids.append(example_dir.name)
 
     copied_case_suite_ids: list[str] = []
@@ -89,26 +85,6 @@ def seed_experiments_from_examples(
         seeded_case_suites=bool(copied_case_suite_ids),
         copied_case_suite_ids=copied_case_suite_ids,
     )
-
-
-def _copy_suite_cases_for_legacy_storage(
-    experiment_dir: Path, *, example_case_suites_root: Path
-) -> None:
-    experiment = ExperimentArtifact.model_validate_json(
-        (experiment_dir / "experiment.json").read_text(encoding="utf-8")
-    )
-    if experiment.case_suite_id is None:
-        return
-    source_cases_dir = example_case_suites_root / experiment.case_suite_id / "cases"
-    if not source_cases_dir.is_dir():
-        return
-    destination_cases_dir = experiment_dir / "cases"
-    if destination_cases_dir.is_dir() and any(destination_cases_dir.glob("*.json")):
-        return
-    destination_cases_dir.mkdir(parents=True, exist_ok=True)
-    for source_path in sorted(source_cases_dir.glob("*.json")):
-        shutil.copy2(source_path, destination_cases_dir / source_path.name)
-
 
 def _has_committed_runtime_artifacts(example_dir: Path) -> bool:
     versions_dir = example_dir / "versions"

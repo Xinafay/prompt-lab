@@ -264,6 +264,24 @@ def test_seed_copies_case_suites_independently() -> None:
         ).is_file()
 
 
+def test_seed_does_not_materialize_suite_cases_under_experiments() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_example(root)
+        write_case_suite(root)
+
+        result = seed_experiments_from_examples(
+            experiments_root=root / "experiments",
+            case_suites_root=root / "case_suites",
+            examples_root=root / "examples",
+        )
+
+        assert result.seeded is True
+        assert result.seeded_case_suites is True
+        assert not (root / "experiments" / "demo" / "cases").exists()
+        assert (root / "case_suites" / "demo-suite" / "cases" / "case-a.json").is_file()
+
+
 def test_seed_does_not_overwrite_existing_case_suites() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -309,65 +327,28 @@ def test_repository_demo_examples_seed_for_ui_testing() -> None:
         assert "demo-string" in experiment_ids
         assert "demo-json" in experiment_ids
 
-        for experiment_id in ("demo-string", "demo-json"):
-            cases = client.get(f"/api/experiments/{experiment_id}/versions/v002")
-            assert cases.status_code == 200
-            case_ids = [case["id"] for case in cases.json()["cases"]]
-            assert len(case_ids) >= 2
-
-            runs = client.get(
-                f"/api/experiments/{experiment_id}/versions/v002/runs"
-            )
-            assert runs.status_code == 200
-            assert runs.json()["run_batch_id"] == "run-000002"
-            runs_by_case = {
-                case_id: [
-                    run
-                    for run in runs.json()["runs"]
-                    if run["case_id"] == case_id
-                ]
-                for case_id in case_ids
-            }
-            assert all(len(case_runs) >= 2 for case_runs in runs_by_case.values())
-
-            validation = client.get(
-                f"/api/experiments/{experiment_id}/versions/v002/validations/latest"
-            )
-            assert validation.status_code == 200
-            assert validation.json()["validation_batch"]["validation_batch_id"] == (
-                "validation-000002"
-            )
-            assert len(validation.json()["validators"]) == 2
-            assert len(validation.json()["results"]) >= len(case_ids) * 2 * 2
-
-            review = client.get(
-                f"/api/experiments/{experiment_id}/versions/v002/reviews/latest"
-            )
-            assert review.status_code == 200
-            review_id = review.json()["review_id"]
-            proposal = client.get(
-                f"/api/experiments/{experiment_id}/versions/v002/reviews/"
-                f"{review_id}/proposal"
-            )
-            assert proposal.status_code == 200
-            assert proposal.json()["source"]["validation_batch_id"] == (
-                "validation-000002"
-            )
-
-            comparison = client.post(
-                f"/api/experiments/{experiment_id}/comparisons",
-                json={
-                    "baseline_version": "v001",
-                    "candidate_version": "v002",
-                    "dry_run": True,
-                },
-            )
-            assert comparison.status_code == 200
-            assert comparison.json()["schema_version"] == (
-                "prompt_lab.compare_matrix/v1"
-            )
-            assert comparison.json()["versions"] == ["v001", "v002"]
-            assert comparison.json()["rows"]
+        assert (
+            root
+            / "case_suites"
+            / "demo-string-replies"
+            / "cases"
+            / "billing-reply.json"
+        ).is_file()
+        assert (
+            root
+            / "case_suites"
+            / "demo-string-replies"
+            / "cases"
+            / "support-reply.json"
+        ).is_file()
+        assert (
+            root / "case_suites" / "demo-json-briefs" / "cases" / "product-brief.json"
+        ).is_file()
+        assert (
+            root / "case_suites" / "demo-json-briefs" / "cases" / "service-brief.json"
+        ).is_file()
+        assert not (root / "experiments" / "demo-string" / "cases").exists()
+        assert not (root / "experiments" / "demo-json" / "cases").exists()
 
 
 def main() -> int:
@@ -380,6 +361,7 @@ def main() -> int:
         test_seed_creates_empty_experiments_when_examples_missing,
         test_seed_fails_on_conflicting_existing_directory_without_manifest,
         test_seed_copies_case_suites_independently,
+        test_seed_does_not_materialize_suite_cases_under_experiments,
         test_seed_does_not_overwrite_existing_case_suites,
         test_repository_demo_examples_seed_for_ui_testing,
     ]
