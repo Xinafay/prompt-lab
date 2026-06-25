@@ -4,8 +4,8 @@
 .models.jsonc
 .cache/
 .worktrees/
-experiments/
-case_suites/
+/experiments/
+/case_suites/
 .venv/
 venv/
 env/
