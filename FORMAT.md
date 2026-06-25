@@ -1,7 +1,7 @@
 # Prompt Lab Artifact Format
 
 This file documents the neutral artifact format used by committed examples and
-the local `experiments/` runtime workspace.
+the local `experiments/` and `case_suites/` runtime workspaces.
 
 Prompt Lab is independent from Carmilla runtime code. Carmilla may export these
 artifacts, but Prompt Lab consumes only plain JSON files and prompt/model source
@@ -15,6 +15,7 @@ files.
   "id": "split-scenes",
   "title": "Split scenes",
   "description": "Split a chapter into contiguous structured scenes.",
+  "case_suite_id": "story-chapters",
   "active_version": "v001",
   "output": {
     "type": "pydantic",
@@ -33,7 +34,8 @@ files.
   "run_defaults": {
     "repeat_count": 3,
     "llm_cache": "disabled",
-    "case_order": "case-major"
+    "case_order": "case-major",
+    "excluded_case_ids": []
   }
 }
 ```
@@ -51,23 +53,50 @@ rendering uses.
 
 ## Directory Layout
 
-An experiment directory keeps cases at the experiment level and version-specific
-prompt/model files under `versions/`. Validator definitions live in
-experiment-level `validators/` files and apply to every version:
+Experiment directories keep experiment metadata and version-specific
+prompt/model files. Case payloads live in Case Suites and are shared by every
+experiment that references the suite:
 
 ```text
-validators/
-  scene-quality.json
-  scene-count.json
-cases/
-  case-id.json
-versions/v001/
-  prompt.md
-  model.py       # only for Pydantic experiments
+experiments/
+  split-scenes/
+    experiment.json
+    validators/
+      scene-quality.json
+      scene-count.json
+    versions/v001/
+      prompt.md
+      model.py       # only for Pydantic experiments
+case_suites/
+  story-chapters/
+    suite.json
+    cases/
+      case-id.json
 ```
 
-State cases are shared by all versions. Creating a new version copies or writes
-only prompt/model files; state inputs are not duplicated.
+Creating a new version copies or writes only prompt/model files. Case Suite
+payloads are not duplicated into versions or experiments. Experiment-specific
+case inclusion is stored as `run_defaults.excluded_case_ids` in
+`experiment.json`.
+
+## Case Suite
+
+Case Suites are reusable collections of case payloads:
+
+```json
+{
+  "schema_version": "prompt_lab.case_suite/v1",
+  "id": "story-chapters",
+  "title": "Story chapters",
+  "description": "Source chapter excerpts shared by story experiments."
+}
+```
+
+Cases live under `case_suites/<suite_id>/cases/` as plain JSON objects. The
+case id is the filename stem, for example
+`case_suites/story-chapters/cases/chapter-one.json` has case id `chapter-one`.
+Experiments select exactly one suite with `case_suite_id`; several experiments
+can share the same suite.
 
 ## Validators
 
@@ -144,9 +173,8 @@ evidence before asking the judge model to synthesize findings.
 
 ## Case
 
-A case represents one concrete prompt invocation. Cases live under `cases/` as
-plain JSON objects. The case id is the filename stem, for example
-`cases/chapter-one.json` has case id `chapter-one`.
+A case represents one concrete prompt invocation. The file content is the
+context dictionary passed directly to prompt rendering and validation.
 
 ```json
 {

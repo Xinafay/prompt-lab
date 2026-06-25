@@ -44,9 +44,11 @@ Experiment prompts are rendered with the copied `shared.jinjax` package. Each
 case is a plain JSON object, and the backend passes it directly as the context
 dictionary for prompt rendering and Pydantic validation.
 
-Cases live once per experiment under `cases/` and are shared by all versions.
-Version directories hold the active prompt/model files plus generated run,
-validation, review, proposal, and comparison artifacts.
+Cases live in Case Suites under `case_suites/<suite_id>/cases/` and are shared
+by every experiment that references the suite with `case_suite_id`. Experiments
+own run inclusion through `run_defaults.excluded_case_ids`. Version directories
+hold the active prompt/model files plus generated run, validation, review,
+proposal, and comparison artifacts.
 
 Validator, judge, and proposal system prompts live in editable Markdown/Jinja files:
 
@@ -58,15 +60,17 @@ Python code builds structured context and renders these templates through `promp
 
 ## Runtime Paths
 
-Prompt Lab has two repository-local experiment roots:
+Prompt Lab has repository-local experiment and Case Suite roots:
 
-- `examples/` - committed golden templates, used only to seed a new workspace.
-- `experiments/` - local runtime workspace, ignored by git.
+- `examples/experiments/` - committed golden experiment templates.
+- `examples/case_suites/` - committed golden Case Suite templates.
+- `experiments/` - local runtime experiment workspace, ignored by git.
+- `case_suites/` - local runtime Case Suite workspace, ignored by git.
 
-On backend startup, if `experiments/` does not exist or contains no
-`*/experiment.json` manifests, Prompt Lab copies top-level example experiment
-directories from `examples/` into `experiments/`. Once seeded, the backend lists,
-loads, and writes only `experiments/`.
+On backend startup, Prompt Lab independently seeds missing runtime roots:
+`examples/experiments/` into `experiments/`, and `examples/case_suites/` into
+`case_suites/`. Once seeded, the backend lists, loads, and writes only the
+runtime roots.
 
 Carmilla exports complete Prompt Lab experiments through its eval runner. From
 the Carmilla repository root:
@@ -75,21 +79,24 @@ the Carmilla repository root:
 python -m python.workflow_runtime.eval_runner \
   --workflow story_parser \
   --test split-scenes \
-  --export-prompt-lab /Users/karol/Projects/sinafai/prompt-lab/examples/split-scenes
+  --export-prompt-lab /Users/karol/Projects/sinafai/prompt-lab/examples/experiments/split-scenes
 ```
 
-The command writes shared `cases/`, validator definitions, version files, and
-top-level experiment metadata, then reports created, existing, and skipped file
-events to stderr.
+The command writes validator definitions, version files, and top-level
+experiment metadata. Case payloads belong in a Case Suite under
+`examples/case_suites/`, with the experiment manifest referencing that suite by
+`case_suite_id`. The exporter reports created, existing, and skipped file events
+to stderr.
 
-Existing runtime experiments are not migrated when examples change. Once
-`experiments/` contains any active manifest, the backend leaves it alone unless
-the user edits or replaces it.
+Existing runtime experiments and Case Suites are not migrated when examples
+change. Once a runtime root is seeded, the backend leaves it alone unless the
+user edits or replaces it.
 
 Environment overrides:
 
 - `PROMPT_LAB_EXPERIMENTS_ROOT`
 - `PROMPT_LAB_EXAMPLES_ROOT`
+- `PROMPT_LAB_CASE_SUITES_ROOT`
 
 ## Checks
 

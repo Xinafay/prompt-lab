@@ -5,6 +5,12 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { CaseSuiteManager } from "../src/components/CaseSuiteManager.tsx";
+import {
+  canSaveSuiteCases,
+  getSuiteSelectionBlockedMessage,
+  isSuiteMutationDisabled,
+  parseCasePayloadDraft
+} from "../src/components/caseSuiteDrafts.ts";
 import type { Case, CaseSuite } from "../src/types.ts";
 
 const suites: CaseSuite[] = [
@@ -129,17 +135,35 @@ test("production app wires a dedicated case suites view", () => {
   assert.match(source, /Case Suite cases saved\./);
 });
 
-test("case suite manager blocks saving while payload JSON is invalid", () => {
-  const source = readFileSync(
-    new URL("../src/components/CaseSuiteManager.tsx", import.meta.url),
-    "utf8"
-  );
+test("case suite draft helpers reject invalid payloads and block saving", () => {
+  const invalidSyntax = parseCasePayloadDraft('{"customer": ');
+  assert.equal(invalidSyntax.ok, false);
+  if (!invalidSyntax.ok) {
+    assert.match(invalidSyntax.error, /JSON/);
+  }
 
-  assert.match(source, /const hasCasePayloadError = payloadError !== null;/);
-  assert.match(source, /if \(hasCasePayloadError\) \{[\s\S]*setError\(payloadError\);[\s\S]*return;[\s\S]*\}/);
-  assert.match(
-    source,
-    /disabled=\{[\s\S]*?isBusy \|\|[\s\S]*?selectedSuite === null \|\|[\s\S]*?hasCasePayloadError/
+  assert.deepEqual(parseCasePayloadDraft("[]"), {
+    ok: false,
+    error: "Payload must be a JSON object."
+  });
+
+  assert.equal(
+    canSaveSuiteCases({
+      isBusy: false,
+      isDirty: true,
+      hasPayloadError: true,
+      selectedSuiteId: "suite-regression"
+    }),
+    false
+  );
+  assert.equal(
+    canSaveSuiteCases({
+      isBusy: false,
+      isDirty: true,
+      hasPayloadError: false,
+      selectedSuiteId: "suite-regression"
+    }),
+    true
   );
 });
 
@@ -155,17 +179,25 @@ test("production app tracks dirty case suite drafts before switching suites", ()
   assert.match(source, /onResetCases=\{handleResetCaseSuiteCases\}/);
 });
 
-test("case suite manager disables suite mutations while case changes are dirty", () => {
-  const source = readFileSync(
-    new URL("../src/components/CaseSuiteManager.tsx", import.meta.url),
-    "utf8"
+test("case suite draft helpers block suite selection and mutations while dirty", () => {
+  assert.equal(
+    getSuiteSelectionBlockedMessage(true),
+    "Save or reset suite case changes before switching suites."
   );
+  assert.equal(getSuiteSelectionBlockedMessage(false), null);
 
-  assert.match(source, /caseSuiteCasesDirty: boolean;/);
-  assert.match(source, /const suiteMutationDisabled = isBusy \|\| caseSuiteCasesDirty;/);
-  assert.match(source, /disabled=\{suiteMutationDisabled\}/);
-  assert.match(source, /Save or reset case changes before switching\s*suites\./);
-  assert.match(source, /Reset case changes/);
+  assert.equal(
+    isSuiteMutationDisabled({ isBusy: false, caseSuiteCasesDirty: true }),
+    true
+  );
+  assert.equal(
+    isSuiteMutationDisabled({ isBusy: true, caseSuiteCasesDirty: false }),
+    true
+  );
+  assert.equal(
+    isSuiteMutationDisabled({ isBusy: false, caseSuiteCasesDirty: false }),
+    false
+  );
 });
 
 test("case suite manager stacks below the shared mobile breakpoint", () => {

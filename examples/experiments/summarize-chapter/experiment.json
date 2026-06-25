@@ -20,6 +20,7 @@
   "run_defaults": {
     "repeat_count": 3,
     "llm_cache": "disabled",
-    "case_order": "case-major"
+    "case_order": "case-major",
+    "excluded_case_ids": []
   }
 }

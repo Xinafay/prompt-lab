@@ -1,16 +1,19 @@
 # Prompt Lab Examples
 
-These examples are generated from Carmilla Story Parser eval fixtures and
-exported as complete neutral Prompt Lab experiments.
+These examples include complete neutral Prompt Lab experiments and reusable Case
+Suites.
 
 Case files are plain JSON context objects passed directly to prompt rendering
 and validation. The committed prompts use the `jinjax` template engine copied
 from Carmilla's portable `shared.jinjax` package.
 
-Each example keeps workflow state cases in the experiment-level `cases/`
-directory. Version directories contain only version-specific prompt/model files
-and generated runtime artifacts after seeding into `experiments/`; cases are
-shared by all versions of an experiment.
+Committed experiments live under `examples/experiments/`. Committed Case Suites
+live under `examples/case_suites/`, and their `cases/` directories contain the
+plain JSON payloads shared by experiments. Experiment manifests reference one
+suite with `case_suite_id` and store per-experiment run inclusion in
+`run_defaults.excluded_case_ids`. Version directories contain only
+version-specific prompt/model files and generated runtime artifacts after
+seeding into `experiments/`.
 
 From the Carmilla repository root, regenerate an example with:
 
@@ -18,19 +21,24 @@ From the Carmilla repository root, regenerate an example with:
 python -m python.workflow_runtime.eval_runner \
   --workflow story_parser \
   --test split-scenes \
-  --export-prompt-lab /Users/karol/Projects/sinafai/prompt-lab/examples/split-scenes
+  --export-prompt-lab /Users/karol/Projects/sinafai/prompt-lab/examples/experiments/split-scenes
 ```
 
-The exporter reports created, existing, and skipped files to stderr.
+The exporter reports created, existing, and skipped experiment files to stderr.
+Case payload updates belong in the corresponding suite under
+`examples/case_suites/`.
 
 Examples:
 
-- `demo-string`: plain text UI QA fixture with precomputed runs,
+- `experiments/demo-string`: plain text UI QA fixture with precomputed runs,
   validations, review, and proposal artifacts.
-- `demo-json`: Pydantic structured-output UI QA fixture with precomputed runs,
+- `experiments/demo-json`: Pydantic structured-output UI QA fixture with precomputed runs,
   validations, review, and proposal artifacts.
-- `split-scenes`: Pydantic structured output using `model.SceneList`.
-- `summarize-chapter`: plain text output.
+- `experiments/split-scenes`: Pydantic structured output using `model.SceneList`.
+- `experiments/summarize-chapter`: plain text output.
+- `case_suites/demo-string-replies`: cases for the text demo.
+- `case_suites/demo-json-briefs`: cases for the structured-output demo.
+- `case_suites/story-chapters`: shared story-parser cases.
 
 Use `demo-string` and `demo-json` for manual browser testing and UI regression
 checks. They are intentionally small, deterministic, and include enough
@@ -67,10 +75,11 @@ validators assign `grade: 1..5 | null` to explicit checks over configured input
 scope. Automatic validators run local rules such as word counts or JSON-path
 counts and currently map binary rule outcomes to grade `5` or `1`.
 
-The running app does not write into `examples/`. At backend startup, examples are
-copied into `experiments/` only when the runtime workspace is missing or has no
-experiment manifests. Edit and run experiments from `experiments/`; update
-`examples/` only when changing the golden starter templates.
+The running app does not write into `examples/`. At backend startup, example
+experiments and example Case Suites are independently copied into the runtime
+`experiments/` and `case_suites/` roots when those workspaces are missing. Edit
+and run from the runtime roots; update `examples/` only when changing the golden
+starter templates.
 
 Examples that contain committed runtime artifacts under version directories
 (`runs/`, `validations/`, `reviews/`, or `comparisons/`) are copied exactly so
@@ -78,6 +87,6 @@ their saved artifacts stay consistent with their manifest. Global default models
 and repeat count are applied only to starter examples without committed runtime
 artifacts.
 
-Existing runtime experiments are not migrated when committed examples change.
-Delete or move `experiments/` only when you intentionally want to reseed from the
-current examples.
+Existing runtime experiments and Case Suites are not migrated when committed
+examples change. Delete or move `experiments/` and/or `case_suites/` only when
+you intentionally want to reseed from the current examples.

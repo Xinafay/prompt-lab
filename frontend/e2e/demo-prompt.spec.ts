@@ -7,6 +7,7 @@ test.describe.configure({ mode: "serial" });
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const demoFixtureNames = ["demo-json", "demo-string"] as const;
+const demoCaseSuiteNames = ["demo-json-briefs", "demo-string-replies"] as const;
 
 function removeManagedExperimentFixtures() {
   const experimentsRoot = resolve(repoRoot, "experiments");
@@ -21,8 +22,14 @@ function removeManagedExperimentFixtures() {
 function resetDemoFixtures() {
   removeManagedExperimentFixtures();
   for (const fixtureName of demoFixtureNames) {
-    const source = resolve(repoRoot, "examples", fixtureName);
+    const source = resolve(repoRoot, "examples", "experiments", fixtureName);
     const destination = resolve(repoRoot, "experiments", fixtureName);
+    rmSync(destination, { recursive: true, force: true });
+    cpSync(source, destination, { recursive: true });
+  }
+  for (const suiteName of demoCaseSuiteNames) {
+    const source = resolve(repoRoot, "examples", "case_suites", suiteName);
+    const destination = resolve(repoRoot, "case_suites", suiteName);
     rmSync(destination, { recursive: true, force: true });
     cpSync(source, destination, { recursive: true });
   }
@@ -44,6 +51,31 @@ async function selectVersion(page: import("@playwright/test").Page, version: str
   }
   await expect(versionSelect).toHaveValue(version);
 }
+
+test("demo cases tab shows suite-backed cases and opens case suites", async ({
+  page
+}) => {
+  await page.goto("/demo-string/cases");
+
+  const stringCases = page.getByRole("region", { name: "Cases" });
+  await expect(stringCases).toContainText("2 of 2 from Demo string replies");
+  await expect(stringCases).toContainText("billing-reply");
+  await expect(stringCases).toContainText("support-reply");
+
+  await page.goto("/demo-json/cases");
+  const jsonCases = page.getByRole("region", { name: "Cases" });
+  await expect(jsonCases).toContainText("2 of 2 from Demo JSON briefs");
+  await expect(jsonCases).toContainText("product-brief");
+  await expect(jsonCases).toContainText("service-brief");
+
+  await page.getByRole("button", { name: "Case Suites" }).click();
+  await expect(
+    page.getByRole("complementary", { name: "Case suite list" })
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Case Suites" })).toBeVisible();
+  await expect(page.getByText("Demo JSON briefs")).toBeVisible();
+  await expect(page.getByText("Demo string replies")).toBeVisible();
+});
 
 test("demo string prompt and validators tabs show source sections", async ({ page }) => {
   await page.goto("/demo-string/prompt");

@@ -82,20 +82,6 @@ export interface CaseUploadRequest {
   payload: Record<string, unknown>;
 }
 
-export interface CaseRunInclusionRequest {
-  enabled: boolean;
-}
-
-export interface CaseSetUpdateRequest {
-  cases: CaseUploadRequest[];
-  excluded_case_ids: string[];
-}
-
-export interface CaseSetUpdateResponse {
-  experiment: Experiment;
-  cases: Case[];
-}
-
 export interface CaseInclusionUpdateRequest {
   excluded_case_ids: string[];
 }

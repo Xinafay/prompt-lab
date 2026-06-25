@@ -44,6 +44,7 @@ import {
 } from "./api";
 import { CaseBrowser } from "./components/CaseBrowser";
 import { CaseSuiteManager } from "./components/CaseSuiteManager";
+import { getSuiteSelectionBlockedMessage } from "./components/caseSuiteDrafts";
 import { ComparisonView } from "./components/ComparisonView";
 import {
   CloneExperimentModal,
@@ -715,8 +716,9 @@ function App() {
   }
 
   function handleSelectCaseSuite(suiteId: string) {
-    if (caseSuiteCasesDirty) {
-      setCaseSuiteMessage("Save or reset case changes before switching suites.");
+    const blockedMessage = getSuiteSelectionBlockedMessage(caseSuiteCasesDirty);
+    if (blockedMessage !== null) {
+      setCaseSuiteMessage(blockedMessage);
       return;
     }
     setSelectedCaseSuiteId(suiteId);
@@ -1771,7 +1773,7 @@ function App() {
 
   async function handleCreateCaseSuite(request: CaseSuiteCreateRequest) {
     if (caseSuiteCasesDirty) {
-      setCaseSuiteMessage("Save or reset case changes before creating suites.");
+      setCaseSuiteMessage("Save or reset suite case changes before creating suites.");
       return;
     }
     setCaseSuiteBusy(true);
@@ -1793,7 +1795,7 @@ function App() {
     request: CaseSuiteUpdateRequest
   ) {
     if (caseSuiteCasesDirty) {
-      setCaseSuiteMessage("Save or reset case changes before updating suites.");
+      setCaseSuiteMessage("Save or reset suite case changes before updating suites.");
       return;
     }
     setCaseSuiteBusy(true);
@@ -1812,7 +1814,7 @@ function App() {
 
   async function handleDeleteCaseSuite(suiteId: string) {
     if (caseSuiteCasesDirty) {
-      setCaseSuiteMessage("Save or reset case changes before deleting suites.");
+      setCaseSuiteMessage("Save or reset suite case changes before deleting suites.");
       return;
     }
     setCaseSuiteBusy(true);

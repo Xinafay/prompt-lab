@@ -6,6 +6,12 @@ import type {
   CaseSuiteCreateRequest,
   CaseSuiteUpdateRequest
 } from "../types";
+import {
+  canSaveSuiteCases,
+  isSuiteMutationDisabled,
+  parseCasePayloadDraft,
+  SUITE_CASE_SELECTION_BLOCKED_MESSAGE
+} from "./caseSuiteDrafts";
 
 interface CaseSuiteManagerProps {
   suites: CaseSuite[];
@@ -33,18 +39,6 @@ function formatCaseCount(count: number | undefined): string {
 
 function formatPayload(payload: Record<string, unknown>): string {
   return JSON.stringify(payload, null, 2);
-}
-
-function parseJsonObject(text: string): Record<string, unknown> {
-  const parsed = JSON.parse(text) as unknown;
-  if (
-    parsed === null ||
-    typeof parsed !== "object" ||
-    Array.isArray(parsed)
-  ) {
-    throw new Error("Payload must be a JSON object.");
-  }
-  return parsed as Record<string, unknown>;
 }
 
 export function CaseSuiteManager({
@@ -86,7 +80,16 @@ export function CaseSuiteManager({
   const [payloadError, setPayloadError] = useState<string | null>(null);
   const referencedBy = selectedSuite?.experiment_ids ?? [];
   const hasCasePayloadError = payloadError !== null;
-  const suiteMutationDisabled = isBusy || caseSuiteCasesDirty;
+  const suiteMutationDisabled = isSuiteMutationDisabled({
+    isBusy,
+    caseSuiteCasesDirty
+  });
+  const saveSuiteCasesDisabled = !canSaveSuiteCases({
+    isBusy,
+    isDirty: caseSuiteCasesDirty,
+    hasPayloadError: hasCasePayloadError,
+    selectedSuiteId: selectedSuite?.id ?? null
+  });
   const deleteDisabled =
     selectedSuite === null || referencedBy.length > 0 || suiteMutationDisabled;
 
@@ -164,22 +167,20 @@ export function CaseSuiteManager({
   function handlePayloadTextChange(nextText: string) {
     setPayloadText(nextText);
     if (selectedCase === null) return;
-    try {
-      const payload = parseJsonObject(nextText);
+    const parsed = parseCasePayloadDraft(nextText);
+    if (parsed.ok) {
       setPayloadError(null);
       setError(null);
       onCasesChange(
         cases.map((artifactCase) =>
           artifactCase.id === selectedCase.id
-            ? { ...artifactCase, payload }
+            ? { ...artifactCase, payload: parsed.payload }
             : artifactCase
         )
       );
-    } catch (parseError) {
-      const message =
-        parseError instanceof Error ? parseError.message : "Invalid JSON.";
-      setPayloadError(message);
-      setError(message);
+    } else {
+      setPayloadError(parsed.error);
+      setError(parsed.error);
     }
   }
 
@@ -194,15 +195,18 @@ export function CaseSuiteManager({
       setError(`Case ${caseId} already exists.`);
       return;
     }
-    try {
-      const payload = parseJsonObject(addPayloadText);
+    const parsed = parseCasePayloadDraft(addPayloadText);
+    if (parsed.ok) {
       setError(null);
-      onCasesChange([...cases, { id: caseId, enabled: true, payload }]);
+      onCasesChange([
+        ...cases,
+        { id: caseId, enabled: true, payload: parsed.payload }
+      ]);
       setSelectedCaseId(caseId);
       setAddCaseId("");
       setAddPayloadText("{\n  \n}");
-    } catch (parseError) {
-      setError(parseError instanceof Error ? parseError.message : "Invalid JSON.");
+    } else {
+      setError(parsed.error);
     }
   }
 
@@ -301,8 +305,7 @@ export function CaseSuiteManager({
         {error !== null ? <div className="settings-error">{error}</div> : null}
         {caseSuiteCasesDirty ? (
           <div className="settings-message">
-            Unsaved suite case changes. Save or reset case changes before switching
-            suites.
+            Unsaved suite case changes. {SUITE_CASE_SELECTION_BLOCKED_MESSAGE}
           </div>
         ) : null}
 
@@ -434,12 +437,7 @@ export function CaseSuiteManager({
                   />
                   <button
                     className="primary-action"
-                    disabled={
-                      isBusy ||
-                      selectedSuite === null ||
-                      hasCasePayloadError ||
-                      !caseSuiteCasesDirty
-                    }
+                    disabled={saveSuiteCasesDisabled}
                     onClick={() => void handleSaveCases()}
                     type="button"
                   >
@@ -451,7 +449,7 @@ export function CaseSuiteManager({
                     onClick={onResetCases}
                     type="button"
                   >
-                    Reset case changes
+                    Reset suite case changes
                   </button>
                 </div>
               </div>

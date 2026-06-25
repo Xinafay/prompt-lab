@@ -2,9 +2,6 @@ import type {
   Case,
   CaseInclusionUpdateRequest,
   CaseInclusionUpdateResponse,
-  CaseRunInclusionRequest,
-  CaseSetUpdateRequest,
-  CaseSetUpdateResponse,
   CaseSuite,
   CaseSuiteCasesUpdateResponse,
   CaseSuiteCreateRequest,
@@ -217,50 +214,6 @@ export function saveCaseInclusion(
 ): Promise<CaseInclusionUpdateResponse> {
   return apiPut<CaseInclusionUpdateResponse>(
     `/api/experiments/${encodeURIComponent(experimentId)}/case-inclusion`,
-    request
-  );
-}
-
-export function uploadCase(
-  experimentId: string,
-  request: CaseUploadRequest
-): Promise<Case> {
-  return apiPost<Case>(
-    `/api/experiments/${encodeURIComponent(experimentId)}/cases`,
-    request
-  );
-}
-
-export function deleteCase(
-  experimentId: string,
-  caseId: string
-): Promise<{ case_id: string }> {
-  return apiDelete<{ case_id: string }>(
-    `/api/experiments/${encodeURIComponent(experimentId)}/cases/${encodeURIComponent(
-      caseId
-    )}`
-  );
-}
-
-export function updateCaseRunInclusion(
-  experimentId: string,
-  caseId: string,
-  request: CaseRunInclusionRequest
-): Promise<Case> {
-  return apiPatch<Case>(
-    `/api/experiments/${encodeURIComponent(experimentId)}/cases/${encodeURIComponent(
-      caseId
-    )}/run-inclusion`,
-    request
-  );
-}
-
-export function saveCases(
-  experimentId: string,
-  request: CaseSetUpdateRequest
-): Promise<CaseSetUpdateResponse> {
-  return apiPut<CaseSetUpdateResponse>(
-    `/api/experiments/${encodeURIComponent(experimentId)}/cases`,
     request
   );
 }

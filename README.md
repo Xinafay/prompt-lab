@@ -6,9 +6,10 @@ proposal generation, and deterministic version comparison.
 
 Prompt Lab stores experiments as filesystem artifacts. Carmilla or another external tool may export neutral experiment bundles into this repository, but Prompt Lab does not import Carmilla workflow runtime, workflow state, or workflow classes.
 
-Cases are plain JSON objects. The case id is the filename stem under `cases/`,
-and the file content is the context dictionary passed directly to jinjax prompt
-rendering and Pydantic validation. See `FORMAT.md` for the artifact contract.
+Cases are plain JSON objects grouped into Case Suites. Experiments point to one
+suite with `case_suite_id`; the suite owns payload files, while each experiment
+owns run inclusion through `run_defaults.excluded_case_ids`. See `FORMAT.md` for
+the artifact contract.
 
 ## Setup
 
@@ -39,15 +40,16 @@ judge models are selected per experiment in `experiment.json`:
 Model references use the `<server>/<model>` format, where `<server>` must match a
 key in `.servers.jsonc`.
 
-`examples/` contains committed golden templates. On backend startup, if
-`experiments/` does not exist or contains no `*/experiment.json` manifests, Prompt
-Lab copies examples into `experiments/`. Runtime reads, generated artifacts, and
-future GUI edits use `experiments/` only. The `experiments/` directory is ignored
-by git.
+`examples/` contains committed golden templates split into
+`examples/experiments/` and `examples/case_suites/`. On backend startup, Prompt
+Lab independently seeds missing runtime `experiments/` and `case_suites/` roots
+from those example directories. Runtime reads, generated artifacts, and future
+GUI edits use `experiments/` and `case_suites/` only. Both runtime roots are
+ignored by git.
 
 Existing runtime experiments are not migrated when committed examples change.
-Delete or move `experiments/` only when you intentionally want to reseed from
-the current examples.
+Delete or move `experiments/` and/or `case_suites/` only when you intentionally
+want to reseed from the current examples.
 
 Carmilla can export a complete Prompt Lab experiment directly from saved workflow
 eval fixtures. From the Carmilla repository root, run:
@@ -56,13 +58,15 @@ eval fixtures. From the Carmilla repository root, run:
 python -m python.workflow_runtime.eval_runner \
   --workflow story_parser \
   --test split-scenes \
-  --export-prompt-lab /Users/karol/Projects/sinafai/prompt-lab/examples/split-scenes
+  --export-prompt-lab /Users/karol/Projects/sinafai/prompt-lab/examples/experiments/split-scenes
 ```
 
-The export command writes the experiment manifest, validator definitions, shared
-`cases/`, and initial version files. It prints created, existing, and skipped
-file events to stderr so callers can see what changed without parsing the
-generated files.
+The export command writes the experiment manifest, validator definitions, and
+initial version files for the experiment. Case payloads should live in a Case
+Suite under `examples/case_suites/` and experiments should reference that suite
+by `case_suite_id`. The exporter prints created, existing, and skipped file
+events to stderr so callers can see what changed without parsing generated
+files.
 
 Each experiment version keeps one active workflow chain:
 

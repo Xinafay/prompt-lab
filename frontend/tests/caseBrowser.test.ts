@@ -218,6 +218,6 @@ test("case browser stacks before the full mobile app breakpoint", () => {
 
   assert.match(
     css,
-    /@media \(max-width: 980px\)[\s\S]*?\.case-browser\s*\{[\s\S]*?grid-template-columns:\s*1fr;/
+    /@media \(max-width: 980px\)[\s\S]*?\.case-browser,\s*[\s\S]*?\.case-suite-manager\s*\{[\s\S]*?grid-template-columns:\s*1fr;/
   );
 });
