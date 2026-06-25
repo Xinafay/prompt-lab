@@ -18,8 +18,11 @@ feature is closer to a reusable evaluation/test suite than a bundle of files.
 - Editing a case in a suite affects every experiment assigned to that suite.
 - Per-experiment case inclusion stays on the experiment through
   `run_defaults.excluded_case_ids`.
+- Experiment views may preview suite cases and toggle whether each case is run
+  for that experiment, but they do not add, delete, or edit suite case payloads.
 - Cloning an experiment preserves the same `case_suite_id`; it does not copy
   case payloads.
+- Case Suite and suite-case management lives in a separate UI area.
 - New experiments may have no Case Suite assigned. They are valid drafts, but
   cannot be run or previewed until a suite is assigned.
 - There is no legacy fallback to `experiments/<id>/cases/`. Runtime experiments
@@ -164,11 +167,12 @@ version after a suite payload save succeeds.
 
 Changing `excluded_case_ids` is still an experiment-local setting. It should be
 validated against the assigned suite's current case ids, and run/preview should
-use only enabled cases.
+use only enabled cases. If the inclusion set changes, generated workflow
+artifacts for that experiment are invalidated because previous runs may have
+used a different case set.
 
-Deleting an experiment never deletes a Case Suite. Deleting Case Suites is out
-of scope for the first implementation because it needs dependency checks across
-experiments.
+Deleting an experiment never deletes a Case Suite. Deleting a Case Suite is
+allowed only when no experiment references it.
 
 ## Backend Storage
 
@@ -183,6 +187,7 @@ def load_cases_for_experiment(self, experiment_id: str) -> list[CaseArtifact]: .
 def replace_suite_cases(self, suite_id: str, cases: list[CaseArtifact]) -> list[CaseArtifact]: ...
 def experiments_using_case_suite(self, suite_id: str) -> list[ExperimentArtifact]: ...
 def invalidate_case_suite_consumers(self, suite_id: str) -> list[str]: ...
+def invalidate_experiment_case_selection(self, experiment_id: str) -> None: ...
 ```
 
 `load_cases_for_experiment()` should:
@@ -201,41 +206,49 @@ Add Case Suite endpoints:
 
 ```http
 GET /api/case-suites
+POST /api/case-suites
 GET /api/case-suites/{suite_id}
+PATCH /api/case-suites/{suite_id}
+DELETE /api/case-suites/{suite_id}
 GET /api/case-suites/{suite_id}/cases
+POST /api/case-suites/{suite_id}/cases
 PUT /api/case-suites/{suite_id}/cases
+PUT /api/case-suites/{suite_id}/cases/{case_id}
+DELETE /api/case-suites/{suite_id}/cases/{case_id}
 ```
 
-Keep existing experiment-facing case endpoints for the active workbench:
+Keep experiment-facing case endpoints focused on preview and run inclusion:
 
 ```http
 GET /api/experiments/{experiment_id}/versions/{version}
-PUT /api/experiments/{experiment_id}/cases
 PATCH /api/experiments/{experiment_id}/cases/{case_id}/run-inclusion
+PUT /api/experiments/{experiment_id}/case-inclusion
 ```
 
 Those endpoints should now operate through the assigned Case Suite:
 
 - version overview returns cases from the assigned suite;
-- saving case payloads updates the suite;
-- saving changed payloads invalidates generated artifacts for every experiment
-  assigned to the suite and returns the affected experiment ids;
-- saving inclusion updates only the experiment manifest;
-- missing `case_suite_id` returns a clear error for case save, run, validation,
-  and prompt preview workflows.
+- experiment case views expose case payloads as read-only preview data;
+- saving suite payload changes happens only through Case Suite endpoints;
+- saving changed suite payloads invalidates generated artifacts for every
+  experiment assigned to the suite and returns the affected experiment ids;
+- saving inclusion updates only the experiment manifest and invalidates
+  generated artifacts for that experiment;
+- missing `case_suite_id` returns a clear error for experiment case inclusion,
+  run, validation, and prompt preview workflows.
 
 Add experiment settings support for assigning an existing `case_suite_id`.
 
 ## Frontend UX
 
-The existing Cases tab remains the main place to inspect and edit the active
-experiment's cases.
+The existing experiment Cases tab remains the place to inspect the active
+experiment's assigned suite cases and decide which cases should run for that
+experiment.
 
 When an experiment has a Case Suite assigned, the Cases tab shows the suite title
-and makes the shared nature explicit: payload edits apply to every experiment
-using that suite. Per-case run inclusion remains local to the active experiment.
-After a shared payload save, the UI reports which experiments had generated
-workflow artifacts invalidated.
+and shows read-only payload previews. Per-case run inclusion remains editable
+and local to the active experiment. Saving changed inclusion reports that the
+experiment's generated workflow artifacts were invalidated.
 
 When no Case Suite is assigned:
 
@@ -245,18 +258,34 @@ When no Case Suite is assigned:
   Suite must be assigned first.
 
 Experiment creation does not create a Case Suite. Clone experiment keeps the
-source `case_suite_id`. Full Case Suite creation, cloning, and deletion UI is
-out of scope for the first implementation.
+source `case_suite_id`.
+
+Case Suite management lives in a separate UI area, not inside the experiment
+Cases tab. It includes:
+
+- listing suites with title, id, case count, and referencing experiments;
+- creating a suite with title, generated id, and optional description;
+- editing suite title and description;
+- deleting a suite only when no experiment references it;
+- adding a case to a suite;
+- editing an existing case payload;
+- deleting a case from a suite.
+
+Suite case edits should use the shared `CodeViewer`/editor patterns already used
+for JSON-like artifact displays. After suite case additions, deletions, or
+payload saves, the UI reports which referencing experiments had generated
+workflow artifacts invalidated.
 
 ## Validation Rules
 
 - `case_suite_id` uses the same safe storage segment rules as experiment ids and
   case ids.
 - If an experiment has `case_suite_id`, the suite must exist for run, preview,
-  validation, and case editing workflows.
+  validation, and experiment case inclusion workflows.
 - `excluded_case_ids` may contain only ids that exist in the assigned suite when
   case settings are saved.
 - A suite cannot contain duplicate case ids.
+- A suite cannot be deleted while any experiment references it.
 - A case id still comes from the filename stem under `cases/`.
 - Case files remain plain JSON objects and are passed directly to prompt
   rendering and validation.
@@ -287,8 +316,11 @@ Backend tests should cover:
 - missing suite assignment blocks run and prompt preview;
 - missing referenced suite returns a clear error;
 - `excluded_case_ids` validation against suite case ids;
+- changing experiment case inclusion invalidates generated artifacts for that
+  experiment;
 - cloning an experiment preserves `case_suite_id` and does not copy cases;
 - deleting an experiment leaves the suite untouched;
+- deleting a referenced Case Suite is rejected;
 - saving suite case payloads invalidates generated artifacts for experiments
   assigned to that suite;
 - storage rejects path escapes for suite ids and case ids.
@@ -297,7 +329,11 @@ Frontend tests should cover:
 
 - `demo-string` and `demo-json` still load stable cases through suites;
 - Cases tab shows assigned suite context;
+- experiment Cases tab previews payloads without add/delete/payload-edit
+  controls;
 - no-suite experiments show the empty assigned-suite state;
 - Settings can assign a Case Suite;
+- separate Case Suite UI can create, edit, and delete unreferenced suites;
+- separate Case Suite UI can add, edit, and delete suite cases;
 - clone experiment preserves Case Suite assignment;
 - run controls surface the no-suite error clearly.
