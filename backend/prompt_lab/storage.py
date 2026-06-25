@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import re
+import shutil
 from pathlib import Path, PureWindowsPath
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import TypeAdapter
 
 from prompt_lab.errors import NotFoundError
+from prompt_lab.settings import PromptLabSettings
 from prompt_lab.models.artifacts import CaseArtifact, ExperimentArtifact
 from prompt_lab.models.validators import (
     ValidationBatchArtifact,
@@ -49,6 +52,11 @@ def _validate_storage_id(value: str, label: str) -> None:
         raise NotFoundError(f"{label} not found")
 
 
+def _slugify_title(title: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+    return slug or "experiment"
+
+
 class PromptLabStore:
     """Filesystem-backed Prompt Lab artifact store."""
 
@@ -82,6 +90,78 @@ class PromptLabStore:
     def load_experiment(self, experiment_id: str) -> ExperimentArtifact:
         path = self.experiment_dir(experiment_id) / "experiment.json"
         return ExperimentArtifact.model_validate(_read_json(path))
+
+    def _available_experiment_id(self, title: str) -> str:
+        base = _slugify_title(title)
+        resolved_root = self.experiments_root.resolve()
+        self.experiments_root.mkdir(parents=True, exist_ok=True)
+        candidate = base
+        suffix = 2
+        while True:
+            _validate_storage_id(candidate, "Experiment")
+            candidate_dir = (resolved_root / candidate).resolve()
+            if candidate_dir != resolved_root and not candidate_dir.is_relative_to(
+                resolved_root
+            ):
+                raise NotFoundError("Experiment not found")
+            if not candidate_dir.exists():
+                return candidate
+            candidate = f"{base}-{suffix}"
+            suffix += 1
+
+    def create_experiment(
+        self,
+        *,
+        title: str,
+        output_type: Literal["text", "pydantic"],
+        model_entrypoint: str | None,
+        settings: PromptLabSettings,
+    ) -> ExperimentArtifact:
+        experiment_id = self._available_experiment_id(title)
+        experiment_dir = self.experiments_root.resolve() / experiment_id
+        version_dir = experiment_dir / "versions" / "v001"
+        output: dict[str, Any]
+        if output_type == "pydantic":
+            if model_entrypoint is None or model_entrypoint.strip() == "":
+                raise ValueError("pydantic output requires model_entrypoint")
+            output = {
+                "type": "pydantic",
+                "model_file": "model.py",
+                "model_entrypoint": model_entrypoint.strip(),
+            }
+        else:
+            output = {"type": "text"}
+        artifact = ExperimentArtifact.model_validate(
+            {
+                "schema_version": "prompt_lab.experiment/v1",
+                "id": experiment_id,
+                "title": title,
+                "description": "",
+                "active_version": "v001",
+                "output": output,
+                "template": {"engine": "jinjax", "path": "prompt.md"},
+                "models": {
+                    "generator_model": settings.default_generator_model,
+                    "validator_model": settings.default_validator_model,
+                    "judge_model": settings.default_judge_model,
+                },
+                "run_defaults": {
+                    "repeat_count": settings.default_repeat_count,
+                    "llm_cache": "disabled",
+                    "case_order": "case-major",
+                    "excluded_case_ids": [],
+                },
+            }
+        )
+        try:
+            version_dir.mkdir(parents=True, exist_ok=False)
+        except FileExistsError:
+            raise FileExistsError("Experiment already exists")
+        _write_json(experiment_dir / "experiment.json", artifact.model_dump(mode="json"))
+        (version_dir / "prompt.md").write_text("", encoding="utf-8")
+        if output_type == "pydantic":
+            (version_dir / "model.py").write_text("", encoding="utf-8")
+        return artifact
 
     def list_versions(self, experiment_id: str) -> list[str]:
         versions_root = self.experiment_dir(experiment_id) / "versions"

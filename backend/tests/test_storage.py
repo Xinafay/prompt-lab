@@ -5,6 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from prompt_lab.errors import NotFoundError
+from prompt_lab.settings import PromptLabSettings
 from prompt_lab.models.artifacts import ExperimentArtifact
 from prompt_lab.models.validators import (
     AutomaticValidatorDefinition,
@@ -547,6 +548,107 @@ def test_store_rejects_save_missing_active_version() -> None:
             raise AssertionError("Expected missing active version to be rejected")
 
 
+def test_store_creates_text_experiment_with_unique_slug() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        existing = root / "experiments" / "demo-title"
+        (existing / "versions" / "v001").mkdir(parents=True)
+        write_experiment_manifest(
+            existing / "experiment.json",
+            experiment_id="demo-title",
+        )
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+        settings = PromptLabSettings(
+            schema_version="prompt_lab.settings/v1",
+            default_generator_model="openai/generator",
+            default_validator_model="openai/validator",
+            default_judge_model="openai/judge",
+            default_repeat_count=4,
+        )
+
+        created = store.create_experiment(
+            title="Demo Title",
+            output_type="text",
+            model_entrypoint=None,
+            settings=settings,
+        )
+
+        created_dir = root / "experiments" / "demo-title-2"
+        assert created.id == "demo-title-2"
+        assert created.title == "Demo Title"
+        assert created.active_version == "v001"
+        assert created.output.type == "text"
+        assert created.models.generator_model == "openai/generator"
+        assert created.models.validator_model == "openai/validator"
+        assert created.models.judge_model == "openai/judge"
+        assert created.run_defaults.repeat_count == 4
+        assert (created_dir / "experiment.json").is_file()
+        assert (created_dir / "versions" / "v001" / "prompt.md").read_text(
+            encoding="utf-8"
+        ) == ""
+        assert not (created_dir / "versions" / "v001" / "model.py").exists()
+
+
+def test_store_creates_pydantic_experiment_with_empty_model_file() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+        settings = PromptLabSettings(
+            schema_version="prompt_lab.settings/v1",
+            default_generator_model="local/generator",
+            default_validator_model="local/validator",
+            default_judge_model="local/judge",
+            default_repeat_count=1,
+        )
+
+        created = store.create_experiment(
+            title="Structured Output",
+            output_type="pydantic",
+            model_entrypoint="model.Output",
+            settings=settings,
+        )
+
+        version_dir = root / "experiments" / "structured-output" / "versions" / "v001"
+        assert created.id == "structured-output"
+        assert created.output.type == "pydantic"
+        assert created.output.model_file == "model.py"
+        assert created.output.model_entrypoint == "model.Output"
+        assert (version_dir / "prompt.md").read_text(encoding="utf-8") == ""
+        assert (version_dir / "model.py").read_text(encoding="utf-8") == ""
+
+
+def test_store_create_experiment_slug_falls_back_for_symbol_title() -> None:
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        store = PromptLabStore(
+            experiments_root=root / "experiments",
+            examples_root=root / "examples",
+        )
+        settings = PromptLabSettings(
+            schema_version="prompt_lab.settings/v1",
+            default_generator_model="local/generator",
+            default_validator_model="local/validator",
+            default_judge_model="local/judge",
+            default_repeat_count=1,
+        )
+
+        created = store.create_experiment(
+            title="!!!",
+            output_type="text",
+            model_entrypoint=None,
+            settings=settings,
+        )
+
+        assert created.id == "experiment"
+        assert (root / "experiments" / "experiment" / "experiment.json").is_file()
+
+
 def main() -> int:
     tests = [
         test_store_does_not_list_examples_directly,
@@ -567,6 +669,9 @@ def main() -> int:
         test_store_saves_experiment_manifest_under_experiments_root,
         test_store_rejects_save_experiment_id_mismatch,
         test_store_rejects_save_missing_active_version,
+        test_store_creates_text_experiment_with_unique_slug,
+        test_store_creates_pydantic_experiment_with_empty_model_file,
+        test_store_create_experiment_slug_falls_back_for_symbol_title,
     ]
     for test in tests:
         test()
