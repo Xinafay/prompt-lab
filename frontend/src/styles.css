@@ -289,11 +289,36 @@ select {
 }
 
 .workflow-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  background: #f8fafc;
   overflow-wrap: anywhere;
   color: #475467;
   font-size: 12px;
-  font-weight: 650;
-  line-height: 1.35;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.workflow-status-success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.workflow-status-warning {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.workflow-status-error {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
 }
 
 .workflow-mode-badge {

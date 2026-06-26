@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import type { Experiment, JobStatus, WorkflowMode } from "../types";
 import "./WorkflowToolbar.css";
 
+type WorkflowStatusTone = "info" | "success" | "warning" | "error";
+
 interface WorkflowToolbarProps {
   experiment?: Experiment;
   contextTitle?: string;
@@ -23,6 +25,34 @@ interface WorkflowToolbarProps {
   tabNotice?: ReactNode;
   tabs: ReactNode;
   showDryRunControls: boolean;
+}
+
+export function classifyWorkflowStatusTone(
+  message: string | null
+): WorkflowStatusTone {
+  if (message === null) return "info";
+  const normalized = message.toLowerCase();
+  if (
+    /\b(error|failed|unknown|invalid|cannot|could not)\b/.test(normalized) ||
+    normalized.includes("no longer listed")
+  ) {
+    return "error";
+  }
+  if (
+    /\b(wait|save .* before|create .* before|validate .* before|cancelled|reset)\b/.test(
+      normalized
+    )
+  ) {
+    return "warning";
+  }
+  if (
+    /\b(saved|created|deleted|cloned|switched|overwrote|completed|loaded|generated)\b/.test(
+      normalized
+    )
+  ) {
+    return "success";
+  }
+  return "info";
 }
 
 export function WorkflowToolbar({
@@ -53,6 +83,16 @@ export function WorkflowToolbar({
     jobStatus === null
       ? workflowMessage
       : `${jobStatus.status}: ${jobStatus.message} (${jobStatus.completed_units}/${jobStatus.total_units})`;
+  const statusTone =
+    jobStatus === null
+      ? classifyWorkflowStatusTone(statusMessage)
+      : jobStatus.status === "completed"
+        ? "success"
+        : jobStatus.status === "failed"
+          ? "error"
+          : jobStatus.status === "cancelled"
+            ? "warning"
+            : "info";
   const showCancelAction =
     jobStatus?.status === "running" && onCancelJob !== undefined;
   const showActions =
@@ -100,7 +140,9 @@ export function WorkflowToolbar({
             <div className="workflow-tab-meta">
               {tabNotice}
               {statusMessage !== null ? (
-                <span className="workflow-status">{statusMessage}</span>
+                <span className={`workflow-status workflow-status-${statusTone}`}>
+                  {statusMessage}
+                </span>
               ) : null}
             </div>
           ) : null}

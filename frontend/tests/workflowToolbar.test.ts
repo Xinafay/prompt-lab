@@ -4,7 +4,10 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { WorkflowToolbar } from "../src/components/WorkflowToolbar.tsx";
+import {
+  classifyWorkflowStatusTone,
+  WorkflowToolbar
+} from "../src/components/WorkflowToolbar.tsx";
 import type { Experiment } from "../src/types.ts";
 
 const experiment: Experiment = {
@@ -111,6 +114,51 @@ test("workflow toolbar can place tab controls beside the active tab title", () =
   assert.match(html, /Diff/);
 });
 
+test("workflow toolbar marks saved workflow messages as success", () => {
+  assert.equal(classifyWorkflowStatusTone("Case inclusion saved."), "success");
+  assert.equal(
+    classifyWorkflowStatusTone("Validation inclusion saved."),
+    "success"
+  );
+  assert.equal(classifyWorkflowStatusTone("Review changes saved."), "success");
+  assert.equal(
+    classifyWorkflowStatusTone("Created v003 and switched to it."),
+    "success"
+  );
+  assert.equal(classifyWorkflowStatusTone("Preparing prompt preview..."), "info");
+  assert.equal(classifyWorkflowStatusTone("Unknown error"), "error");
+});
+
+test("workflow toolbar renders success workflow status with green class", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(WorkflowToolbar, {
+      activeTabLabel: "Cases",
+      activeVersion: "v001",
+      availableVersions: ["v001"],
+      experiment,
+      isVersionSwitching: false,
+      jobStatus: null,
+      onActiveVersionChange: () => undefined,
+      onWorkflowModeChange: () => undefined,
+      primaryAction: null,
+      secondaryAction: null,
+      showDryRunControls: false,
+      tabs: React.createElement(
+        "div",
+        { className: "workbench-tabs", role: "tablist" },
+        "Tabs"
+      ),
+      workflowMessage: "Case inclusion saved.",
+      workflowMode: "live"
+    })
+  );
+
+  assert.match(
+    html,
+    /<span class="workflow-status workflow-status-success">Case inclusion saved\.<\/span>/
+  );
+});
+
 test("workflow toolbar styles keep the whole header sticky", () => {
   const styles = readFileSync(
     new URL("../src/styles.css", import.meta.url),
@@ -123,4 +171,5 @@ test("workflow toolbar styles keep the whole header sticky", () => {
   );
   assert.match(styles, /\.workflow-tabs-row/);
   assert.match(styles, /\.workflow-tab-actions-row/);
+  assert.match(styles, /\.workflow-status-success/);
 });
