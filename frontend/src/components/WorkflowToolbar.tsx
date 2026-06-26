@@ -19,6 +19,7 @@ interface WorkflowToolbarProps {
   onCancelJob?: () => void;
   primaryAction: ReactNode;
   secondaryAction?: ReactNode;
+  tabControl?: ReactNode;
   tabNotice?: ReactNode;
   tabs: ReactNode;
   showDryRunControls: boolean;
@@ -40,6 +41,7 @@ export function WorkflowToolbar({
   onWorkflowModeChange,
   primaryAction,
   secondaryAction = null,
+  tabControl = null,
   tabNotice = null,
   tabs,
   showDryRunControls
@@ -93,6 +95,7 @@ export function WorkflowToolbar({
       <div className="workflow-tab-actions-row">
         <div className="workflow-tab-heading">
           <h2>{activeTabLabel}</h2>
+          {tabControl}
           {showTabMeta ? (
             <div className="workflow-tab-meta">
               {tabNotice}

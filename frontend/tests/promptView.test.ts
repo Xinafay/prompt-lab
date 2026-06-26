@@ -174,6 +174,30 @@ test("editable prompt view exposes a cancel editing action", () => {
   assert.match(html, /Cancel editing/);
 });
 
+test("editable prompt view can defer source mode tabs to the workbench toolbar", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(PromptView, {
+      overview: buildOverview("text"),
+      isRunning: false,
+      isSourceEditing: true,
+      onRunVersion: () => undefined,
+      onSourceDraftChange: () => undefined,
+      showSourceActions: false,
+      showSourceModeTabs: false,
+      sourceDraft: {
+        prompt: "Write a clearer response for {{ topic }}.",
+        model_py: ""
+      },
+      sourceViewMode: "edit"
+    })
+  );
+
+  assert.doesNotMatch(html, /source-editor-toolbar/);
+  assert.doesNotMatch(html, /Source editor view/);
+  assert.match(html, /Prompt source/);
+  assert.match(html, /prompt\.md/);
+});
+
 test("editable prompt view renders source editing actions and diff mode", () => {
   const html = renderToStaticMarkup(
     React.createElement(PromptView, {

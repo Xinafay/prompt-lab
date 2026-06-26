@@ -73,6 +73,44 @@ test("workflow toolbar renders three persistent workbench header rows", () => {
   assert.match(html, /Save/);
 });
 
+test("workflow toolbar can place tab controls beside the active tab title", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(WorkflowToolbar, {
+      activeTabLabel: "Prompt",
+      activeVersion: "v001",
+      availableVersions: ["v001"],
+      experiment,
+      isVersionSwitching: false,
+      jobStatus: null,
+      onActiveVersionChange: () => undefined,
+      onWorkflowModeChange: () => undefined,
+      primaryAction: null,
+      secondaryAction: null,
+      showDryRunControls: false,
+      tabControl: React.createElement(
+        "div",
+        { "aria-label": "Source editor view", role: "tablist" },
+        React.createElement("button", { type: "button" }, "Edit"),
+        React.createElement("button", { type: "button" }, "Diff")
+      ),
+      tabs: React.createElement(
+        "div",
+        { className: "workbench-tabs", role: "tablist" },
+        "Tabs"
+      ),
+      workflowMessage: null,
+      workflowMode: "live"
+    })
+  );
+
+  assert.match(
+    html,
+    /<div class="workflow-tab-heading"><h2>Prompt<\/h2><div aria-label="Source editor view" role="tablist">/
+  );
+  assert.match(html, /Edit/);
+  assert.match(html, /Diff/);
+});
+
 test("workflow toolbar styles keep the whole header sticky", () => {
   const styles = readFileSync(
     new URL("../src/styles.css", import.meta.url),

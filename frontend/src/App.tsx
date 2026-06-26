@@ -3130,6 +3130,29 @@ function App() {
         Unsaved validator changes.
       </span>
     ) : null;
+  const sourceModeControl =
+    activeTab === "prompt" && sourceEditing ? (
+      <div
+        className="proposal-tabs"
+        role="tablist"
+        aria-label="Source editor view"
+      >
+        {(["edit", "diff"] as const).map((mode) => (
+          <button
+            aria-selected={sourceViewMode === mode}
+            className={
+              sourceViewMode === mode ? "proposal-tab is-active" : "proposal-tab"
+            }
+            key={mode}
+            onClick={() => setSourceViewMode(mode)}
+            role="tab"
+            type="button"
+          >
+            {mode === "edit" ? "Edit" : "Diff"}
+          </button>
+        ))}
+      </div>
+    ) : null;
   const workflowDirtySaveAction =
     activeTab === "validation" && validationDirty ? (
       <TooltipButton
@@ -3336,6 +3359,7 @@ function App() {
                     onCancelJob={handleCancelWorkflowJob}
                     onWorkflowModeChange={setWorkflowMode}
                     showDryRunControls={SHOW_DRY_RUN_CONTROLS}
+                    tabControl={sourceModeControl}
                     tabNotice={workflowTabNotice}
                     tabs={
                       <WorkbenchTabs
@@ -3604,6 +3628,7 @@ function App() {
                         onSourceViewModeChange={setSourceViewMode}
                         showRunAction={false}
                         showSourceActions={false}
+                        showSourceModeTabs={false}
                         sourceBusy={workflowLocked}
                         sourceDirty={sourceDirty}
                         sourceDraft={sourceDraft}

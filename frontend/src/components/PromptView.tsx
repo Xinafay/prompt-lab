@@ -17,6 +17,7 @@ interface PromptViewProps {
   onSourceViewModeChange?: (mode: SourceViewMode) => void;
   showRunAction?: boolean;
   showSourceActions?: boolean;
+  showSourceModeTabs?: boolean;
   sourceBusy?: boolean;
   sourceDirty?: boolean;
   sourceDraft?: VersionSourceDraft | null;
@@ -37,6 +38,7 @@ export function PromptView({
   onSourceViewModeChange = () => undefined,
   showRunAction = true,
   showSourceActions = true,
+  showSourceModeTabs = true,
   sourceBusy = false,
   sourceDirty = false,
   sourceDraft = null,
@@ -91,30 +93,32 @@ export function PromptView({
         </div>
       ) : null}
 
-      {isSourceEditing ? (
+      {isSourceEditing && (showSourceModeTabs || showSourceActions) ? (
         <div className="source-editor-toolbar">
-          <div
-            className="proposal-tabs"
-            role="tablist"
-            aria-label="Source editor view"
-          >
-            {(["edit", "diff"] as const).map((mode) => (
-              <button
-                aria-selected={sourceViewMode === mode}
-                className={
-                  sourceViewMode === mode
-                    ? "proposal-tab is-active"
-                    : "proposal-tab"
-                }
-                key={mode}
-                onClick={() => onSourceViewModeChange(mode)}
-                role="tab"
-                type="button"
-              >
-                {mode === "edit" ? "Edit" : "Diff"}
-              </button>
-            ))}
-          </div>
+          {showSourceModeTabs ? (
+            <div
+              className="proposal-tabs"
+              role="tablist"
+              aria-label="Source editor view"
+            >
+              {(["edit", "diff"] as const).map((mode) => (
+                <button
+                  aria-selected={sourceViewMode === mode}
+                  className={
+                    sourceViewMode === mode
+                      ? "proposal-tab is-active"
+                      : "proposal-tab"
+                  }
+                  key={mode}
+                  onClick={() => onSourceViewModeChange(mode)}
+                  role="tab"
+                  type="button"
+                >
+                  {mode === "edit" ? "Edit" : "Diff"}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {showSourceActions ? (
             <div className="source-editor-actions">
               <button
