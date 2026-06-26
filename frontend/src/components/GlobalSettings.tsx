@@ -27,6 +27,13 @@ function prepareForSave(settings: GlobalSettingsModel): GlobalSettingsModel {
   };
 }
 
+export function shouldShowGlobalSettingsMessage(
+  message: string | null,
+  isDirty: boolean
+) {
+  return message !== null && !isDirty;
+}
+
 export function GlobalSettings({
   isBusy,
   message,
@@ -103,7 +110,7 @@ export function GlobalSettings({
           {isDirty ? (
             <span className="settings-unsaved-action">Unsaved settings changes.</span>
           ) : null}
-          {message !== null ? (
+          {shouldShowGlobalSettingsMessage(message, isDirty) ? (
             <span className="settings-message">{message}</span>
           ) : null}
           <TooltipButton

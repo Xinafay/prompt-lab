@@ -22,7 +22,9 @@ registerHooks({
   }
 });
 
-const { GlobalSettings } = await import("../src/components/GlobalSettings.tsx");
+const { GlobalSettings, shouldShowGlobalSettingsMessage } = await import(
+  "../src/components/GlobalSettings.tsx"
+);
 
 const settings: GlobalSettingsModel = {
   schema_version: "prompt_lab.settings/v1",
@@ -50,6 +52,18 @@ test("global settings clears saved message after new dirty edits", () => {
     /function handleGlobalSettingsDirtyChange\(isDirty: boolean\)[\s\S]*setGlobalSettingsDirty\(isDirty\);[\s\S]*if \(isDirty\) \{[\s\S]*setGlobalSettingsMessage\(null\);/
   );
   assert.match(source, /onDirtyChange=\{handleGlobalSettingsDirtyChange\}/);
+});
+
+test("global settings saved message is hidden while settings are dirty", () => {
+  assert.equal(
+    shouldShowGlobalSettingsMessage("Global settings saved.", false),
+    true
+  );
+  assert.equal(
+    shouldShowGlobalSettingsMessage("Global settings saved.", true),
+    false
+  );
+  assert.equal(shouldShowGlobalSettingsMessage(null, false), false);
 });
 
 test("global settings shows saved message beside form actions", () => {
