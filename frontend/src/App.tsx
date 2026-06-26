@@ -3096,13 +3096,26 @@ function App() {
   const settingsResetDisabledReason = settingsBusy
     ? "Wait for the settings save to finish."
     : "Change settings before resetting.";
+  const sourceActionDisabled = workflowLocked;
+  const sourceSaveDisabled = workflowLocked || !sourceDirty;
+  const sourceEditDisabledReason = workflowLocked
+    ? "Wait for the current workflow action to finish."
+    : null;
+  const sourceResetDisabledReason = workflowLocked
+    ? "Wait for the current workflow action to finish."
+    : "Change source before resetting.";
+  const sourceSaveDisabledReason = workflowLocked
+    ? "Wait for the current workflow action to finish."
+    : "Change source before saving.";
   const pendingNavigationKind = pendingNavigation?.unsavedKind ?? null;
   const pendingNavigationDialog = pendingNavigationCopy(pendingNavigationKind);
   const pendingNavigationSaveDisabled =
     navigationSaving || !canSavePendingNavigation(pendingNavigationKind);
   const hasUnsavedReviewChanges = decisionsDirty || humanNotesDirty;
   const workflowTabNotice =
-    activeTab === "validation" && validationDirty ? (
+    activeTab === "prompt" && sourceDirty ? (
+      <span className="workflow-unsaved-notice">Unsaved source changes.</span>
+    ) : activeTab === "validation" && validationDirty ? (
       <span className="workflow-unsaved-notice">Unsaved inclusion changes.</span>
     ) : activeTab === "review" && hasUnsavedReviewChanges ? (
       <span className="workflow-unsaved-notice">Unsaved review changes.</span>
@@ -3333,7 +3346,49 @@ function App() {
                     workflowMessage={workflowMessage}
                     workflowMode={workflowMode}
                     secondaryAction={
-                      activeTab === "settings" ? (
+                      activeTab === "prompt" ? (
+                        sourceEditing ? (
+                          <>
+                            <TooltipButton
+                              className="secondary-action"
+                              disabled={sourceActionDisabled}
+                              disabledReason={sourceEditDisabledReason}
+                              onClick={() => clearSourceEditor()}
+                              type="button"
+                            >
+                              Cancel editing
+                            </TooltipButton>
+                            <TooltipButton
+                              className="secondary-action"
+                              disabled={sourceSaveDisabled}
+                              disabledReason={sourceResetDisabledReason}
+                              onClick={handleSourceReset}
+                              type="button"
+                            >
+                              Reset
+                            </TooltipButton>
+                            <TooltipButton
+                              className="secondary-action danger-action"
+                              disabled={sourceSaveDisabled}
+                              disabledReason={sourceSaveDisabledReason}
+                              onClick={() => requestSourceOverwrite()}
+                              type="button"
+                            >
+                              Overwrite current version
+                            </TooltipButton>
+                          </>
+                        ) : (
+                          <TooltipButton
+                            className="secondary-action"
+                            disabled={sourceActionDisabled}
+                            disabledReason={sourceEditDisabledReason}
+                            onClick={handleSourceEdit}
+                            type="button"
+                          >
+                            Edit source
+                          </TooltipButton>
+                        )
+                      ) : activeTab === "settings" ? (
                         <TooltipButton
                           className="secondary-action"
                           disabled={settingsResetDisabled}
@@ -3426,7 +3481,19 @@ function App() {
                       ) : null
                     }
                     primaryAction={
-                      activeTab === "settings" ? (
+                      activeTab === "prompt" && sourceEditing ? (
+                        <TooltipButton
+                          className="primary-action"
+                          disabled={sourceSaveDisabled}
+                          disabledReason={sourceSaveDisabledReason}
+                          onClick={() =>
+                            void handleSaveVersionSource("create_next")
+                          }
+                          type="button"
+                        >
+                          {workflowLocked ? "Saving..." : "Save as next version"}
+                        </TooltipButton>
+                      ) : activeTab === "settings" ? (
                         <TooltipButton
                           className="primary-action"
                           disabled={settingsSaveDisabled}
@@ -3526,6 +3593,7 @@ function App() {
                         isRunning={workflowLocked}
                         isSourceEditing={sourceEditing}
                         onRunVersion={handleRunVersion}
+                        onSourceCancel={() => clearSourceEditor()}
                         onSourceDraftChange={handleSourceDraftChange}
                         onSourceEdit={handleSourceEdit}
                         onSourceOverwriteCurrent={() => requestSourceOverwrite()}
@@ -3535,6 +3603,7 @@ function App() {
                         }
                         onSourceViewModeChange={setSourceViewMode}
                         showRunAction={false}
+                        showSourceActions={false}
                         sourceBusy={workflowLocked}
                         sourceDirty={sourceDirty}
                         sourceDraft={sourceDraft}

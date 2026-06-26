@@ -8,6 +8,7 @@ interface PromptViewProps {
   isRunning: boolean;
   isSourceEditing?: boolean;
   onRunVersion: () => void;
+  onSourceCancel?: () => void;
   onSourceDraftChange?: (draft: VersionSourceDraft) => void;
   onSourceEdit?: () => void;
   onSourceOverwriteCurrent?: () => void;
@@ -15,6 +16,7 @@ interface PromptViewProps {
   onSourceSaveAsNext?: () => void;
   onSourceViewModeChange?: (mode: SourceViewMode) => void;
   showRunAction?: boolean;
+  showSourceActions?: boolean;
   sourceBusy?: boolean;
   sourceDirty?: boolean;
   sourceDraft?: VersionSourceDraft | null;
@@ -26,6 +28,7 @@ export function PromptView({
   isRunning,
   isSourceEditing = false,
   onRunVersion,
+  onSourceCancel = () => undefined,
   onSourceDraftChange = () => undefined,
   onSourceEdit = () => undefined,
   onSourceOverwriteCurrent = () => undefined,
@@ -33,6 +36,7 @@ export function PromptView({
   onSourceSaveAsNext = () => undefined,
   onSourceViewModeChange = () => undefined,
   showRunAction = true,
+  showSourceActions = true,
   sourceBusy = false,
   sourceDirty = false,
   sourceDraft = null,
@@ -59,22 +63,16 @@ export function PromptView({
 
   return (
     <section className="overview-grid" aria-label="Prompt source">
-      <div className="overview-header">
-        <div>
-          <h2>{overview.experiment.title}</h2>
-          <p>{overview.experiment.description || "No description provided."}</p>
-        </div>
+      {showSourceActions && !isSourceEditing ? (
         <div className="overview-header-actions">
-          {!isSourceEditing ? (
-            <button
-              className="secondary-action"
-              disabled={actionDisabled}
-              onClick={onSourceEdit}
-              type="button"
-            >
-              Edit source
-            </button>
-          ) : null}
+          <button
+            className="secondary-action"
+            disabled={actionDisabled}
+            onClick={onSourceEdit}
+            type="button"
+          >
+            Edit source
+          </button>
           {showRunAction ? (
             <button
               className="primary-action"
@@ -86,7 +84,7 @@ export function PromptView({
             </button>
           ) : null}
         </div>
-      </div>
+      ) : null}
 
       {isSourceEditing ? (
         <div className="source-editor-toolbar">
@@ -112,32 +110,42 @@ export function PromptView({
               </button>
             ))}
           </div>
-          <div className="source-editor-actions">
-            <button
-              className="secondary-action"
-              disabled={saveDisabled}
-              onClick={onSourceReset}
-              type="button"
-            >
-              Reset
-            </button>
-            <button
-              className="secondary-action danger-action"
-              disabled={saveDisabled}
-              onClick={onSourceOverwriteCurrent}
-              type="button"
-            >
-              Overwrite current version
-            </button>
-            <button
-              className="primary-action"
-              disabled={saveDisabled}
-              onClick={onSourceSaveAsNext}
-              type="button"
-            >
-              {sourceBusy ? "Saving..." : "Save as next version"}
-            </button>
-          </div>
+          {showSourceActions ? (
+            <div className="source-editor-actions">
+              <button
+                className="secondary-action"
+                disabled={actionDisabled}
+                onClick={onSourceCancel}
+                type="button"
+              >
+                Cancel editing
+              </button>
+              <button
+                className="secondary-action"
+                disabled={saveDisabled}
+                onClick={onSourceReset}
+                type="button"
+              >
+                Reset
+              </button>
+              <button
+                className="secondary-action danger-action"
+                disabled={saveDisabled}
+                onClick={onSourceOverwriteCurrent}
+                type="button"
+              >
+                Overwrite current version
+              </button>
+              <button
+                className="primary-action"
+                disabled={saveDisabled}
+                onClick={onSourceSaveAsNext}
+                type="button"
+              >
+                {sourceBusy ? "Saving..." : "Save as next version"}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -148,8 +156,7 @@ export function PromptView({
       >
         <div className="overview-section">
           <div className="section-heading">
-            <h3>Prompt</h3>
-            <span>{overview.version}</span>
+            <h3>Prompt source</h3>
           </div>
           <div className="overview-code-viewer">
             {isSourceEditing && sourceViewMode === "edit" ? (
@@ -180,8 +187,7 @@ export function PromptView({
         {isPydanticOutput ? (
           <div className="overview-section">
             <div className="section-heading">
-              <h3>Model</h3>
-              <span>{modelFile}</span>
+              <h3>Model source</h3>
             </div>
             {overview.model_py ? (
               <div className="overview-code-viewer">

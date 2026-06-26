@@ -104,6 +104,25 @@ test("pydantic output prompt view renders prompt and model source", () => {
   assert.match(html, /class Answer\(BaseModel\)/);
 });
 
+test("prompt view uses stable source panel headings without duplicated labels", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(PromptView, {
+      overview: buildOverview("pydantic", {
+        model_file: "model.py",
+        model_py: "from pydantic import BaseModel\n\nclass Answer(BaseModel):\n    value: str\n"
+      }),
+      isRunning: false,
+      onRunVersion: () => undefined
+    })
+  );
+
+  assert.match(html, /<h3>Prompt source<\/h3>/);
+  assert.match(html, /<h3>Model source<\/h3>/);
+  assert.doesNotMatch(html, /<h3>Prompt<\/h3><span>v1<\/span>/);
+  assert.doesNotMatch(html, /<h3>Model<\/h3><span>model\.py<\/span>/);
+  assert.doesNotMatch(html, /<h2>Demo experiment<\/h2>/);
+});
+
 test("prompt view can hide its local run action for workbench toolbar layouts", () => {
   const html = renderToStaticMarkup(
     React.createElement(PromptView, {
@@ -115,6 +134,27 @@ test("prompt view can hide its local run action for workbench toolbar layouts", 
   );
 
   assert.doesNotMatch(html, /Run version/);
+});
+
+test("editable prompt view exposes a cancel editing action", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(PromptView, {
+      overview: buildOverview("text"),
+      isRunning: false,
+      isSourceEditing: true,
+      onRunVersion: () => undefined,
+      onSourceCancel: () => undefined,
+      onSourceDraftChange: () => undefined,
+      showRunAction: false,
+      sourceDraft: {
+        prompt: "Write a clearer response for {{ topic }}.",
+        model_py: ""
+      },
+      sourceViewMode: "edit"
+    })
+  );
+
+  assert.match(html, /Cancel editing/);
 });
 
 test("editable prompt view renders source editing actions and diff mode", () => {

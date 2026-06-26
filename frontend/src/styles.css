@@ -443,32 +443,6 @@ select {
   gap: 16px;
 }
 
-.overview-header {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #e4e7ec;
-}
-
-.overview-header h2 {
-  margin: 0;
-  color: #111827;
-  font-size: 24px;
-  font-weight: 740;
-  line-height: 1.2;
-}
-
-.overview-header p {
-  max-width: 720px;
-  margin: 8px 0 0;
-  color: #667085;
-  font-size: 14px;
-  line-height: 1.55;
-}
-
 .overview-header-actions,
 .source-editor-actions {
   display: flex;
@@ -3246,10 +3220,6 @@ select {
 
   .workbench-tabs {
     overflow-x: auto;
-  }
-
-  .overview-header {
-    display: grid;
   }
 
   .overview-header-actions,

@@ -148,8 +148,12 @@ test("demo string prompt and validators tabs show source sections", async ({ pag
   await page.goto("/demo-string/prompt");
 
   const prompt = page.getByRole("region", { name: "Prompt source" });
-  await expect(prompt.getByRole("heading", { name: "Demo String" })).toBeVisible();
-  await expect(prompt.getByRole("heading", { name: "Prompt" })).toBeVisible();
+  await expect(
+    prompt.getByRole("heading", { name: "Prompt source" })
+  ).toBeVisible();
+  await expect(
+    prompt.getByRole("heading", { name: "Demo String" })
+  ).not.toBeVisible();
   await expect(prompt.getByText("Reply to the customer ticket")).toBeVisible();
   await expect(prompt.getByText("Reply quality")).not.toBeVisible();
 
@@ -197,13 +201,19 @@ test("demo json prompt shows prompt and model source", async ({ page }) => {
 
   const prompt = page.getByRole("region", { name: "Prompt source" });
   await expect(prompt).toBeVisible();
-  await expect(prompt.getByRole("heading", { name: "Demo JSON" })).toBeVisible();
-  await expect(prompt.getByRole("heading", { name: "Prompt" })).toBeVisible();
+  await expect(
+    prompt.getByRole("heading", { name: "Prompt source" })
+  ).toBeVisible();
+  await expect(
+    prompt.getByRole("heading", { name: "Demo JSON" })
+  ).not.toBeVisible();
   await expect(
     prompt.getByText("Create a concise launch-readiness report")
   ).toBeVisible();
 
-  await expect(prompt.getByRole("heading", { name: "Model" })).toBeVisible();
+  await expect(
+    prompt.getByRole("heading", { name: "Model source" })
+  ).toBeVisible();
   await expect(prompt.getByText("model.py").first()).toBeVisible();
   await expect(prompt.getByText("class DemoReport")).toBeVisible();
 });
@@ -435,7 +445,7 @@ test("experiment management creates clones and deletes experiments", async ({
     new RegExp(`/experiments/managed-json-${unique}/prompt$`)
   );
   await expect(page.getByRole("region", { name: "Prompt source" })).toContainText(
-    "model.py"
+    "Model source unavailable."
   );
 
   await page.goto("/demo-json/settings");
