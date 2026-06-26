@@ -70,7 +70,7 @@ import {
 import { ValidatorsView } from "./components/ValidatorsView";
 import { snapshotReviewState } from "./components/reviewStateSnapshot";
 import { snapshotValidationState } from "./components/validationStateSnapshot";
-import { WorkbenchTabs } from "./components/WorkbenchTabs";
+import { WorkbenchTabs, workbenchTabLabels } from "./components/WorkbenchTabs";
 import { WorkflowToolbar } from "./components/WorkflowToolbar";
 import type {
   Case,
@@ -3101,66 +3101,65 @@ function App() {
   const pendingNavigationSaveDisabled =
     navigationSaving || !canSavePendingNavigation(pendingNavigationKind);
   const hasUnsavedReviewChanges = decisionsDirty || humanNotesDirty;
-  const workflowUnsavedChangesAction =
+  const workflowTabNotice =
     activeTab === "validation" && validationDirty ? (
-      <div className="workflow-unsaved-action">
-        <span>Unsaved inclusion changes.</span>
-        <TooltipButton
-          className="secondary-action"
-          disabled={workflowLocked || validationState === null}
-          disabledReason={
-            workflowLocked
-              ? "Wait for the current workflow action to finish."
-              : "Change validation inclusion before saving."
-          }
-          onClick={() => void handleSaveValidationInclusion()}
-          type="button"
-        >
-          Save
-        </TooltipButton>
-      </div>
+      <span className="workflow-unsaved-notice">Unsaved inclusion changes.</span>
     ) : activeTab === "review" && hasUnsavedReviewChanges ? (
-      <div className="workflow-unsaved-action">
-        <span>Unsaved review changes.</span>
-        <TooltipButton
-          className="secondary-action"
-          disabled={workflowLocked || reviewState === null}
-          disabledReason={
-            workflowLocked
-              ? "Wait for the current workflow action to finish."
-              : "Change review decisions or human notes before saving."
-          }
-          onClick={() => void handleSaveReviewChanges()}
-          type="button"
-        >
-          Save
-        </TooltipButton>
-      </div>
+      <span className="workflow-unsaved-notice">Unsaved review changes.</span>
     ) : activeTab === "cases" && casesDirty ? (
-      <div className="workflow-unsaved-action">
-        <span>Unsaved case inclusion changes.</span>
-        <TooltipButton
-          className="secondary-action"
-          disabled={workflowLocked || casesDraft === null}
-          disabledReason={
-            workflowLocked
-              ? "Wait for the current workflow action to finish."
-              : "Change case inclusion before saving."
-          }
-          onClick={() => void handleSaveCaseInclusion()}
-          type="button"
-        >
-          Save
-        </TooltipButton>
-      </div>
+      <span className="workflow-unsaved-notice">
+        Unsaved case inclusion changes.
+      </span>
     ) : activeTab === "settings" && settingsDirty ? (
-      <div className="workflow-unsaved-action">
-        <span>Unsaved settings changes.</span>
-      </div>
+      <span className="workflow-unsaved-notice">Unsaved settings changes.</span>
     ) : activeTab === "validators" && validatorsDirty ? (
-      <div className="workflow-unsaved-action">
-        <span>Unsaved validator changes.</span>
-      </div>
+      <span className="workflow-unsaved-notice">
+        Unsaved validator changes.
+      </span>
+    ) : null;
+  const workflowDirtySaveAction =
+    activeTab === "validation" && validationDirty ? (
+      <TooltipButton
+        className="secondary-action"
+        disabled={workflowLocked || validationState === null}
+        disabledReason={
+          workflowLocked
+            ? "Wait for the current workflow action to finish."
+            : "Change validation inclusion before saving."
+        }
+        onClick={() => void handleSaveValidationInclusion()}
+        type="button"
+      >
+        Save
+      </TooltipButton>
+    ) : activeTab === "review" && hasUnsavedReviewChanges ? (
+      <TooltipButton
+        className="secondary-action"
+        disabled={workflowLocked || reviewState === null}
+        disabledReason={
+          workflowLocked
+            ? "Wait for the current workflow action to finish."
+            : "Change review decisions or human notes before saving."
+        }
+        onClick={() => void handleSaveReviewChanges()}
+        type="button"
+      >
+        Save
+      </TooltipButton>
+    ) : activeTab === "cases" && casesDirty ? (
+      <TooltipButton
+        className="secondary-action"
+        disabled={workflowLocked || casesDraft === null}
+        disabledReason={
+          workflowLocked
+            ? "Wait for the current workflow action to finish."
+            : "Change case inclusion before saving."
+        }
+        onClick={() => void handleSaveCaseInclusion()}
+        type="button"
+      >
+        Save
+      </TooltipButton>
     ) : null;
 
   return (
@@ -3314,6 +3313,7 @@ function App() {
               {appView === "experiment" && detailState.status === "loaded" ? (
                 <>
                   <WorkflowToolbar
+                    activeTabLabel={workbenchTabLabels[activeTab]}
                     activeVersion={detailState.overview.version}
                     availableVersions={activeVersionOptions}
                     experiment={detailState.overview.experiment}
@@ -3323,9 +3323,15 @@ function App() {
                     onCancelJob={handleCancelWorkflowJob}
                     onWorkflowModeChange={setWorkflowMode}
                     showDryRunControls={SHOW_DRY_RUN_CONTROLS}
+                    tabNotice={workflowTabNotice}
+                    tabs={
+                      <WorkbenchTabs
+                        activeTab={activeTab}
+                        onTabChange={requestTabChange}
+                      />
+                    }
                     workflowMessage={workflowMessage}
                     workflowMode={workflowMode}
-                    unsavedChangesAction={workflowUnsavedChangesAction}
                     secondaryAction={
                       activeTab === "settings" ? (
                         <TooltipButton
@@ -3368,26 +3374,34 @@ function App() {
                         >
                           Preview prompts
                         </TooltipButton>
+                      ) : activeTab === "cases" ? (
+                        workflowDirtySaveAction
                       ) : activeTab === "validation" ? (
-                        <TooltipButton
-                          className="secondary-action"
-                          disabled={validateAction.disabled}
-                          disabledReason={validateAction.disabledReason}
-                          onClick={handlePreviewValidationPrompts}
-                          type="button"
-                        >
-                          Preview prompts
-                        </TooltipButton>
+                        <>
+                          {workflowDirtySaveAction}
+                          <TooltipButton
+                            className="secondary-action"
+                            disabled={validateAction.disabled}
+                            disabledReason={validateAction.disabledReason}
+                            onClick={handlePreviewValidationPrompts}
+                            type="button"
+                          >
+                            Preview prompts
+                          </TooltipButton>
+                        </>
                       ) : activeTab === "review" ? (
-                        <TooltipButton
-                          className="secondary-action"
-                          disabled={judgeAction.disabled}
-                          disabledReason={judgeAction.disabledReason}
-                          onClick={handlePreviewJudgePrompts}
-                          type="button"
-                        >
-                          Preview prompts
-                        </TooltipButton>
+                        <>
+                          {workflowDirtySaveAction}
+                          <TooltipButton
+                            className="secondary-action"
+                            disabled={judgeAction.disabled}
+                            disabledReason={judgeAction.disabledReason}
+                            onClick={handlePreviewJudgePrompts}
+                            type="button"
+                          >
+                            Preview prompts
+                          </TooltipButton>
+                        </>
                       ) : activeTab === "proposal" ? (
                         <TooltipButton
                           className="secondary-action"
@@ -3503,11 +3517,6 @@ function App() {
                         </TooltipButton>
                       ) : null
                     }
-                  />
-
-                  <WorkbenchTabs
-                    activeTab={activeTab}
-                    onTabChange={requestTabChange}
                   />
 
                   <div className="workbench-body">

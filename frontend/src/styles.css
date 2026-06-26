@@ -235,20 +235,19 @@ select {
   position: sticky;
   top: 0;
   z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  display: grid;
   margin: -16px -16px 0;
-  padding: 10px 16px;
+  padding: 0 16px;
   border-bottom: 1px solid #d9dde3;
   background: #ffffff;
+  box-shadow: 0 8px 18px rgb(16 24 40 / 0.05);
 }
 
-.workflow-context {
+.workflow-context-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  min-height: 44px;
   gap: 8px 12px;
   min-width: 0;
   color: #667085;
@@ -256,14 +255,14 @@ select {
   line-height: 1.35;
 }
 
-.workflow-context strong {
+.workflow-context-row strong {
   overflow-wrap: anywhere;
   color: #111827;
   font-size: 14px;
   font-weight: 750;
 }
 
-.workflow-context span {
+.workflow-context-row span {
   overflow-wrap: anywhere;
 }
 
@@ -290,7 +289,11 @@ select {
 }
 
 .workflow-status {
+  overflow-wrap: anywhere;
   color: #475467;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
 }
 
 .workflow-mode-badge {
@@ -311,9 +314,70 @@ select {
 
 .workflow-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
   flex: 0 0 auto;
+}
+
+.workflow-tabs-row {
+  min-width: 0;
+  border-top: 1px solid #eef1f5;
+}
+
+.workflow-tabs-row .workbench-tabs {
+  margin: 0;
+  border-bottom: 0;
+}
+
+.workflow-tab-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  min-height: 54px;
+  padding: 8px 0 10px;
+  border-top: 1px solid #e4e7ec;
+}
+
+.workflow-tab-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+}
+
+.workflow-tab-heading h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 760;
+  line-height: 1.25;
+}
+
+.workflow-tab-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.workflow-unsaved-notice {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .dry-run-toggle {
@@ -3184,6 +3248,12 @@ select {
     margin: -16px -16px 0;
   }
 
+  .workflow-tab-actions-row {
+    display: grid;
+    align-items: stretch;
+  }
+
+  .workflow-tab-heading,
   .workflow-actions,
   .workflow-actions .primary-action {
     width: 100%;

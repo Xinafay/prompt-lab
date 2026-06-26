@@ -5,7 +5,7 @@ interface WorkbenchTabsProps {
   onTabChange: (tab: WorkbenchTab) => void;
 }
 
-const tabLabels: Record<WorkbenchTab, string> = {
+export const workbenchTabLabels: Record<WorkbenchTab, string> = {
   prompt: "Prompt",
   settings: "Settings",
   validators: "Validators",
@@ -18,7 +18,7 @@ const tabLabels: Record<WorkbenchTab, string> = {
 };
 
 const tabs: Array<{ id: WorkbenchTab; label: string }> = workbenchTabs.map(
-  (tab) => ({ id: tab, label: tabLabels[tab] })
+  (tab) => ({ id: tab, label: workbenchTabLabels[tab] })
 );
 
 export function WorkbenchTabs({ activeTab, onTabChange }: WorkbenchTabsProps) {

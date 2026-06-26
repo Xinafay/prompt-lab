@@ -5,6 +5,7 @@ import "./WorkflowToolbar.css";
 
 interface WorkflowToolbarProps {
   experiment: Experiment;
+  activeTabLabel: string;
   activeVersion: string;
   availableVersions: string[];
   jobStatus: JobStatus | null;
@@ -16,12 +17,14 @@ interface WorkflowToolbarProps {
   onCancelJob?: () => void;
   primaryAction: ReactNode;
   secondaryAction?: ReactNode;
-  unsavedChangesAction?: ReactNode;
+  tabNotice?: ReactNode;
+  tabs: ReactNode;
   showDryRunControls: boolean;
 }
 
 export function WorkflowToolbar({
   experiment,
+  activeTabLabel,
   activeVersion,
   availableVersions = [activeVersion],
   jobStatus,
@@ -33,7 +36,8 @@ export function WorkflowToolbar({
   onWorkflowModeChange,
   primaryAction,
   secondaryAction = null,
-  unsavedChangesAction = null,
+  tabNotice = null,
+  tabs,
   showDryRunControls
 }: WorkflowToolbarProps) {
   const statusMessage =
@@ -46,12 +50,12 @@ export function WorkflowToolbar({
     showDryRunControls ||
     primaryAction !== null ||
     secondaryAction !== null ||
-    unsavedChangesAction !== null ||
     showCancelAction;
+  const showTabMeta = tabNotice !== null || statusMessage !== null;
 
   return (
     <div className="workflow-toolbar" aria-label="Workflow context">
-      <div className="workflow-context">
+      <div className="workflow-context-row">
         <strong>{experiment.title}</strong>
         <label className="version-switcher">
           <span>Version</span>
@@ -72,38 +76,52 @@ export function WorkflowToolbar({
             {workflowMode === "dry-run" ? "Dry-run" : "Live"}
           </span>
         ) : null}
-        {statusMessage !== null ? (
-          <span className="workflow-status">{statusMessage}</span>
-        ) : null}
       </div>
-      {showActions ? (
-        <div className="workflow-actions">
-          {showDryRunControls ? (
-            <label className="dry-run-toggle">
-              <input
-                checked={workflowMode === "dry-run"}
-                onChange={(event) =>
-                  onWorkflowModeChange(event.target.checked ? "dry-run" : "live")
-                }
-                type="checkbox"
-              />
-              <span>Dry-run</span>
-            </label>
-          ) : null}
-          {unsavedChangesAction}
-          {secondaryAction}
-          {primaryAction}
-          {showCancelAction ? (
-            <button
-              className="secondary-action danger-action"
-              onClick={onCancelJob}
-              type="button"
-            >
-              Cancel
-            </button>
+
+      <div className="workflow-tabs-row">{tabs}</div>
+
+      <div className="workflow-tab-actions-row">
+        <div className="workflow-tab-heading">
+          <h2>{activeTabLabel}</h2>
+          {showTabMeta ? (
+            <div className="workflow-tab-meta">
+              {tabNotice}
+              {statusMessage !== null ? (
+                <span className="workflow-status">{statusMessage}</span>
+              ) : null}
+            </div>
           ) : null}
         </div>
-      ) : null}
+        {showActions ? (
+          <div className="workflow-actions">
+            {showDryRunControls ? (
+              <label className="dry-run-toggle">
+                <input
+                  checked={workflowMode === "dry-run"}
+                  onChange={(event) =>
+                    onWorkflowModeChange(
+                      event.target.checked ? "dry-run" : "live"
+                    )
+                  }
+                  type="checkbox"
+                />
+                <span>Dry-run</span>
+              </label>
+            ) : null}
+            {secondaryAction}
+            {primaryAction}
+            {showCancelAction ? (
+              <button
+                className="secondary-action danger-action"
+                onClick={onCancelJob}
+                type="button"
+              >
+                Cancel
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
