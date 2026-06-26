@@ -2961,6 +2961,13 @@ function App() {
     setGlobalSettingsMessage(null);
   }
 
+  function handleGlobalSettingsDirtyChange(isDirty: boolean) {
+    setGlobalSettingsDirty(isDirty);
+    if (isDirty) {
+      setGlobalSettingsMessage(null);
+    }
+  }
+
   async function handleActiveVersionChange(version: string) {
     const navigation = buildPendingNavigation({ kind: "version", version });
     if (navigation !== null) {
@@ -3297,7 +3304,7 @@ function App() {
                   <GlobalSettings
                     isBusy={globalSettingsBusy}
                     message={globalSettingsMessage}
-                    onDirtyChange={setGlobalSettingsDirty}
+                    onDirtyChange={handleGlobalSettingsDirtyChange}
                     onDraftChange={setGlobalSettingsDraft}
                     onReset={handleResetGlobalSettings}
                     onSave={handleSaveGlobalSettings}

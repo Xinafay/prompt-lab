@@ -675,6 +675,15 @@ select {
   color: #166534;
 }
 
+.settings-actions .settings-message {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .settings-warning-message {
   border: 1px solid #fed7aa;
   background: #fff7ed;

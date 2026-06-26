@@ -103,6 +103,9 @@ export function GlobalSettings({
           {isDirty ? (
             <span className="settings-unsaved-action">Unsaved settings changes.</span>
           ) : null}
+          {message !== null ? (
+            <span className="settings-message">{message}</span>
+          ) : null}
           <TooltipButton
             className="secondary-action"
             disabled={isBusy || !isDirty}
@@ -137,7 +140,6 @@ export function GlobalSettings({
         </div>
       </div>
 
-      {message !== null ? <div className="settings-message">{message}</div> : null}
       {error !== null ? <div className="settings-error">{error}</div> : null}
 
       <section className="settings-section">
