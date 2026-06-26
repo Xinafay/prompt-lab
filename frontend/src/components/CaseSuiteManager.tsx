@@ -5,6 +5,7 @@ import type { CaseSuiteTab } from "../urlState";
 import { CaseBrowser } from "./CaseBrowser";
 import { EditCasePayloadModal } from "./CaseSuiteModals";
 import { TooltipButton } from "./TooltipButton";
+import { WorkflowToolbar } from "./WorkflowToolbar";
 import {
   canSaveSuiteCases,
   SUITE_CASE_SELECTION_BLOCKED_MESSAGE
@@ -112,6 +113,102 @@ export function CaseSuiteManager({
         : !suiteDraftDirty
           ? "Change suite settings before saving."
           : null;
+  const activeTabLabel = activeTab === "cases" ? "Cases" : "Settings";
+  const tabNotice =
+    activeTab === "cases" ? (
+      <>
+        <span className="workflow-status">
+          {formatCaseCount(cases.length)} in this suite
+        </span>
+        {caseSuiteCasesDirty ? (
+          <span className="workflow-unsaved-notice">
+            Unsaved suite case changes.
+          </span>
+        ) : null}
+      </>
+    ) : suiteDraftDirty ? (
+      <span className="workflow-unsaved-notice">
+        Unsaved suite settings changes.
+      </span>
+    ) : null;
+  const tabs = (
+    <div className="workbench-tabs" role="tablist" aria-label="Case Suite sections">
+      <button
+        aria-selected={activeTab === "cases"}
+        className={activeTab === "cases" ? "workbench-tab is-active" : "workbench-tab"}
+        onClick={() => onTabChange("cases")}
+        role="tab"
+        type="button"
+      >
+        Cases
+      </button>
+      <button
+        aria-selected={activeTab === "settings"}
+        className={
+          activeTab === "settings" ? "workbench-tab is-active" : "workbench-tab"
+        }
+        onClick={() => onTabChange("settings")}
+        role="tab"
+        type="button"
+      >
+        Settings
+      </button>
+    </div>
+  );
+  const secondaryAction =
+    activeTab === "cases" ? (
+      <>
+        <button
+          className="secondary-action"
+          disabled={isBusy}
+          onClick={onAddCase}
+          type="button"
+        >
+          Add case
+        </button>
+        <TooltipButton
+          className="secondary-action"
+          disabled={resetCasesDisabled}
+          disabledReason={resetCasesDisabledReason}
+          onClick={onResetCases}
+          type="button"
+        >
+          Reset
+        </TooltipButton>
+      </>
+    ) : (
+      <TooltipButton
+        className="secondary-action"
+        disabled={resetSettingsDisabled}
+        disabledReason={resetSettingsDisabledReason}
+        onClick={handleResetSettings}
+        type="button"
+      >
+        Reset
+      </TooltipButton>
+    );
+  const primaryAction =
+    activeTab === "cases" ? (
+      <TooltipButton
+        className="primary-action"
+        disabled={saveSuiteCasesDisabled}
+        disabledReason={saveCasesDisabledReason}
+        onClick={handleSaveCases}
+        type="button"
+      >
+        {isBusy ? "Saving..." : "Save"}
+      </TooltipButton>
+    ) : (
+      <TooltipButton
+        className="primary-action"
+        disabled={saveSettingsDisabled}
+        disabledReason={saveSettingsDisabledReason}
+        form="case-suite-settings-form"
+        type="submit"
+      >
+        {isBusy ? "Saving..." : "Save"}
+      </TooltipButton>
+    );
 
   useEffect(() => {
     setSuiteTitle(selectedSuite?.title ?? "");
@@ -213,98 +310,21 @@ export function CaseSuiteManager({
         </>
       ) : (
         <>
-          <div className="settings-header case-suite-workbench-header">
-            <div>
-              <h2>{selectedSuite.title}</h2>
-              <p>{selectedSuite.id}</p>
-            </div>
-            <div className="settings-actions">
-              {activeTab === "cases" ? (
-                <>
-                  {caseSuiteCasesDirty ? (
-                    <span className="settings-unsaved-action">
-                      Unsaved suite case changes.
-                    </span>
-                  ) : null}
-                  <TooltipButton
-                    className="secondary-action"
-                    disabled={resetCasesDisabled}
-                    disabledReason={resetCasesDisabledReason}
-                    onClick={onResetCases}
-                    type="button"
-                  >
-                    Reset
-                  </TooltipButton>
-                  <TooltipButton
-                    className="primary-action"
-                    disabled={saveSuiteCasesDisabled}
-                    disabledReason={saveCasesDisabledReason}
-                    onClick={handleSaveCases}
-                    type="button"
-                  >
-                    {isBusy ? "Saving..." : "Save"}
-                  </TooltipButton>
-                </>
-              ) : (
-                <>
-                  {suiteDraftDirty ? (
-                    <span className="settings-unsaved-action">
-                      Unsaved suite settings changes.
-                    </span>
-                  ) : null}
-                  <TooltipButton
-                    className="secondary-action"
-                    disabled={resetSettingsDisabled}
-                    disabledReason={resetSettingsDisabledReason}
-                    onClick={handleResetSettings}
-                    type="button"
-                  >
-                    Reset
-                  </TooltipButton>
-                  <TooltipButton
-                    className="primary-action"
-                    disabled={saveSettingsDisabled}
-                    disabledReason={saveSettingsDisabledReason}
-                    form="case-suite-settings-form"
-                    type="submit"
-                  >
-                    {isBusy ? "Saving..." : "Save"}
-                  </TooltipButton>
-                </>
-              )}
-            </div>
-          </div>
-
-          <div
-            className="workbench-tabs"
-            role="tablist"
-            aria-label="Case Suite sections"
-          >
-            <button
-              aria-selected={activeTab === "cases"}
-              className={
-                activeTab === "cases" ? "workbench-tab is-active" : "workbench-tab"
-              }
-              onClick={() => onTabChange("cases")}
-              role="tab"
-              type="button"
-            >
-              Cases
-            </button>
-            <button
-              aria-selected={activeTab === "settings"}
-              className={
-                activeTab === "settings"
-                  ? "workbench-tab is-active"
-                  : "workbench-tab"
-              }
-              onClick={() => onTabChange("settings")}
-              role="tab"
-              type="button"
-            >
-              Settings
-            </button>
-          </div>
+          <WorkflowToolbar
+            activeTabLabel={activeTabLabel}
+            contextMeta={<span>{selectedSuite.id}</span>}
+            contextTitle={selectedSuite.title}
+            isVersionSwitching={isBusy}
+            jobStatus={null}
+            onWorkflowModeChange={() => undefined}
+            primaryAction={primaryAction}
+            secondaryAction={secondaryAction}
+            showDryRunControls={false}
+            tabNotice={tabNotice}
+            tabs={tabs}
+            workflowMessage={message}
+            workflowMode="live"
+          />
 
           {activeTab === "cases" ? (
             <div className="case-suite-cases-view">
@@ -320,20 +340,6 @@ export function CaseSuiteManager({
                   {SUITE_CASE_SELECTION_BLOCKED_MESSAGE}
                 </div>
               ) : null}
-              <div className="settings-header case-suite-cases-toolbar">
-                <div>
-                  <h2>Cases</h2>
-                  <p>{formatCaseCount(cases.length)} in this suite</p>
-                </div>
-                <button
-                  className="secondary-action"
-                  disabled={isBusy}
-                  onClick={onAddCase}
-                  type="button"
-                >
-                  Add case
-                </button>
-              </div>
               {cases.length === 0 ? (
                 <div className="case-browser-empty">No cases in this suite.</div>
               ) : (
@@ -342,6 +348,7 @@ export function CaseSuiteManager({
                   isBusy={isBusy}
                   onDeleteCase={handleDeleteCase}
                   onEditCase={setEditingCase}
+                  showTitle={false}
                   suiteTitle={selectedSuite.title}
                 />
               )}
@@ -352,7 +359,6 @@ export function CaseSuiteManager({
               id="case-suite-settings-form"
               onSubmit={handleSaveSettings}
             >
-              <h2 className="case-suite-settings-title">Case Suite settings</h2>
               {message !== null ? (
                 <div className="settings-message">{message}</div>
               ) : null}

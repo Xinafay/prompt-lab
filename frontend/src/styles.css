@@ -1330,33 +1330,10 @@ select {
   min-width: 0;
 }
 
-.case-suite-workbench-header {
-  min-width: 0;
-}
-
 .case-suite-cases-view {
   display: grid;
   gap: 12px;
   min-width: 0;
-}
-
-.case-suite-cases-toolbar {
-  align-items: center;
-}
-
-.case-suite-cases-toolbar p {
-  margin: 4px 0 0;
-  color: #667085;
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.case-suite-settings-title {
-  margin: 0;
-  color: #111827;
-  font-size: 18px;
-  font-weight: 760;
-  line-height: 1.25;
 }
 
 .case-suite-payload-editor {

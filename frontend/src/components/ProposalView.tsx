@@ -16,6 +16,7 @@ interface ProposalViewProps {
   initialViewMode?: ProposalViewMode;
   isBusy: boolean;
   hasUnsavedReviewChanges: boolean;
+  showHeader?: boolean;
   onGenerateProposal: () => void;
   onCreateVersion: () => void;
 }
@@ -30,6 +31,7 @@ export function ProposalView({
   initialViewMode = "new",
   isBusy,
   hasUnsavedReviewChanges,
+  showHeader = true,
   onGenerateProposal,
   onCreateVersion
 }: ProposalViewProps) {
@@ -39,24 +41,26 @@ export function ProposalView({
 
   return (
     <section className="proposal-panel" aria-label="Proposal">
-      <div className="section-heading">
-        <h3>Proposal</h3>
-        <TooltipButton
-          className="secondary-action"
-          disabled={isBusy || reviewState === null || hasUnsavedReviewChanges}
-          disabledReason={
-            isBusy
-              ? "Wait for the current workflow action to finish."
-              : reviewState === null
-                ? "Judge the active run before generating a proposal."
-                : "Save review changes before generating a proposal."
-          }
-          onClick={onGenerateProposal}
-          type="button"
-        >
-          {isBusy ? "Generating..." : "Generate proposal"}
-        </TooltipButton>
-      </div>
+      {showHeader ? (
+        <div className="section-heading">
+          <h3>Proposal</h3>
+          <TooltipButton
+            className="secondary-action"
+            disabled={isBusy || reviewState === null || hasUnsavedReviewChanges}
+            disabledReason={
+              isBusy
+                ? "Wait for the current workflow action to finish."
+                : reviewState === null
+                  ? "Judge the active run before generating a proposal."
+                  : "Save review changes before generating a proposal."
+            }
+            onClick={onGenerateProposal}
+            type="button"
+          >
+            {isBusy ? "Generating..." : "Generate proposal"}
+          </TooltipButton>
+        </div>
+      ) : null}
 
       {hasUnsavedReviewChanges ? (
         <div className="empty-inline">

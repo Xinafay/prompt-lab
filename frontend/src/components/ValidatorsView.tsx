@@ -25,6 +25,7 @@ interface ValidatorsViewProps {
   message?: string | null;
   onDraftChange?: (draft: VersionValidatorsDraft | null) => void;
   resetNonce?: number;
+  showHeader?: boolean;
   validators: ValidatorDefinition[];
 }
 
@@ -424,6 +425,7 @@ export function ValidatorsView({
   message = null,
   onDraftChange = () => undefined,
   resetNonce = 0,
+  showHeader = true,
   validators
 }: ValidatorsViewProps) {
   const [draft, setDraft] = useState<ValidatorDefinition[]>(() =>
@@ -650,12 +652,14 @@ export function ValidatorsView({
 
   return (
     <section className="validators-editor-panel" aria-label="Validators">
-      <div className="settings-header">
-        <div>
-          <h2>Validators</h2>
-          <p>Edit validators stored with this version.</p>
+      {showHeader ? (
+        <div className="settings-header">
+          <div>
+            <h2>Validators</h2>
+            <p>Edit validators stored with this version.</p>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {message !== null ? <div className="settings-message">{message}</div> : null}
       {validationErrors.length > 0 ? (

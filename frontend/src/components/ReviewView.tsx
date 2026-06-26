@@ -6,6 +6,7 @@ interface ReviewViewProps {
   isBusy: boolean;
   judgeDisabled: boolean;
   judgeDisabledReason: string | null;
+  showHeader?: boolean;
   onJudge: () => void;
   onDecisionChange: (
     findingId: string,
@@ -32,6 +33,7 @@ export function ReviewView({
   isBusy,
   judgeDisabled,
   judgeDisabledReason,
+  showHeader = true,
   onJudge,
   onDecisionChange,
   onHumanNotesChange
@@ -55,18 +57,20 @@ export function ReviewView({
 
   return (
     <section className="review-panel" aria-label="Review">
-      <div className="section-heading">
-        <h3>Review</h3>
-        <TooltipButton
-          className="secondary-action"
-          disabled={judgeDisabled}
-          disabledReason={judgeDisabledReason}
-          onClick={onJudge}
-          type="button"
-        >
-          {isBusy ? "Judging..." : "Judge active run"}
-        </TooltipButton>
-      </div>
+      {showHeader ? (
+        <div className="section-heading">
+          <h3>Review</h3>
+          <TooltipButton
+            className="secondary-action"
+            disabled={judgeDisabled}
+            disabledReason={judgeDisabledReason}
+            onClick={onJudge}
+            type="button"
+          >
+            {isBusy ? "Judging..." : "Judge active run"}
+          </TooltipButton>
+        </div>
+      ) : null}
 
       {reviewState === null ? (
         <div className="empty-inline">

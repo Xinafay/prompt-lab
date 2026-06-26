@@ -9,6 +9,7 @@ interface CaseBrowserProps {
   onCasesChange?: (cases: Case[]) => void;
   onDeleteCase?: (artifactCase: Case) => void;
   onEditCase?: (artifactCase: Case) => void;
+  showTitle?: boolean;
   suiteTitle?: string | null;
 }
 
@@ -53,6 +54,7 @@ export function CaseBrowser({
   onCasesChange,
   onDeleteCase,
   onEditCase,
+  showTitle = true,
   suiteTitle = null
 }: CaseBrowserProps) {
   const [caseQuery, setCaseQuery] = useState("");
@@ -121,7 +123,7 @@ export function CaseBrowser({
       <div className="case-browser-sidebar">
         <div className="case-browser-header">
           <div>
-            <h3>Cases</h3>
+            {showTitle ? <h3>Cases</h3> : null}
             <span>
               {filteredCases.length} of {cases.length}
               {suiteTitle === null ? null : <> from {suiteTitle}</>}

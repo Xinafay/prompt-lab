@@ -3563,6 +3563,7 @@ function App() {
                         message={workflowMessage}
                         onDraftChange={handleValidatorsDraftChange}
                         resetNonce={validatorsResetNonce}
+                        showHeader={false}
                         validators={detailState.overview.validators ?? []}
                       />
                     ) : null}
@@ -3572,6 +3573,7 @@ function App() {
                         cases={casesDraft ?? detailState.overview.cases}
                         isBusy={workflowLocked}
                         onCasesChange={handleCasesDraftChange}
+                        showTitle={false}
                         suiteTitle={
                           detailState.overview.case_suite?.title ?? null
                         }
@@ -3592,6 +3594,7 @@ function App() {
                         isBusy={workflowLocked}
                         onStateChange={handleValidationStateChange}
                         runs={detailState.runs.runs}
+                        showHeader={false}
                         validationState={validationState}
                       />
                     ) : null}
@@ -3605,6 +3608,7 @@ function App() {
                         onHumanNotesChange={handleHumanNotesChange}
                         onJudge={handleJudgeVersion}
                         reviewState={reviewState}
+                        showHeader={false}
                       />
                     ) : null}
 
@@ -3620,6 +3624,7 @@ function App() {
                         onGenerateProposal={handleGenerateProposal}
                         proposalResponse={proposalResponse}
                         reviewState={reviewState}
+                        showHeader={false}
                       />
                     ) : null}
 
@@ -3637,6 +3642,7 @@ function App() {
                         onBaselineVersionChange={handleBaselineVersionChange}
                         onCandidateVersionChange={handleCandidateVersionChange}
                         onCompare={handleCompareVersions}
+                        showHeader={false}
                       />
                     ) : null}
                   </div>

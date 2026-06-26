@@ -628,6 +628,26 @@ test("ValidatorsView renders validator cards instead of the editor by default", 
   assert.doesNotMatch(html, /Validator JSON/);
 });
 
+test("ValidatorsView can defer the visible section title to the workbench header", () => {
+  const validator = createDefaultValidator("automatic", []);
+  validator.validator_id = "report-shape";
+  validator.title = "Report shape";
+
+  const html = renderToStaticMarkup(
+    React.createElement(ValidatorsView, {
+      isBusy: false,
+      message: null,
+      onDraftChange: () => undefined,
+      showHeader: false,
+      validators: [validator]
+    })
+  );
+
+  assert.match(html, /Add validator/);
+  assert.match(html, /Report shape/);
+  assert.doesNotMatch(html, /<h2>Validators<\/h2>/);
+});
+
 test("shouldEmitValidatorsDraft ignores semantically identical payloads", () => {
   const validator = createDefaultValidator("llm_questionnaire", []);
   const dirtyPayload = { validators: [validator] };

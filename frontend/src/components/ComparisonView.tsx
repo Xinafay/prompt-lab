@@ -17,6 +17,7 @@ interface ComparisonViewProps {
   hasUnsavedValidationChanges: boolean;
   hasValidation: boolean;
   isBusy: boolean;
+  showHeader?: boolean;
   onBaselineVersionChange: (version: string) => void;
   onCandidateVersionChange: (version: string) => void;
   onCompare: () => void;
@@ -136,6 +137,7 @@ export function ComparisonView({
   hasUnsavedValidationChanges,
   hasValidation,
   isBusy,
+  showHeader = true,
   onBaselineVersionChange,
   onCandidateVersionChange,
   onCompare
@@ -160,18 +162,20 @@ export function ComparisonView({
 
   return (
     <section className="comparison-panel" aria-label="Comparison">
-      <div className="section-heading">
-        <h3>Comparison</h3>
-        <TooltipButton
-          className="secondary-action"
-          disabled={compareAction.disabled}
-          disabledReason={compareAction.disabledReason}
-          onClick={onCompare}
-          type="button"
-        >
-          {compareAction.label}
-        </TooltipButton>
-      </div>
+      {showHeader ? (
+        <div className="section-heading">
+          <h3>Comparison</h3>
+          <TooltipButton
+            className="secondary-action"
+            disabled={compareAction.disabled}
+            disabledReason={compareAction.disabledReason}
+            onClick={onCompare}
+            type="button"
+          >
+            {compareAction.label}
+          </TooltipButton>
+        </div>
+      ) : null}
       <div className="comparison-controls">
         <label>
           Baseline

@@ -103,7 +103,7 @@ test("case suites list renders suite rail metadata and create action", () => {
 test("case suite manager renders management controls and disables referenced delete", () => {
   const html = renderManager({ activeTab: "settings" });
 
-  assert.match(html, /Case Suite settings/);
+  assert.match(html, /<h2>Settings<\/h2>/);
   assert.match(html, />Save<\/button>/);
   assert.match(html, /Delete suite/);
   assert.match(html, /Danger zone/);
@@ -116,6 +116,11 @@ test("case suite manager renders cases with browser layout and suite actions", (
   const html = renderManager();
 
   assert.match(html, /Case Suite workspace/);
+  assert.match(html, /workflow-toolbar/);
+  assert.match(html, /workflow-context-row/);
+  assert.match(html, /workflow-tabs-row/);
+  assert.match(html, /workflow-tab-actions-row/);
+  assert.match(html, /<h2>Cases<\/h2>/);
   assert.match(html, /Cases/);
   assert.match(html, /alpha/);
   assert.match(html, /bravo/);
@@ -128,7 +133,25 @@ test("case suite manager renders cases with browser layout and suite actions", (
   assert.doesNotMatch(html, /Delete suite/);
   assert.doesNotMatch(html, /case-suite-payload-editor/);
   assert.doesNotMatch(html, /Save suite cases/);
+  assert.doesNotMatch(html, /case-suite-workbench-header/);
+  assert.doesNotMatch(html, /case-suite-cases-toolbar/);
+  assert.doesNotMatch(html, /<h3>Cases<\/h3>/);
   assert.match(html, />Save<\/button>/);
+});
+
+test("case suite manager renders settings actions in the sticky tab row", () => {
+  const html = renderManager({ activeTab: "settings" });
+
+  assert.match(html, /workflow-toolbar/);
+  assert.match(html, /Regression Suite/);
+  assert.match(html, /suite-regression/);
+  assert.match(html, /<h2>Settings<\/h2>/);
+  assert.match(html, /case-suite-settings-form/);
+  assert.match(html, />Reset<\/button>/);
+  assert.match(html, />Save<\/button>/);
+  assert.doesNotMatch(html, /case-suite-workbench-header/);
+  assert.doesNotMatch(html, /case-suite-settings-title/);
+  assert.doesNotMatch(html, /<h2>Case Suite settings<\/h2>/);
 });
 
 test("case suite manager surfaces dirty save state near actions", () => {
@@ -148,7 +171,7 @@ test("case suite manager surfaces dirty save state near actions", () => {
     "utf8"
   );
 
-  assert.match(casesHtml, /settings-unsaved-action/);
+  assert.match(casesHtml, /workflow-unsaved-notice/);
   assert.match(casesHtml, /settings-warning-message/);
   assert.match(casesHtml, /Unsaved suite case changes\./);
   assert.match(casesHtml, /Save or reset suite case changes before switching suites\./);

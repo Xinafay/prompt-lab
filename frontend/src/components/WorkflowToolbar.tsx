@@ -4,15 +4,17 @@ import type { Experiment, JobStatus, WorkflowMode } from "../types";
 import "./WorkflowToolbar.css";
 
 interface WorkflowToolbarProps {
-  experiment: Experiment;
+  experiment?: Experiment;
+  contextTitle?: string;
+  contextMeta?: ReactNode;
   activeTabLabel: string;
-  activeVersion: string;
-  availableVersions: string[];
+  activeVersion?: string;
+  availableVersions?: string[];
   jobStatus: JobStatus | null;
   workflowMessage: string | null;
   workflowMode: WorkflowMode;
   isVersionSwitching: boolean;
-  onActiveVersionChange: (version: string) => void;
+  onActiveVersionChange?: (version: string) => void;
   onWorkflowModeChange: (mode: WorkflowMode) => void;
   onCancelJob?: () => void;
   primaryAction: ReactNode;
@@ -24,9 +26,11 @@ interface WorkflowToolbarProps {
 
 export function WorkflowToolbar({
   experiment,
+  contextTitle,
+  contextMeta = null,
   activeTabLabel,
   activeVersion,
-  availableVersions = [activeVersion],
+  availableVersions,
   jobStatus,
   workflowMessage,
   workflowMode,
@@ -40,6 +44,9 @@ export function WorkflowToolbar({
   tabs,
   showDryRunControls
 }: WorkflowToolbarProps) {
+  const title = contextTitle ?? experiment?.title ?? "";
+  const versionOptions =
+    activeVersion === undefined ? [] : (availableVersions ?? [activeVersion]);
   const statusMessage =
     jobStatus === null
       ? workflowMessage
@@ -56,21 +63,24 @@ export function WorkflowToolbar({
   return (
     <div className="workflow-toolbar" aria-label="Workflow context">
       <div className="workflow-context-row">
-        <strong>{experiment.title}</strong>
-        <label className="version-switcher">
-          <span>Version</span>
-          <select
-            disabled={isVersionSwitching || jobStatus?.status === "running"}
-            onChange={(event) => onActiveVersionChange(event.currentTarget.value)}
-            value={activeVersion}
-          >
-            {availableVersions.map((version) => (
-              <option key={version} value={version}>
-                {version}
-              </option>
-            ))}
-          </select>
-        </label>
+        <strong>{title}</strong>
+        {activeVersion === undefined ? null : (
+          <label className="version-switcher">
+            <span>Version</span>
+            <select
+              disabled={isVersionSwitching || jobStatus?.status === "running"}
+              onChange={(event) => onActiveVersionChange(event.currentTarget.value)}
+              value={activeVersion}
+            >
+              {versionOptions.map((version) => (
+                <option key={version} value={version}>
+                  {version}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {contextMeta}
         {showDryRunControls ? (
           <span className={`workflow-mode-badge mode-${workflowMode}`}>
             {workflowMode === "dry-run" ? "Dry-run" : "Live"}

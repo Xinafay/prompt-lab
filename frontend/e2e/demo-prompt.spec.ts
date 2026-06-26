@@ -113,7 +113,7 @@ test("demo cases tab shows suite-backed cases and opens case suites", async ({
   await page.getByRole("tab", { name: "Settings" }).click();
   await expect(page).toHaveURL(/\/case-suites\/demo-json-briefs\/settings$/);
   await expect(
-    page.getByRole("heading", { name: "Case Suite settings" })
+    suiteWorkspace.getByRole("heading", { name: "Settings" })
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
   await expect(
@@ -126,7 +126,7 @@ test("demo cases tab shows suite-backed cases and opens case suites", async ({
     page
   ).toHaveURL(/\/case-suites\/demo-json-briefs\/settings$/);
   await expect(
-    page.getByRole("heading", { name: "Case Suite settings" })
+    suiteWorkspace.getByRole("heading", { name: "Settings" })
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Experiments" }).click();
@@ -156,7 +156,7 @@ test("demo string prompt and validators tabs show source sections", async ({ pag
   await page.getByRole("tab", { name: "Validators" }).click();
 
   const validators = page.getByRole("region", { name: "Validators" });
-  await expect(validators.getByRole("heading", { name: "Validators" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Validators" })).toBeVisible();
   await expect(
     validators.getByRole("article", { name: /Reply quality validator/i })
   ).toBeVisible();

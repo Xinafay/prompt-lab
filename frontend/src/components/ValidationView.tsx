@@ -27,6 +27,7 @@ interface ValidationViewProps {
   runs: RunArtifact[];
   isBusy: boolean;
   hasRuns: boolean;
+  showHeader?: boolean;
   onStateChange: (state: ValidationState) => void;
 }
 
@@ -220,6 +221,7 @@ export function ValidationView({
   runs,
   isBusy,
   hasRuns,
+  showHeader = true,
   onStateChange
 }: ValidationViewProps) {
   const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
@@ -243,9 +245,11 @@ export function ValidationView({
 
   return (
     <section className="validation-panel" aria-label="Validation">
-      <div className="section-heading">
-        <h3>Validation</h3>
-      </div>
+      {showHeader ? (
+        <div className="section-heading">
+          <h3>Validation</h3>
+        </div>
+      ) : null}
 
       {validationState === null || matrix === null ? (
         <div className="empty-inline">
