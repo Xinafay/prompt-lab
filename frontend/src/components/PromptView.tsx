@@ -43,7 +43,12 @@ export function PromptView({
   sourceViewMode = "edit"
 }: PromptViewProps) {
   const isPydanticOutput = overview.experiment.output.type === "pydantic";
-  const modelFile = overview.model_file ?? "model.py";
+  const promptFile = overview.experiment.template.path || "prompt.md";
+  const modelFile =
+    overview.model_file ??
+    (overview.experiment.output.type === "pydantic"
+      ? overview.experiment.output.model_file ?? "model.py"
+      : "model.py");
   const activeDraft =
     sourceDraft ??
     ({
@@ -162,21 +167,21 @@ export function PromptView({
             {isSourceEditing && sourceViewMode === "edit" ? (
               <CodeEditor
                 disabled={actionDisabled}
-                label="Prompt"
+                label={promptFile}
                 language="markdown-jinja"
                 onChange={updatePrompt}
                 value={activeDraft.prompt}
               />
             ) : isSourceEditing && sourceViewMode === "diff" ? (
               <DiffViewer
-                label="Prompt diff"
+                label={`${promptFile} diff`}
                 language="markdown-jinja"
                 original={overview.prompt}
                 value={activeDraft.prompt}
               />
             ) : (
               <CodeViewer
-                label="Prompt"
+                label={promptFile}
                 language="markdown-jinja"
                 value={overview.prompt}
               />
@@ -201,7 +206,7 @@ export function PromptView({
                   />
                 ) : isSourceEditing && sourceViewMode === "diff" ? (
                   <DiffViewer
-                    label="Model diff"
+                    label={`${modelFile} diff`}
                     language="python"
                     original={overview.model_py}
                     value={activeDraft.model_py ?? ""}

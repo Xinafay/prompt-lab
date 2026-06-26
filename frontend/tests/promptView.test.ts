@@ -123,6 +123,23 @@ test("prompt view uses stable source panel headings without duplicated labels", 
   assert.doesNotMatch(html, /<h2>Demo experiment<\/h2>/);
 });
 
+test("prompt source viewer uses the prompt template file name", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(PromptView, {
+      overview: buildOverview("pydantic", {
+        model_file: "model.py",
+        model_py: "from pydantic import BaseModel\n\nclass Answer(BaseModel):\n    value: str\n"
+      }),
+      isRunning: false,
+      onRunVersion: () => undefined
+    })
+  );
+
+  assert.match(html, /<div class="code-viewer-label">prompt\.md<\/div>/);
+  assert.match(html, /<div class="code-viewer-label">model\.py<\/div>/);
+  assert.doesNotMatch(html, /<div class="code-viewer-label">Prompt<\/div>/);
+});
+
 test("prompt view can hide its local run action for workbench toolbar layouts", () => {
   const html = renderToStaticMarkup(
     React.createElement(PromptView, {
@@ -187,8 +204,8 @@ test("editable prompt view renders source editing actions and diff mode", () => 
   assert.match(html, /Reset/);
   assert.match(html, /Overwrite current version/);
   assert.match(html, /Save as next version/);
-  assert.match(html, /Prompt diff/);
-  assert.match(html, /Model diff/);
+  assert.match(html, /prompt\.md diff/);
+  assert.match(html, /custom_model\.py diff/);
   assert.match(html, /confidence: float/);
 });
 
