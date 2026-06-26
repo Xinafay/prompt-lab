@@ -40,7 +40,8 @@ test("global settings exposes dirty save state copy", () => {
     "utf8"
   );
 
-  assert.match(source, /settings-unsaved-action/);
+  assert.match(source, /workflow-unsaved-notice/);
+  assert.doesNotMatch(source, /settings-unsaved-action/);
   assert.match(source, /Unsaved settings changes\./);
 });
 
@@ -81,10 +82,20 @@ test("global settings shows saved message beside form actions", () => {
 
   assert.match(
     html,
-    /<div class="settings-actions">[\s\S]*<span class="settings-message">Global settings saved\.<\/span>[\s\S]*<\/div>/
+    /<div class="settings-actions">[\s\S]*<span class="workflow-status workflow-status-success">Global settings saved\.<\/span>[\s\S]*<\/div>/
   );
   assert.doesNotMatch(
     html,
     /<\/div><div class="settings-message">Global settings saved\.<\/div><section/
   );
+});
+
+test("global settings status styles reuse compact workflow badge sizing", () => {
+  const styles = readFileSync(
+    new URL("../src/styles.css", import.meta.url),
+    "utf8"
+  );
+
+  assert.doesNotMatch(styles, /\.settings-unsaved-action/);
+  assert.doesNotMatch(styles, /\.settings-actions \.settings-message/);
 });

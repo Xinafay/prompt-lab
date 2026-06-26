@@ -108,10 +108,14 @@ export function GlobalSettings({
         </div>
         <div className="settings-actions">
           {isDirty ? (
-            <span className="settings-unsaved-action">Unsaved settings changes.</span>
+            <span className="workflow-unsaved-notice">
+              Unsaved settings changes.
+            </span>
           ) : null}
           {shouldShowGlobalSettingsMessage(message, isDirty) ? (
-            <span className="settings-message">{message}</span>
+            <span className="workflow-status workflow-status-success">
+              {message}
+            </span>
           ) : null}
           <TooltipButton
             className="secondary-action"
